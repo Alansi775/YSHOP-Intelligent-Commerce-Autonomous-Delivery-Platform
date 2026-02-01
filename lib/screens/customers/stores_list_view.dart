@@ -9,7 +9,7 @@ import '../../services/api_service.dart'; //  استخدام API
 import '../auth/sign_in_ui.dart'; // LuxuryTheme
 
 // استيراد الشاشات والمكونات
-import '../stores/store_detail_view.dart';
+import 'store_detail_view.dart';
 import '../../widgets/side_menu_view_contents.dart';
 import '../../widgets/side_cart_view_contents.dart';
 import '../../models/store.dart';
@@ -162,9 +162,21 @@ class _StoresListViewState extends State<StoresListView> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: textColor),
-          onPressed: () => Navigator.of(context).pop(),
+        leading: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: Container(
+            margin: const EdgeInsets.only(left: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                width: 1,
+              ),
+            ),
+            child: Icon(Icons.arrow_back, color: textColor, size: 20),
+          ),
         ),
         title: GestureDetector(
           onTap: () => Navigator.of(context).pop(),

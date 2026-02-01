@@ -7,11 +7,11 @@ import '../screens/customers/stores_list_view.dart';
 // MARK: - Category Mappings (تبقى ثابتة)
 // -------------------------------------------------------------
 const Map<String, IconData> categoryIconMappings = {
-  "Food": Icons.restaurant_menu_rounded,
+  "Food": Icons.restaurant_rounded,
   "Pharmacy": Icons.local_hospital_rounded,
   "Clothes": Icons.checkroom_rounded,
   "Market": Icons.shopping_basket_rounded,
-  "Restaurants": Icons.restaurant_rounded,
+
 };
 
 const Map<String, Color> categoryColorMappings = {
@@ -19,7 +19,6 @@ const Map<String, Color> categoryColorMappings = {
   "Pharmacy": Color.fromRGBO(143, 201, 250, 1.0), // ثابت
   "Clothes": Color.fromRGBO(209, 158, 232, 1.0), // ثابت
   "Market": Color.fromRGBO(168, 222, 168, 1.0), // ثابت
-  "Restaurants": Color.fromRGBO(250, 153, 153, 1.0), // ثابت
 };
 
 

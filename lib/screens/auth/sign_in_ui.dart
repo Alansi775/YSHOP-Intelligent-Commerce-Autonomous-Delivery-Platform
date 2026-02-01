@@ -477,12 +477,10 @@ class SignInUIComponents {
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: GestureDetector(
           onTap: onToggle,
-          child: RichText(
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            text: TextSpan(
+          child: Text.rich(
+            TextSpan(
               style: TextStyle(
-                color: isDark ? Colors.white60 : Colors.black54, 
+                color: isDark ? Colors.white60 : Colors.black54,
                 fontSize: 14,
                 fontFamily: 'Arial',
               ),
@@ -498,6 +496,9 @@ class SignInUIComponents {
                 ),
               ],
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            strutStyle: const StrutStyle(forceStrutHeight: true),
           ),
         ),
       ),

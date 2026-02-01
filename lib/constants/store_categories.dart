@@ -6,7 +6,6 @@ class StoreCategories {
     "Pharmacy",
     "Clothes",
     "Market",
-    "Restaurants",
   ];
 
   static bool isValid(String category) => all.contains(category);

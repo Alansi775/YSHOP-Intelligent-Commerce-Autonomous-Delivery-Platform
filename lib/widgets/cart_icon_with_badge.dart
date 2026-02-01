@@ -15,49 +15,58 @@ class CartIconWithBadge extends StatelessWidget {
         final totalItems = cartManager.totalItems;
         final primaryIconColor = Theme.of(context).colorScheme.onSurface;
 
-        return InkWell(
-          onTap: onTap ?? () => Scaffold.of(context).openEndDrawer(),
-          borderRadius: BorderRadius.circular(100),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-            IconButton(
-                icon: Icon(Icons.shopping_bag_outlined, color: Theme.of(context).colorScheme.onSurface),
-                onPressed: () => Scaffold.of(context).openEndDrawer(),
-            ),
-              if (totalItems > 0)
-                Positioned(
-                  right: 5,
-                  top: 0,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: onTap ?? () => Scaffold.of(context).openEndDrawer(),
-                      borderRadius: BorderRadius.circular(50),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade700,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                        child: Center(
-                          child: Text(
-                            totalItems > 99 ? '99+' : totalItems.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ),
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            GestureDetector(
+              onTap: onTap ?? () => Scaffold.of(context).openEndDrawer(),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                    width: 1,
                   ),
                 ),
-            ],
-          ),
+                child: Icon(
+                  Icons.shopping_bag_outlined,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  size: iconSize,
+                ),
+              ),
+            ),
+            if (totalItems > 0)
+              Positioned(
+                right: 2,
+                top: 0,
+                child: Builder(builder: (context) {
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                  final badgeColor = isDark ? const Color(0xFF4A9FFF) : const Color(0xFF2196F3);
+                  return Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      shape: BoxShape.circle,
+                    ),
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  child: Center(
+                    child: Text(
+                      totalItems > 99 ? '99+' : totalItems.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  );
+                }),
+              ),
+          ],
         );
       },
     );

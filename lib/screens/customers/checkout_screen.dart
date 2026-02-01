@@ -206,10 +206,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios,
-            color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy,
-          ),
+          icon: Icon(Icons.arrow_back, color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
