@@ -31,6 +31,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
   late AnimationController _headerEntranceController;
   late AnimationController _productsRevealController;
   late AnimationController _categoryRevealController;
+  late ValueNotifier<double> _burgerWelcomeOpacity;
   
   // Data
   List<Product> _products = [];
@@ -47,6 +48,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     super.initState();
     _mainScrollController = ScrollController();
     _mainScrollController.addListener(_onScroll);
+    _burgerWelcomeOpacity = ValueNotifier<double>(1.0);
     _headerEntranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -115,6 +117,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     _productsRevealController.dispose();
     _categoryRevealController.dispose();
     _mainScrollController.dispose();
+    _burgerWelcomeOpacity.dispose();
     super.dispose();
   }
 
@@ -159,6 +162,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             child: BurgerAssemblyWidget(
               scrollNotifier: _scrollNotifier,
               storeName: widget.store.storeName,
+              welcomeOpacityNotifier: _burgerWelcomeOpacity,
               onAssembled: () async {
                 if (!mounted) return;
                 setState(() => _showMenu = true);
@@ -372,36 +376,47 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             () => Navigator.pop(context),
             isDark,
           ),
-          Consumer<CartManager>(
-            builder: (context, cart, _) => Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _buildCircleBtn(
-                  Icons.shopping_bag_outlined,
-                  () => Scaffold.of(context).openEndDrawer(),
-                  isDark,
+          ValueListenableBuilder<double>(
+            valueListenable: _burgerWelcomeOpacity,
+            builder: (context, opacity, _) {
+              return Consumer<CartManager>(
+                builder: (context, cart, _) => AnimatedOpacity(
+                  opacity: 1.0 - opacity,
+                  duration: const Duration(milliseconds: 300),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      opacity > 0.1
+                          ? const SizedBox.shrink()
+                          : _buildCircleBtn(
+                              Icons.shopping_bag_outlined,
+                              () => Scaffold.of(context).openEndDrawer(),
+                              isDark,
+                            ),
+                      if (cart.totalItems > 0 && opacity <= 0.1)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: CircleAvatar(
+                            radius: 9,
+                            backgroundColor: isDark 
+                              ? const Color(0xFF4A9FFF)
+                              : const Color(0xFF2196F3),
+                            child: Text(
+                              '${cart.totalItems}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        )
+                    ],
+                  ),
                 ),
-                if (cart.totalItems > 0)
-                  Positioned(
-                    right: -2,
-                    top: -2,
-                    child: CircleAvatar(
-                      radius: 9,
-                      backgroundColor: isDark 
-                        ? const Color(0xFF4A9FFF)
-                        : const Color(0xFF2196F3),
-                      child: Text(
-                        '${cart.totalItems}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  )
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),

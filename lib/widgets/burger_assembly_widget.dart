@@ -9,6 +9,7 @@ class BurgerAssemblyWidget extends StatefulWidget {
   final double height;
   final String? storeName;
   final VoidCallback? onAssembled;
+  final ValueNotifier<double>? welcomeOpacityNotifier;
 
   const BurgerAssemblyWidget({
     Key? key,
@@ -16,6 +17,7 @@ class BurgerAssemblyWidget extends StatefulWidget {
     this.height = 300,
     this.storeName,
     this.onAssembled,
+    this.welcomeOpacityNotifier,
   }) : super(key: key);
 
   @override
@@ -44,6 +46,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   double _assemblyProgress = 0.0;
   bool _isAssembled = false;
   bool _isRevealing = false;
+  late ValueNotifier<double> initialWelcomeOpacityNotifier;
   late List<double> _layerProgresses;
   late List<Particle> _particles;
 
@@ -96,6 +99,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   @override
   void initState() {
     super.initState();
+    initialWelcomeOpacityNotifier = ValueNotifier<double>(1.0);
     _initializeAnimations();
     _initializeParticles();
     widget.scrollNotifier.addListener(_handleScroll);
@@ -118,7 +122,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
         // Holographic shimmer - very slow drift to reduce visual noise
         _holographicController = AnimationController(
           vsync: this,
-          duration: const Duration(milliseconds: 20000),
+          duration: const Duration(milliseconds: 8000),
         )..repeat();
 
     // Particle system
@@ -128,16 +132,16 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
           duration: const Duration(milliseconds: 2000),
         );
 
-    // Explosion effect on completion
+    // Explosion effect on completion - faster for smooth flow
     _explosionController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1),
     );
 
-    // Final reveal animation - slower and more dramatic
+    // Final reveal animation - faster and smoother
     _finalRevealController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 1300),
     );
 
     // Individual layer controllers - MUCH SLOWER for better viewing
@@ -161,24 +165,6 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
             _layerProgresses[i] = _layerControllers[i].value.clamp(0.0, 1.0);
             _updateAssemblyProgress();
           });
-        }
-      });
-
-      _layerControllers[i].addStatusListener((status) {
-        if (status == AnimationStatus.completed && mounted) {
-          // Trigger next layer with LONGER delay for better viewing
-          if (i < _layers.length - 1) {
-            Future.delayed(Duration(milliseconds: 300), () {
-              if (mounted && !_isAssembled) {
-                _layerControllers[i + 1].forward();
-              }
-            });
-          } else if (!_isAssembled) {
-            // All layers complete - wait a bit before final sequence
-            Future.delayed(Duration(milliseconds: 500), () {
-              if (mounted) _triggerFinalSequence();
-            });
-          }
         }
       });
     }
@@ -207,28 +193,60 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
     
     setState(() {
       _scrollOffset = newOffset;
+      // Fade out initial welcome text when scrolling starts
+      initialWelcomeOpacityNotifier.value = (1.0 - (newOffset / 60.0)).clamp(0.0, 1.0);
+      // Also update parent notifier if provided
+      widget.welcomeOpacityNotifier?.value = initialWelcomeOpacityNotifier.value;
     });
 
-    // Trigger layer animations based on scroll thresholds
+    // Each layer gets triggered with a staggered delay
     final layerCount = _layers.length;
     for (int i = 0; i < layerCount; i++) {
-      final threshold = (i + 1) / (layerCount + 1);
+      // Calculate the scroll threshold for this layer
+      final layerStartThreshold = i / (layerCount + 1);
+      final layerEndThreshold = (i + 1) / (layerCount + 1);
       
-      if (rawProgress >= threshold && _layerProgresses[i] < 1.0) {
+      // Calculate target progress for this layer based on scroll
+      double targetProgress = 0.0;
+      if (rawProgress >= layerStartThreshold) {
+        final rangeSize = layerEndThreshold - layerStartThreshold;
+        final progressInRange = (rawProgress - layerStartThreshold) / rangeSize;
+        targetProgress = progressInRange.clamp(0.0, 1.0);
+      }
+      
+      // Smoothly animate to target progress instead of jumping
+      // Use a delayed start for staggered effect
+      if (targetProgress > _layerProgresses[i]) {
+        // Moving forward - add delay for stagger
         if (!_layerControllers[i].isAnimating) {
-          // Magnetic snap effect when close
-          final snapProgress = ((rawProgress - threshold) * 3).clamp(0.0, 1.0);
-          if (snapProgress > 0.3) {
-            _layerControllers[i].forward();
-          } else {
-            // Preview mode - keep clamped
-            _layerProgresses[i] = (snapProgress * 0.5).clamp(0.0, 0.3);
-          }
+          Future.delayed(Duration(milliseconds: i * 80), () {
+            if (mounted && !_isAssembled) {
+              _layerControllers[i].animateTo(
+                targetProgress,
+                duration: Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          });
+        }
+      } else if (targetProgress < _layerProgresses[i]) {
+        // Moving backward - reverse smoothly
+        if (!_layerControllers[i].isAnimating) {
+          _layerControllers[i].animateTo(
+            targetProgress,
+            duration: Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+          );
         }
       }
     }
 
     _updateAssemblyProgress();
+    
+    // Check if we've completed assembly
+    if (rawProgress >= 1.0 && !_isAssembled) {
+      _triggerFinalSequence();
+    }
   }
 
   void _updateAssemblyProgress() {
@@ -243,27 +261,28 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
       _isRevealing = true;
     });
 
-    // Explosion effect
+    // Explosion effect - quick burst
     await _explosionController.forward(from: 0.0);
     
-    // Small pause for impact
-    await Future.delayed(const Duration(milliseconds: 100));
+    // Minimal pause for smooth transition
+    await Future.delayed(const Duration(milliseconds: 10));
     
-    // Final reveal with cinematic timing
+    // Final reveal - smooth and fast
     await _finalRevealController.forward();
     
     setState(() {
       _isAssembled = true;
     });
 
-    // Notify parent after elegant delay
-    await Future.delayed(const Duration(milliseconds: 800));
+    // Notify parent after minimal delay
+    await Future.delayed(const Duration(milliseconds: 250));
     widget.onAssembled?.call();
   }
 
   @override
   void dispose() {
     widget.scrollNotifier.removeListener(_handleScroll);
+    initialWelcomeOpacityNotifier.dispose();
     _masterController.dispose();
     _breathingController.dispose();
     _holographicController.dispose();
@@ -290,7 +309,11 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
           // ✨ Particle system
           _buildParticleSystem(),
           
-          // 🍔 Assembly view (fades out when complete)
+          // � Initial welcome text with shimmer effect
+          if (_assemblyProgress < 0.1)
+            _buildInitialWelcomeText(),
+          
+          // �🍔 Assembly view (fades out when complete)
           AnimatedOpacity(
             opacity: _isAssembled ? 0.0 : 1.0,
             duration: const Duration(milliseconds: 1000),
@@ -298,10 +321,10 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
           ),
           
           // 🎭 Final hero view (fades in when ALMOST complete - later timing)
-          if (_assemblyProgress > 0.96)
+          if (_assemblyProgress > 0.93)
             AnimatedOpacity(
-              opacity: (((_assemblyProgress - 0.96) / 0.04) * _finalRevealController.value).clamp(0.0, 1.0),
-              duration: const Duration(milliseconds: 300),
+              opacity: (((_assemblyProgress - 0.93) / 0.07) * _finalRevealController.value).clamp(0.0, 1.0),
+              duration: const Duration(milliseconds: 200),
               child: _buildHeroView(),
             ),
           
@@ -635,6 +658,125 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildInitialWelcomeText() {
+    return ValueListenableBuilder<double>(
+      valueListenable: initialWelcomeOpacityNotifier,
+      builder: (context, opacity, _) {
+        return AnimatedBuilder(
+          animation: _holographicController,
+          builder: (context, child) {
+            // Shimmer effect with gradient shift
+            final shimmerOffset = _holographicController.value;
+            
+            return Opacity(
+              opacity: opacity,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Animated subtitle
+                  ShaderMask(
+                    shaderCallback: (bounds) {
+                      return LinearGradient(
+                        begin: Alignment(-1.0 + (shimmerOffset * 2), 0),
+                        end: Alignment(1.0 + (shimmerOffset * 2), 0),
+                        colors: [
+                          Color(0xFF6366F1).withOpacity(0.3),
+                          Color(0xFFFF6B35),
+                          Color(0xFFFFC837),
+                          Color(0xFF6366F1).withOpacity(0.3),
+                        ],
+                      ).createShader(bounds);
+                    },
+                    child: Text(
+                      'DISCOVER EXCELLENCE',
+                      style: TextStyle(
+                        fontFamily: 'TenorSans',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 5,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  
+                  SizedBox(height: 20),
+                  
+                  // Main animated welcome message
+                  ShaderMask(
+                    shaderCallback: (bounds) {
+                      return LinearGradient(
+                        begin: Alignment(-1.0 + (shimmerOffset * 2), 0),
+                        end: Alignment(1.0 + (shimmerOffset * 2), 0),
+                        colors: [
+                          Colors.white.withOpacity(0.2),
+                          Colors.white,
+                          Color(0xFFFFC837),
+                          Colors.white.withOpacity(0.2),
+                        ],
+                        stops: [0.0, 0.25, 0.75, 1.0],
+                      ).createShader(bounds);
+                    },
+                    child: Text(
+                      'Scroll Down to Explore',
+                      style: TextStyle(
+                        fontFamily: 'TenorSans',
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  
+                  SizedBox(height: 30),
+                  
+                  // Animated arrow
+                  Transform.translate(
+                    offset: Offset(0, math.sin(shimmerOffset * math.pi * 2) * 8),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 32,
+                      color: Color(0xFFFF6B35).withOpacity(0.8),
+                    ),
+                  ),
+                  
+                  SizedBox(height: 15),
+                  
+                  // Decorative shimmer line
+                  Container(
+                    width: 180,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(1),
+                      gradient: LinearGradient(
+                        begin: Alignment(-1.0 + (shimmerOffset * 2), 0),
+                        end: Alignment(1.0 + (shimmerOffset * 2), 0),
+                        colors: [
+                          Colors.transparent,
+                          Color(0xFF6366F1),
+                          Color(0xFFFF6B35),
+                          Colors.transparent,
+                        ],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0xFFFF6B35).withOpacity(0.5),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
