@@ -85,6 +85,8 @@ export class User {
 
   static async update(userId, userData) {
     try {
+      // 🔥 CRITICAL: userId is uid from JWT token (string like 'user_1768935031597_3j88p2h5e')
+      // We need to use uid in WHERE clause, not numeric id
       const updates = [];
       const values = [];
 
@@ -124,21 +126,21 @@ export class User {
       // If no valid fields to update, return existing data
       if (updates.length === 0) {
         logger.info('No valid fields to update, returning existing user');
-        const user = await this.findById(userId);
+        const user = await this.findByUid(userId);
         return user;
       }
 
       values.push(userId);
 
       logger.info('Executing UPDATE query:', {
-        query: `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+        query: `UPDATE users SET ${updates.join(', ')} WHERE uid = ?`,
         valueCount: values.length,
         values: values.map(v => typeof v === 'string' ? v.substring(0, 50) : v)
       });
 
       const connection = await pool.getConnection();
       await connection.execute(
-        `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+        `UPDATE users SET ${updates.join(', ')} WHERE uid = ?`,
         values
       );
       connection.release();

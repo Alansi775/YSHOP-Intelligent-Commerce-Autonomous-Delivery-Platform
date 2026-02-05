@@ -43,6 +43,10 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
   // Animation States
   bool _showMenu = false;
 
+  // 🎯 SCROLL CONFIGURATION متناسق مع البرغر
+  // 6 طبقات × 150px = 900px + 100px buffer = 1000px
+  final double _burgerScrollEnd = 1700.0;
+
   @override
   void initState() {
     super.initState();
@@ -153,124 +157,130 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             ),
           ),
 
-          // Burger Assembly Stage
+          // 🎬 BURGER ASSEMBLY - Fixed in Center
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            height: MediaQuery.of(context).size.height * 0.85,
-            child: BurgerAssemblyWidget(
-              scrollNotifier: _scrollNotifier,
-              storeName: widget.store.storeName,
-              welcomeOpacityNotifier: _burgerWelcomeOpacity,
-              onAssembled: () async {
-                if (!mounted) return;
-                setState(() => _showMenu = true);
-
-                // Ensure scroll is at top so products reveal from the start
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_mainScrollController.hasClients) {
-                    _mainScrollController.animateTo(
-                      0.0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }
-                });
-                
-                // Animate header
-                await Future.delayed(const Duration(milliseconds: 100));
-                _headerEntranceController.forward(from: 0.0);
-                
-                // Animate categories
-                await Future.delayed(const Duration(milliseconds: 300));
-                _categoryRevealController.forward(from: 0.0);
-                
-                // Animate products
-                await Future.delayed(const Duration(milliseconds: 500));
-                _productsRevealController.forward(from: 0.0);
-              },
+            height: MediaQuery.of(context).size.height,
+            child: RepaintBoundary(
+              child: IgnorePointer(  // لا يمنع الـ scroll
+                child: Center(
+                  child: BurgerAssemblyWidget(
+                    scrollNotifier: _scrollNotifier,
+                    storeName: widget.store.storeName,
+                    welcomeOpacityNotifier: _burgerWelcomeOpacity,
+                    onAssembled: () async {
+                      if (!mounted) return;
+                      
+                      setState(() => _showMenu = true);
+                      
+                      // Animate header
+                      await Future.delayed(const Duration(milliseconds: 150));
+                      _headerEntranceController.forward(from: 0.0);
+                      
+                      // Animate categories
+                      await Future.delayed(const Duration(milliseconds: 350));
+                      _categoryRevealController.forward(from: 0.0);
+                      
+                      // Animate products
+                      await Future.delayed(const Duration(milliseconds: 550));
+                      _productsRevealController.forward(from: 0.0);
+                    },
+                  ),
+                ),
+              ),
             ),
           ),
 
           // Scrollable Content
           CustomScrollView(
             controller: _mainScrollController,
-            physics: const BouncingScrollPhysics(),
-            slivers: _showMenu
-                ? [
-                    // Store header with animation
-                    SliverToBoxAdapter(
-                      child: _buildAnimatedStoreHeader(isDark),
-                    ),
-                    
-                    // "THE MENU" title
-                    SliverToBoxAdapter(
-                      child: AnimatedBuilder(
-                        animation: _headerEntranceController,
-                        builder: (context, child) {
-                          final t = Curves.easeOut.transform(_headerEntranceController.value);
-                          return Opacity(
-                            opacity: t.clamp(0.0, 1.0),
-                            child: Transform.translate(
-                              offset: Offset(0, (1 - t) * 20),
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 24, bottom: 16),
-                                child: Text(
-                                  'THE MENU',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontFamily: 'TenorSans',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 6,
-                                    color: isDark ? Colors.white70 : Colors.black54,
-                                  ),
-                                ),
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              // ✅ SPACER - مساحة للبرغر
+              SliverToBoxAdapter(
+                child: SizedBox(height: _burgerScrollEnd),
+              ),
+
+              // Menu Content
+              if (_showMenu) ...[
+                // Store header
+                SliverToBoxAdapter(
+                  child: _buildAnimatedStoreHeader(isDark),
+                ),
+                
+                // "THE MENU" title
+                SliverToBoxAdapter(
+                  child: AnimatedBuilder(
+                    animation: _headerEntranceController,
+                    builder: (context, child) {
+                      final t = Curves.easeOut.transform(_headerEntranceController.value);
+                      return Opacity(
+                        opacity: t.clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, (1 - t) * 20),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 24, bottom: 16),
+                            child: Text(
+                              'THE MENU',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'TenorSans',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 6,
+                                color: isDark ? Colors.white70 : Colors.black54,
                               ),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    // Category filter - animated
-                    SliverStickyHeader(
-                      child: AnimatedBuilder(
-                        animation: _categoryRevealController,
-                        builder: (context, child) {
-                          final t = Curves.easeOutCubic.transform(_categoryRevealController.value);
-                          return Opacity(
-                            opacity: t.clamp(0.0, 1.0),
-                            child: Transform.translate(
-                              offset: Offset(0, (1 - t) * 30),
-                              child: _buildGlassyCategoryFilter(isDark),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    // Products grid with staggered animation
-                    if (_isLoading)
-                      SliverFillRemaining(
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: isDark ? const Color(0xFF4A9FFF) : const Color(0xFF2196F3),
                           ),
                         ),
-                      )
-                    else
-                      _buildAnimatedProductGrid(isDark),
-                    
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ]
-                : [
-                    SliverToBoxAdapter(
-                      child: SizedBox(height: MediaQuery.of(context).size.height + 480),
+                      );
+                    },
+                  ),
+                ),
+
+                // Category filter
+                SliverStickyHeader(
+                  child: AnimatedBuilder(
+                    animation: _categoryRevealController,
+                    builder: (context, child) {
+                      final t = Curves.easeOutCubic.transform(_categoryRevealController.value);
+                      return Opacity(
+                        opacity: t.clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, (1 - t) * 30),
+                          child: _buildGlassyCategoryFilter(isDark),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // Products grid
+                if (_isLoading)
+                  SliverFillRemaining(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: isDark ? const Color(0xFF4A9FFF) : const Color(0xFF2196F3),
+                      ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ],
+                  )
+                else
+                  _buildAnimatedProductGrid(isDark),
+                
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ] else ...[
+                // Placeholder
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.5,
+                  ),
+                ),
+              ],
+            ],
           ),
 
           // Floating UI
@@ -298,7 +308,6 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
               ),
               child: Row(
                 children: [
-                  // Store icon with glow
                   Container(
                     width: 72,
                     height: 72,
@@ -327,7 +336,6 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                   ),
                   const SizedBox(width: 16),
                   
-                  // Store info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,7 +546,6 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     return GestureDetector(
       onTap: () {
         setState(() => _selectedCategoryId = id);
-        // Reset and restart product animation
         _productsRevealController.forward(from: 0.0);
       },
       child: AnimatedContainer(
@@ -594,12 +601,10 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     return AnimatedBuilder(
       animation: _productsRevealController,
       builder: (context, child) {
-        // Staggered animation
-        final delay = (index % 6) * 0.1; // 6 items per "wave"
+        final delay = (index % 6) * 0.1;
         final adjustedValue = (_productsRevealController.value - delay) / (1 - delay);
         final t = Curves.easeOutCubic.transform(adjustedValue.clamp(0.0, 1.0));
         
-        // Different animations based on position
         final isEven = index % 2 == 0;
         final offsetX = isEven ? -30.0 * (1 - t) : 30.0 * (1 - t);
         final offsetY = 40.0 * (1 - t);
@@ -651,130 +656,126 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
             child: Container(
-              // single-piece translucent card similar to category chips
               color: isDark ? Colors.black.withOpacity(0.36) : Colors.white.withOpacity(0.04),
               child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Product image
-              Expanded(
-                flex: 7,
-                child: Hero(
-                  tag: 'product_${product.id}',
-                  child: Center(
-                    child: CachedNetworkImage(
-                      imageUrl: product.imageUrl,
-                      fit: BoxFit.contain,
-                      placeholder: (c, u) => Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: isDark
-                            ? const Color(0xFF4A9FFF)
-                            : const Color(0xFF2196F3),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Product image
+                  Expanded(
+                    flex: 7,
+                    child: Hero(
+                      tag: 'product_${product.id}',
+                      child: Center(
+                        child: CachedNetworkImage(
+                          imageUrl: product.imageUrl,
+                          fit: BoxFit.contain,
+                          placeholder: (c, u) => Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: isDark
+                                ? const Color(0xFF4A9FFF)
+                                : const Color(0xFF2196F3),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              
-              // Product info (tighter spacing, consistent font with header)
-              Flexible(
-                flex: 1,
-                fit: FlexFit.loose,
-                child: Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      // Product name (uses TenorSans to match other UI elements)
-                      Text(
-                        product.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'TenorSans',
-                          color: isDark ? Colors.white : Colors.black,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13.5,
-                          height: 1.18,
-                        ),
-                      ),
-
-                      const SizedBox(height: 4),
-
-                      // Price + add button row — compact and aligned
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                  
+                  // Product info
+                  Flexible(
+                    flex: 1,
+                    fit: FlexFit.loose,
+                    child: Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              "${product.currency} ${product.price}",
-                              style: TextStyle(
-                                fontFamily: 'TenorSans',
-                                color: isDark
-                                  ? const Color(0xFF4A9FFF)
-                                  : const Color(0xFF2196F3),
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                                letterSpacing: 0.2,
-                              ),
+                          Text(
+                            product.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'TenorSans',
+                              color: isDark ? Colors.white : Colors.black,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                              height: 1.18,
                             ),
                           ),
 
-                          // Add button (glass style to match card)
-                          InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () async {
-                              try {
-                                final cart = Provider.of<CartManager>(context, listen: false);
-                                await cart.addToCart(product: product, quantity: 1);
-                                ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Could not add item: $e')),
-                                );
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                  ? Colors.white.withOpacity(0.03)
-                                  : Colors.black.withOpacity(0.04),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isDark
-                                    ? Colors.white.withOpacity(0.06)
-                                    : Colors.black.withOpacity(0.06),
+                          const SizedBox(height: 4),
+
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  "${product.currency} ${product.price}",
+                                  style: TextStyle(
+                                    fontFamily: 'TenorSans',
+                                    color: isDark
+                                      ? const Color(0xFF4A9FFF)
+                                      : const Color(0xFF2196F3),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                    letterSpacing: 0.2,
+                                  ),
                                 ),
                               ),
-                              child: Icon(
-                                Icons.add,
-                                size: 18,
-                                color: isDark
-                                  ? const Color(0xFF4A9FFF)
-                                  : const Color(0xFF2196F3),
+
+                              InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () async {
+                                  try {
+                                    final cart = Provider.of<CartManager>(context, listen: false);
+                                    await cart.addToCart(product: product, quantity: 1);
+                                    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                                  } catch (e) {
+                                    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Could not add item: $e')),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                      ? Colors.white.withOpacity(0.03)
+                                      : Colors.black.withOpacity(0.04),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isDark
+                                        ? Colors.white.withOpacity(0.06)
+                                        : Colors.black.withOpacity(0.06),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.add,
+                                    size: 18,
+                                    color: isDark
+                                      ? const Color(0xFF4A9FFF)
+                                      : const Color(0xFF2196F3),
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  ),
-);
-}
+    );
+  }
 }
 
 // Sticky Header
@@ -802,5 +803,16 @@ class RenderSliverStickyHeader extends RenderSliverSingleBoxAdapter {
       layoutExtent: paintExtent,
       hasVisualOverflow: childHeight > constraints.remainingPaintExtent,
     );
+  }
+  
+  @override
+  bool hitTestChildren(SliverHitTestResult result, {required double mainAxisPosition, required double crossAxisPosition}) {
+    if (child != null && mainAxisPosition >= 0 && mainAxisPosition <= (geometry?.paintExtent ?? 0)) {
+      return child!.hitTest(
+        BoxHitTestResult.wrap(result),
+        position: Offset(crossAxisPosition, mainAxisPosition),
+      );
+    }
+    return false;
   }
 }

@@ -11,8 +11,8 @@ router.get('/profile', verifyAdminToken, UserController.getProfile);
 // Get user's store (requires auth)
 router.get('/store', verifyToken, UserController.getUserStore);
 
-// Update profile (requires auth)
-router.put('/profile', verifyAdminToken, UserController.updateProfile);
+// Update profile (requires auth - allows both admin and regular users)
+router.put('/profile', verifyToken, UserController.updateProfile);
 
 // Admin-scoped: update user status (ban/approve)
 router.put('/admin/:userId/status', verifyAdminToken, verifyAdminRole, UserController.updateUserStatusAdmin);

@@ -1,9 +1,10 @@
 import 'dart:ui';
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-/// 🔥 ULTRA MODERN BURGER ASSEMBLY - REDESIGNED WITH INSANE CREATIVITY
-/// Features: Particle effects, holographic glow, magnetic assembly, quantum transitions
+/// 🚀 EXPLODED VIEW BURGER ASSEMBLY
+/// كل طبقة تنفجر من مركزها مع تأثيرات 3D خرافية!
 class BurgerAssemblyWidget extends StatefulWidget {
   final ValueNotifier<double> scrollNotifier;
   final double height;
@@ -26,73 +27,86 @@ class BurgerAssemblyWidget extends StatefulWidget {
 
 class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
     with TickerProviderStateMixin {
-  // 🎯 PHYSICS CONSTANTS - OPTIMIZED FOR SMOOTHNESS
-  static const double kAssemblyThreshold = 280.0;
-  static const double kMagneticSnapDistance = 40.0;
-  // fewer particles for calmer effect
-  static const double kParticleCount = 14.0;
 
   // 🎬 ANIMATION CONTROLLERS
-  late AnimationController _masterController;
   late AnimationController _breathingController;
-  late AnimationController _holographicController;
+  late AnimationController _shimmerController;
   late AnimationController _particleController;
-  late AnimationController _explosionController;
-  late AnimationController _finalRevealController;
-  late List<AnimationController> _layerControllers;
+  late AnimationController _lightRayController;  // 🆕 للشعاع
 
   // 📊 STATE MANAGEMENT
-  double _scrollOffset = 0.0;
   double _assemblyProgress = 0.0;
   bool _isAssembled = false;
-  bool _isRevealing = false;
   late ValueNotifier<double> initialWelcomeOpacityNotifier;
   late List<double> _layerProgresses;
   late List<Particle> _particles;
 
-  // 🎨 LAYER DEFINITIONS WITH ENHANCED PROPERTIES
+  // 🎯 SCROLL CONFIGURATION
+  final double _scrollRangePerLayer = 180.0;  // أقصر = أسرع
+  final List<ScrollRange> _scrollRanges = [];
+  final double _totalScrollRange = 1080.0;  // 6 طبقات × 180px
+
+  // 🎨 EXPLODED VIEW LAYERS
   final List<BurgerLayer> _layers = [
+    // 1️⃣ Bottom Bun - ينفجر من الأسفل
     BurgerLayer(
       asset: 'assets/images/burger3D/bottom_bun.png',
-      entryAngle: math.pi * 0.25,
-      spinSpeed: 2.0,
+      startAngle: math.pi / 2,  // من الأسفل
+      explodeDistance: 400.0,
       glowColor: Color(0xFFFFD700),
-      magneticStrength: 1.2,
+      label: 'Golden Base',
+      rotationMultiplier: 1.5,
+      scaleStart: 0.5,
     ),
-    BurgerLayer(
-      asset: 'assets/images/burger3D/beef_patty.png',
-      entryAngle: -math.pi * 0.3,
-      spinSpeed: -1.5,
-      glowColor: Color(0xFFFF4500),
-      magneticStrength: 1.0,
-    ),
-    BurgerLayer(
-      asset: 'assets/images/burger3D/cheese_slice.png',
-      entryAngle: math.pi * 0.4,
-      spinSpeed: 1.8,
-      glowColor: Color(0xFFFFA500),
-      magneticStrength: 0.9,
-    ),
-    BurgerLayer(
-      asset: 'assets/images/burger3D/lettuce.png',
-      entryAngle: -math.pi * 0.2,
-      spinSpeed: -2.2,
-      glowColor: Color(0xFF32CD32),
-      magneticStrength: 0.8,
-    ),
+    // 2️⃣ Sauce - ينفجر من اليمين السفلي
     BurgerLayer(
       asset: 'assets/images/burger3D/sauce_layer.png',
-      entryAngle: math.pi * 0.35,
-      spinSpeed: 1.3,
+      startAngle: math.pi / 3,  // يمين سفلي
+      explodeDistance: 420.0,
       glowColor: Color(0xFFFF6347),
-      magneticStrength: 0.7,
+      label: 'Spicy Sauce',
+      rotationMultiplier: -2.0,
+      scaleStart: 0.4,
     ),
+    // 3️⃣ Beef Patty - ينفجر من اليسار
+    BurgerLayer(
+      asset: 'assets/images/burger3D/beef_patty.png',
+      startAngle: math.pi,  // من اليسار
+      explodeDistance: 450.0,
+      glowColor: Color(0xFF8B4513),
+      label: 'Juicy Beef',
+      rotationMultiplier: 2.5,
+      scaleStart: 0.3,
+    ),
+    // 4️⃣ Cheese - ينفجر من اليمين
+    BurgerLayer(
+      asset: 'assets/images/burger3D/cheese_slice.png',
+      startAngle: 0.0,  // من اليمين
+      explodeDistance: 440.0,
+      glowColor: Color(0xFFFFA500),
+      label: 'Melted Cheese',
+      rotationMultiplier: -1.8,
+      scaleStart: 0.35,
+    ),
+    // 5️⃣ Lettuce - ينفجر من اليسار العلوي
+    BurgerLayer(
+      asset: 'assets/images/burger3D/lettuce.png',
+      startAngle: -2 * math.pi / 3,  // يسار علوي
+      explodeDistance: 460.0,
+      glowColor: Color(0xFF90EE90),
+      label: 'Fresh Lettuce',
+      rotationMultiplier: 2.2,
+      scaleStart: 0.4,
+    ),
+    // 6️⃣ Top Bun - ينفجر من الأعلى مع دوران كامل
     BurgerLayer(
       asset: 'assets/images/burger3D/top_bun.png',
-      entryAngle: -math.pi * 0.15,
-      spinSpeed: -1.7,
-      glowColor: Color(0xFFFFD700),
-      magneticStrength: 1.1,
+      startAngle: -math.pi / 2,  // من الأعلى
+      explodeDistance: 480.0,
+      glowColor: Color(0xFFDAA520),
+      label: 'Perfect Crown',
+      rotationMultiplier: 1.2,  // 🆕 بطيء من 3.0
+      scaleStart: 0.3,
     ),
   ];
 
@@ -100,198 +114,117 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   void initState() {
     super.initState();
     initialWelcomeOpacityNotifier = ValueNotifier<double>(1.0);
+    _initializeScrollRanges();
     _initializeAnimations();
     _initializeParticles();
     widget.scrollNotifier.addListener(_handleScroll);
   }
 
-  void _initializeAnimations() {
-    // Master timeline controller
-    _masterController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
-
-        // Breathing life effect (much slower now for a calm scene)
-        _breathingController = AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 9000),
-        )..repeat(reverse: true);
-
-    // Holographic shimmer
-        // Holographic shimmer - very slow drift to reduce visual noise
-        _holographicController = AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 8000),
-        )..repeat();
-
-    // Particle system
-        // Particle system - slower one-shot bursts for gentle motion
-        _particleController = AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 2000),
-        );
-
-    // Explosion effect on completion - faster for smooth flow
-    _explosionController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1),
-    );
-
-    // Final reveal animation - faster and smoother
-    _finalRevealController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1300),
-    );
-
-    // Individual layer controllers - MUCH SLOWER for better viewing
-    _layerControllers = List.generate(
-      _layers.length,
-      (i) => AnimationController(
-        vsync: this,
-        duration: Duration(milliseconds: 1200 + (i * 150)), // Slower base + more stagger
-      ),
-    );
-
-    // Initialize layer progresses
-    _layerProgresses = List.filled(_layers.length, 0.0);
-
-    // Add listeners for automatic progression
-    for (int i = 0; i < _layerControllers.length; i++) {
-      _layerControllers[i].addListener(() {
-        if (mounted) {
-          setState(() {
-            // CRITICAL: Clamp to prevent floating-point errors
-            _layerProgresses[i] = _layerControllers[i].value.clamp(0.0, 1.0);
-            _updateAssemblyProgress();
-          });
-        }
-      });
+  void _initializeScrollRanges() {
+    for (int i = 0; i < _layers.length; i++) {
+      _scrollRanges.add(ScrollRange(
+        start: i * _scrollRangePerLayer,
+        end: (i + 1) * _scrollRangePerLayer,
+      ));
     }
+  }
+
+  void _initializeAnimations() {
+    _breathingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    )..repeat(reverse: true);
+    
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4000),
+    )..repeat();
+    
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 6000),
+    )..repeat();
+    
+    // 🆕 Light ray controller - بطيء وهادئ
+    _lightRayController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 8000),
+    )..repeat();
+
+    _layerProgresses = List.filled(_layers.length, 0.0);
   }
 
   void _initializeParticles() {
     final random = math.Random();
-    _particles = List.generate(
-      kParticleCount.toInt(),
-      (i) => Particle(
-        x: random.nextDouble() * 2 - 1,
-        y: random.nextDouble() * 2 - 1,
-        speed: 0.12 + random.nextDouble() * 0.36,
-        size: 1.0 + random.nextDouble() * 3.0,
-        opacity: 0.4 + random.nextDouble() * 0.4,
-        color: _layers[random.nextInt(_layers.length)].glowColor,
-      ),
-    );
+    _particles = List.generate(50, (i) => Particle(
+      x: random.nextDouble() * 2 - 1,
+      y: random.nextDouble() * 2 - 1,
+      speed: 0.05 + random.nextDouble() * 0.1,
+      size: 1.5 + random.nextDouble() * 3.5,
+      color: _layers[random.nextInt(_layers.length)].glowColor,
+      lifeShift: random.nextDouble(), // 🆕 توقيت خاص لكل نجمة
+    ));
   }
 
   void _handleScroll() {
-    if (_isAssembled || _isRevealing) return;
-
-    final newOffset = widget.scrollNotifier.value;
-    final rawProgress = (newOffset / kAssemblyThreshold).clamp(0.0, 1.0);
+    final scroll = widget.scrollNotifier.value;
     
-    setState(() {
-      _scrollOffset = newOffset;
-      // Fade out initial welcome text when scrolling starts
-      initialWelcomeOpacityNotifier.value = (1.0 - (newOffset / 60.0)).clamp(0.0, 1.0);
-      // Also update parent notifier if provided
-      widget.welcomeOpacityNotifier?.value = initialWelcomeOpacityNotifier.value;
-    });
+    // تحديث Welcome opacity
+    if (scroll < 100) {
+      initialWelcomeOpacityNotifier.value = 1.0;
+    } else if (scroll < 300) {
+      initialWelcomeOpacityNotifier.value = 1.0 - ((scroll - 100) / 200.0);
+    } else {
+      initialWelcomeOpacityNotifier.value = 0.0;
+    }
+    widget.welcomeOpacityNotifier?.value = initialWelcomeOpacityNotifier.value;
 
-    // Each layer gets triggered with a staggered delay
-    final layerCount = _layers.length;
-    for (int i = 0; i < layerCount; i++) {
-      // Calculate the scroll threshold for this layer
-      final layerStartThreshold = i / (layerCount + 1);
-      final layerEndThreshold = (i + 1) / (layerCount + 1);
-      
-      // Calculate target progress for this layer based on scroll
-      double targetProgress = 0.0;
-      if (rawProgress >= layerStartThreshold) {
-        final rangeSize = layerEndThreshold - layerStartThreshold;
-        final progressInRange = (rawProgress - layerStartThreshold) / rangeSize;
-        targetProgress = progressInRange.clamp(0.0, 1.0);
+    // حساب progress كل طبقة
+    bool changed = false;
+    for (int i = 0; i < _layers.length; i++) {
+      final range = _scrollRanges[i];
+      double progress = 0.0;
+
+      if (scroll <= range.start) {
+        progress = 0.0;
+      } else if (scroll >= range.end) {
+        progress = 1.0;
+      } else {
+        final raw = (scroll - range.start) / (range.end - range.start);
+        // استخدام curve قوي للـ exploded effect
+        progress = Curves.easeOutBack.transform(raw);
       }
-      
-      // Smoothly animate to target progress instead of jumping
-      // Use a delayed start for staggered effect
-      if (targetProgress > _layerProgresses[i]) {
-        // Moving forward - add delay for stagger
-        if (!_layerControllers[i].isAnimating) {
-          Future.delayed(Duration(milliseconds: i * 80), () {
-            if (mounted && !_isAssembled) {
-              _layerControllers[i].animateTo(
-                targetProgress,
-                duration: Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            }
-          });
-        }
-      } else if (targetProgress < _layerProgresses[i]) {
-        // Moving backward - reverse smoothly
-        if (!_layerControllers[i].isAnimating) {
-          _layerControllers[i].animateTo(
-            targetProgress,
-            duration: Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-          );
-        }
+
+      if ((_layerProgresses[i] - progress).abs() > 0.01) {
+        changed = true;
+        _layerProgresses[i] = progress;
       }
     }
 
-    _updateAssemblyProgress();
-    
-    // Check if we've completed assembly
-    if (rawProgress >= 1.0 && !_isAssembled) {
-      _triggerFinalSequence();
+    if (changed && mounted) {
+      setState(() {
+        final avg = _layerProgresses.reduce((a, b) => a + b) / _layerProgresses.length;
+        _assemblyProgress = avg.clamp(0.0, 1.0);
+      });
     }
-  }
 
-  void _updateAssemblyProgress() {
-    final avg = _layerProgresses.reduce((a, b) => a + b) / _layerProgresses.length;
-    _assemblyProgress = avg.clamp(0.0, 1.0);
-  }
-
-  void _triggerFinalSequence() async {
-    if (_isRevealing) return;
-    
-    setState(() {
-      _isRevealing = true;
-    });
-
-    // Explosion effect - quick burst
-    await _explosionController.forward(from: 0.0);
-    
-    // Minimal pause for smooth transition
-    await Future.delayed(const Duration(milliseconds: 10));
-    
-    // Final reveal - smooth and fast
-    await _finalRevealController.forward();
-    
-    setState(() {
-      _isAssembled = true;
-    });
-
-    // Notify parent after minimal delay
-    await Future.delayed(const Duration(milliseconds: 250));
-    widget.onAssembled?.call();
+    // اكتمال البرغر
+    if (scroll >= _totalScrollRange + 100 && !_isAssembled) {
+      if (mounted) {
+        setState(() => _isAssembled = true);
+      }
+      widget.onAssembled?.call();
+    }
   }
 
   @override
   void dispose() {
     widget.scrollNotifier.removeListener(_handleScroll);
     initialWelcomeOpacityNotifier.dispose();
-    _masterController.dispose();
     _breathingController.dispose();
-    _holographicController.dispose();
+    _shimmerController.dispose();
     _particleController.dispose();
-    _explosionController.dispose();
-    _finalRevealController.dispose();
-    for (var controller in _layerControllers) {
-      controller.dispose();
-    }
+    _lightRayController.dispose();  // 🆕
     super.dispose();
   }
 
@@ -303,68 +236,40 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
         alignment: Alignment.center,
         clipBehavior: Clip.none,
         children: [
-          // 🌌 Holographic background
-          _buildHolographicBackground(),
-          
-          // ✨ Particle system
+          _buildBackground(),
           _buildParticleSystem(),
           
-          // � Initial welcome text with shimmer effect
-          if (_assemblyProgress < 0.1)
-            _buildInitialWelcomeText(),
+          if (_assemblyProgress <= 0.05) _buildInitialWelcomeText(),
           
-          // �🍔 Assembly view (fades out when complete)
-          AnimatedOpacity(
-            opacity: _isAssembled ? 0.0 : 1.0,
-            duration: const Duration(milliseconds: 1000),
-            child: _buildAssemblyView(),
-          ),
+          // 🚀 EXPLODED VIEW ASSEMBLY
+          _buildExplodedView(),
           
-          // 🎭 Final hero view (fades in when ALMOST complete - later timing)
-          if (_assemblyProgress > 0.93)
-            AnimatedOpacity(
-              opacity: (((_assemblyProgress - 0.93) / 0.07) * _finalRevealController.value).clamp(0.0, 1.0),
-              duration: const Duration(milliseconds: 200),
-              child: _buildHeroView(),
-            ),
-          
-          // 💥 Explosion overlay
-          if (_explosionController.value > 0)
-            _buildExplosionEffect(),
-          
-          // 📝 Welcome text
-          if (_isAssembled)
-            _buildWelcomeText(),
+          if (_isAssembled) _buildWelcomeToRestaurant(),
         ],
       ),
     );
   }
 
-  Widget _buildHolographicBackground() {
+  Widget _buildBackground() {
     return AnimatedBuilder(
-      animation: _holographicController,
+      animation: _shimmerController,
       builder: (context, child) {
-        // Subtle during assembly, strong at reveal
-        final intensity = _assemblyProgress < 0.95 
-            ? _assemblyProgress * 0.3  // Very subtle during assembly
-            : _assemblyProgress;       // Full intensity when complete
-            
+        final intensity = _assemblyProgress * 0.4;
         return Container(
-          width: widget.height * 2,
-          height: widget.height * 2,
+          width: widget.height * 2.5,
+          height: widget.height * 2.5,
           decoration: BoxDecoration(
             gradient: RadialGradient(
               colors: [
-                Color(0xFF6366F1).withOpacity(0.1 * intensity),
-                Color(0xFF8B5CF6).withOpacity(0.05 * intensity),
+                Color(0xFF6366F1).withOpacity(0.15 * intensity),
+                Color(0xFF8B5CF6).withOpacity(0.08 * intensity),
                 Colors.transparent,
               ],
-              stops: [0.0, 0.5, 1.0],
             ),
           ),
           child: CustomPaint(
-            painter: HolographicPainter(
-              progress: _holographicController.value,
+            painter: BackgroundPainter(
+              progress: _shimmerController.value,
               intensity: intensity,
             ),
           ),
@@ -376,442 +281,322 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   Widget _buildParticleSystem() {
     return AnimatedBuilder(
       animation: _particleController,
-      builder: (context, child) {
-        return CustomPaint(
-          size: Size(widget.height * 2, widget.height * 2),
-          painter: ParticlePainter(
-            particles: _particles,
-            progress: _particleController.value,
-            assemblyProgress: _assemblyProgress,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAssemblyView() {
-    return Transform.scale(
-      scale: 1.0 + (_assemblyProgress * 0.15),
-      child: Stack(
-        alignment: Alignment.center,
-        children: _layers.asMap().entries.map((entry) {
-          final index = entry.key;
-          final layer = entry.value;
-          final progress = _layerProgresses[index];
-
-          return _buildLayer(index, layer, progress);
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildLayer(int index, BurgerLayer layer, double progress) {
-    // CRITICAL: Clamp progress to prevent floating-point precision errors
-    progress = progress.clamp(0.0, 1.0);
-    
-    // Calculate entry position - layers come straight down from above
-    final startHeight = 700.0; // Start from top
-    // Each layer needs to stop at a specific height to stack properly
-    // Bottom layers (index 0) at bottom, top layers at top
-    final stackOrder = _layers.length - 1 - index; // Reverse: 0 = top bun, 5 = bottom bun
-    // How far apart the layers should be when stacked. Increase to avoid overlap.
-    final layerThickness = 12.0;
-    // Center the whole stack vertically around Y=0 so layers align visually
-    final totalStackHeight = (_layers.length - 1) * layerThickness;
-    final baseTop = - (totalStackHeight / 2);
-    final targetY = baseTop + (stackOrder * layerThickness);
-    
-    // Remove 3D perspective and rotation so layers stack straight
-    // Keep translations only on Y so layers align vertically on top of each other
-    final depthOffset = 0.0; // no Z offset
-    final perspectiveY = 0.0; // no extra Y perspective shift
-    
-    // Smooth single descent - no bounce, just clean easeOut
-    final descendCurve = Curves.easeOutCubic.transform(progress.clamp(0.0, 1.0));
-    
-    final currentY = startHeight * (1 - descendCurve) + targetY * descendCurve;
-
-    // No rotation for stacked appearance
-    final rotation = 0.0;
-    
-    // Simple scale - no bounce
-    // Disable per-layer width scaling so all layers align vertically
-    final perspectiveScale = 1.0;
-    final scale = (0.85 + (progress * 0.15)) * perspectiveScale;
-
-    return AnimatedBuilder(
-      animation: _breathingController,
-      builder: (context, child) {
-        final breathOffset = progress >= 0.98 
-            ? math.sin(_breathingController.value * math.pi * 2) * 2.0
-            : 0.0;
-
-        return Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..translate(0.0, currentY + breathOffset, 0.0)
-            ..scale(scale),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Very subtle glow during assembly (only when progress > 0.6)
-              if (progress > 0.6 && progress < 0.95)
-                Container(
-                  width: widget.height * 0.7,
-                  height: widget.height * 0.7,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: layer.glowColor.withOpacity(0.12 * (progress - 0.6)),
-                        blurRadius: 20 * (progress - 0.6),
-                        spreadRadius: 3 * (progress - 0.6),
-                      ),
-                    ],
-                  ),
-                ),
-              
-              // Layer image with shader
-              ShaderMask(
-                shaderCallback: (bounds) {
-                  return RadialGradient(
-                    colors: [
-                      Colors.white,
-                      Colors.white.withOpacity(0.95),
-                    ],
-                  ).createShader(bounds);
-                },
-                            child: Image.asset(
-                              layer.asset,
-                              width: widget.height * 1.5,
-                              fit: BoxFit.contain,
-                            ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildHeroView() {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_breathingController, _finalRevealController]),
-      builder: (context, child) {
-        final breathScale = 1.0 + (math.sin(_breathingController.value * math.pi * 2) * 0.025);
-        final floatY = math.sin(_breathingController.value * math.pi * 2) * 8.0;
-        final revealScale = Curves.elasticOut.transform(_finalRevealController.value);
-
-        return Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..translate(0.0, floatY - 50)
-            ..scale(breathScale * revealScale),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Epic glow aura
-              Container(
-                width: widget.height * 1.2,
-                height: widget.height * 1.2,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Color(0xFFFF6B35).withOpacity(0.5),
-                      Color(0xFFFFC837).withOpacity(0.3),
-                      Colors.transparent,
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Color(0xFFFF6B35).withOpacity(0.6),
-                      blurRadius: 80,
-                      spreadRadius: 20,
-                    ),
-                  ],
-                ),
-              ),
-              
-              // 3D perspective burger
-              Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..setEntry(3, 2, 0.001)
-                  ..rotateY(math.sin(_breathingController.value * math.pi) * 0.08)
-                  ..rotateX(math.cos(_breathingController.value * math.pi * 0.5) * 0.03),
-                child: Image.asset(
-                  'assets/images/burger3D/full2.png',
-                  width: widget.height * 1.5,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              
-              // Light rays
-              CustomPaint(
-                size: Size(widget.height * 2, widget.height * 2),
-                painter: LightRayPainter(
-                  progress: _breathingController.value,
-                  intensity: _finalRevealController.value,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildExplosionEffect() {
-    return CustomPaint(
-      size: Size(widget.height * 3, widget.height * 3),
-      painter: ExplosionPainter(
-        progress: _explosionController.value,
-      ),
-    );
-  }
-
-  Widget _buildWelcomeText() {
-    return Positioned(
-      bottom: 40,
-      child: FadeTransition(
-        opacity: _finalRevealController,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.0).animate(
-            CurvedAnimation(
-              parent: _finalRevealController,
-              curve: Curves.elasticOut,
-            ),
-          ),
-          child: Column(
-            children: [
-              // Subtitle
-              ShaderMask(
-                shaderCallback: (bounds) => LinearGradient(
-                  colors: [Color(0xFFFF6B35), Color(0xFFFFC837)],
-                ).createShader(bounds),
-                child: Text(
-                  'CRAFTED WITH PASSION',
-                  style: TextStyle(
-                    fontFamily: 'TenorSans',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 4,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              
-              SizedBox(height: 12),
-              
-              // Main title with gradient
-              ShaderMask(
-                shaderCallback: (bounds) => LinearGradient(
-                  colors: [
-                    Colors.white,
-                    Color(0xFFFFC837),
-                    Color(0xFFFF6B35),
-                  ],
-                ).createShader(bounds),
-                child: Text(
-                  'Welcome to ${widget.storeName ?? "Paradise"}',
-                  style: TextStyle(
-                    fontFamily: 'TenorSans',
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    shadows: [
-                      Shadow(
-                        color: Color(0xFFFF6B35).withOpacity(0.8),
-                        blurRadius: 20,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              
-              SizedBox(height: 15),
-              
-              // Decorative line
-              Container(
-                width: 200,
-                height: 3,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(2),
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      Color(0xFFFF6B35),
-                      Color(0xFFFFC837),
-                      Colors.transparent,
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Color(0xFFFF6B35).withOpacity(0.6),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+      builder: (context, child) => CustomPaint(
+        size: Size(widget.height * 2.5, widget.height * 2.5),
+        painter: ParticlePainter(
+          particles: _particles,
+          progress: _particleController.value,
+          assemblyProgress: _assemblyProgress,
         ),
       ),
     );
   }
 
-  Widget _buildInitialWelcomeText() {
-    return ValueListenableBuilder<double>(
-      valueListenable: initialWelcomeOpacityNotifier,
-      builder: (context, opacity, _) {
-        return AnimatedBuilder(
-          animation: _holographicController,
-          builder: (context, child) {
-            // Shimmer effect with gradient shift
-            final shimmerOffset = _holographicController.value;
-            
-            return Opacity(
-              opacity: opacity,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Animated subtitle
-                  ShaderMask(
-                    shaderCallback: (bounds) {
-                      return LinearGradient(
-                        begin: Alignment(-1.0 + (shimmerOffset * 2), 0),
-                        end: Alignment(1.0 + (shimmerOffset * 2), 0),
-                        colors: [
-                          Color(0xFF6366F1).withOpacity(0.3),
-                          Color(0xFFFF6B35),
-                          Color(0xFFFFC837),
-                          Color(0xFF6366F1).withOpacity(0.3),
-                        ],
-                      ).createShader(bounds);
-                    },
-                    child: Text(
-                      'DISCOVER EXCELLENCE',
-                      style: TextStyle(
-                        fontFamily: 'TenorSans',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 5,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
+  /// 🚀 EXPLODED VIEW - كل طبقة تنفجر وتتجمع
+  Widget _buildExplodedView() {
+    return AnimatedBuilder(
+      animation: _breathingController,
+      builder: (context, child) {
+        final breathScale = 1.0 + (math.sin(_breathingController.value * math.pi * 2) * 0.025);
+        
+        return Transform.scale(
+          scale: breathScale * (1.0 + (_assemblyProgress * 0.12)),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // 🆕 Light ray behind burger - خفيف
+              if (_assemblyProgress > 0.3)
+                Opacity(
+                  opacity: (_assemblyProgress * 0.3).clamp(0.0, 1.0),  // خفيف جداً
+                  child: CustomPaint(
+                    size: Size(widget.height * 2.5, widget.height * 2.5),
+                    painter: LightRayPainter(
+                      progress: _lightRayController.value,
+                      intensity: _assemblyProgress * 0.4,  // خفيف
+                      colors: _layers.map((l) => l.glowColor).toList(),
                     ),
                   ),
-                  
-                  SizedBox(height: 20),
-                  
-                  // Main animated welcome message
-                  ShaderMask(
-                    shaderCallback: (bounds) {
-                      return LinearGradient(
-                        begin: Alignment(-1.0 + (shimmerOffset * 2), 0),
-                        end: Alignment(1.0 + (shimmerOffset * 2), 0),
-                        colors: [
-                          Colors.white.withOpacity(0.2),
-                          Colors.white,
-                          Color(0xFFFFC837),
-                          Colors.white.withOpacity(0.2),
-                        ],
-                        stops: [0.0, 0.25, 0.75, 1.0],
-                      ).createShader(bounds);
-                    },
-                    child: Text(
-                      'Scroll Down to Explore',
-                      style: TextStyle(
-                        fontFamily: 'TenorSans',
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  
-                  SizedBox(height: 30),
-                  
-                  // Animated arrow
-                  Transform.translate(
-                    offset: Offset(0, math.sin(shimmerOffset * math.pi * 2) * 8),
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 32,
-                      color: Color(0xFFFF6B35).withOpacity(0.8),
-                    ),
-                  ),
-                  
-                  SizedBox(height: 15),
-                  
-                  // Decorative shimmer line
-                  Container(
-                    width: 180,
-                    height: 2,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(1),
-                      gradient: LinearGradient(
-                        begin: Alignment(-1.0 + (shimmerOffset * 2), 0),
-                        end: Alignment(1.0 + (shimmerOffset * 2), 0),
-                        colors: [
-                          Colors.transparent,
-                          Color(0xFF6366F1),
-                          Color(0xFFFF6B35),
-                          Colors.transparent,
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0xFFFF6B35).withOpacity(0.5),
-                          blurRadius: 12,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
+                ),
+              
+              // Burger layers
+              ...List.generate(_layers.length, (i) => _buildExplodedLayer(i)),
+            ],
+          ),
         );
       },
     );
   }
+
+  Widget _buildExplodedLayer(int index) {
+    final layer = _layers[index];
+    final progress = _layerProgresses[index].clamp(0.0, 1.0);
+    
+    // 🎯 EXPLODED VIEW CALCULATION
+    // في البداية: كل طبقة في مكانها المنفجر
+    // مع الـ scroll: تتجمع في مكانها النهائي
+    
+    // المكان النهائي (stacked position)
+    final stackOrder = _layers.length - 1 - index;
+    final layerThickness = 16.0;
+    final totalHeight = (_layers.length - 1) * layerThickness;
+    final finalY = -(totalHeight / 2) + (stackOrder * layerThickness);
+    
+    // المكان الابتدائي (exploded position)
+    final explodedX = math.cos(layer.startAngle) * layer.explodeDistance;
+    final explodedY = math.sin(layer.startAngle) * layer.explodeDistance;
+    
+    // Interpolation من exploded إلى final
+    final currentX = explodedX * (1 - progress);
+    final currentY = explodedY * (1 - progress) + finalY * progress;
+    
+    // تأثيرات إضافية
+    final rotation = layer.rotationMultiplier * math.pi * (1 - progress);  // دوران يقل تدريجياً
+    final scale = layer.scaleStart + ((1.0 - layer.scaleStart) * progress);  // يكبر تدريجياً
+    final opacity = progress < 0.1 ? progress * 10 : 1.0;
+    
+    // 3D Perspective
+    final perspectiveValue = 0.002 * (1 - progress);  // يقل مع الاقتراب
+    
+    return Opacity(
+      opacity: opacity,
+      child: Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, perspectiveValue)  // 3D perspective
+          ..translate(currentX, currentY)
+          ..rotateZ(rotation)
+          ..rotateX((1 - progress) * 0.3)  // flip effect
+          ..scale(scale),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Glow effect قوي
+            if (progress > 0.2 && progress < 0.95)
+              Container(
+                width: widget.height * 0.95,
+                height: widget.height * 0.95,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: layer.glowColor.withOpacity(0.25 * progress),
+                      blurRadius: 35 * progress,
+                      spreadRadius: 10 * progress,
+                    )
+                  ],
+                ),
+              ),
+            
+            // الصورة
+            Image.asset(
+              layer.asset,
+              width: widget.height * 1.5,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+  Widget _buildInitialWelcomeText() {
+    return ValueListenableBuilder<double>(
+      valueListenable: initialWelcomeOpacityNotifier,
+      builder: (context, opacity, _) => AnimatedBuilder(
+        animation: _shimmerController,
+        builder: (context, child) {
+          // 🆕 يدخل من البداية (اليسار) ويخرج من النهاية (اليمين)
+          // -2 إلى 2 = يغطي النص كامل بدون رجوع
+          final shimmerOffset = (_shimmerController.value * 4.0) - 2.0;
+          
+          return AnimatedOpacity(
+            opacity: opacity,
+            duration: Duration(milliseconds: 300),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Animated subtitle
+                ShaderMask(
+                  shaderCallback: (bounds) {
+                    return LinearGradient(
+                      begin: Alignment(-1.0 + shimmerOffset, 0),
+                      end: Alignment(1.0 + shimmerOffset, 0),
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withOpacity(0.9),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ).createShader(bounds);
+                  },
+                  child: Text(
+                    'DISCOVER EXCELLENCE',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 5,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                
+                SizedBox(height: 20),
+                
+                // Main animated welcome message with shimmer
+                ShaderMask(
+                  shaderCallback: (bounds) {
+                    return LinearGradient(
+                      begin: Alignment(-1.0 + shimmerOffset, 0),
+                      end: Alignment(1.0 + shimmerOffset, 0),
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withOpacity(0.9),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ).createShader(bounds);
+                  },
+                  child: Text(
+                    'Scroll Down to Explore',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                
+                SizedBox(height: 30),
+                
+                // Animated arrow
+                Transform.translate(
+                  offset: Offset(0, math.sin(shimmerOffset * math.pi * 2) * 8),
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 32,
+                    color: Color(0xFFFF6B35).withOpacity(0.8),
+                  ),
+                ),
+                
+                SizedBox(height: 15),
+                
+                // Decorative shimmer line
+                Container(
+                  width: 180,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(1),
+                    gradient: LinearGradient(
+                      begin: Alignment(-1.0 + shimmerOffset, 0),
+                      end: Alignment(1.0 + shimmerOffset, 0),
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withOpacity(0.9),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0xFFFF6B35).withOpacity(0.5),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildWelcomeToRestaurant() {
+    return Positioned(
+      bottom: -80,
+      left: 0,
+      right: 0,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeOutBack,
+        builder: (context, val, child) {
+          final clampedVal = val.clamp(0.0, 1.0);
+          return Transform.scale(
+            scale: clampedVal,
+            child: Opacity(
+              opacity: clampedVal,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.storeName ?? "PARADISE",
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      color: Colors.white,
+                      fontSize: 40,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
+                      shadows: [
+                        Shadow(
+                          color: Color(0xFFFF6B35),
+                          blurRadius: 30,
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "MASTERPIECE ASSEMBLED",
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      color: Colors.white70,
+                      letterSpacing: 5,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
-// 🎨 CUSTOM PAINTERS FOR VISUAL EFFECTS
-
-class HolographicPainter extends CustomPainter {
-  final double progress;
-  final double intensity;
-
-  HolographicPainter({required this.progress, required this.intensity});
-
+// 🎨 PAINTERS
+class BackgroundPainter extends CustomPainter {
+  final double progress, intensity;
+  BackgroundPainter({required this.progress, required this.intensity});
+  
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
+    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 2.5;
     final center = Offset(size.width / 2, size.height / 2);
-    // Use a slow sinusoidal phase per ring so rings drift gently without sharp wrap
-    for (int i = 0; i < 5; i++) {
-      final phase = (progress + (i * 0.18));
-      // smooth -1..1 then normalize to 0..1
+    
+    for (int i = 0; i < 7; i++) {
+      final phase = (progress + (i * 0.14));
       final offset = (math.sin(phase * math.pi * 2) * 0.5) + 0.5;
-      final baseRadius = size.width * 0.18 + (i * size.width * 0.06);
-      final radius = baseRadius + (offset * size.width * 0.12);
-      final opacity = ((1 - offset) * intensity * 0.15).clamp(0.0, 1.0);
-
-      paint.color = Color(0xFF8B5CF6).withOpacity(opacity);
+      final radius = size.width * 0.18 + (i * size.width * 0.11) + (offset * size.width * 0.13);
+      paint.color = Color(0xFF8B5CF6).withOpacity(
+        ((1 - offset) * intensity * 0.18).clamp(0.0, 1.0),
+      );
       canvas.drawCircle(center, radius, paint);
     }
   }
-
+  
   @override
-  bool shouldRepaint(HolographicPainter oldDelegate) => true;
+  bool shouldRepaint(BackgroundPainter old) => true;
 }
 
 class ParticlePainter extends CustomPainter {
@@ -829,34 +614,64 @@ class ParticlePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     
-    for (var particle in particles) {
-      final angle = particle.x * math.pi * 2 + progress * math.pi * 2;
-      final radius = (particle.y.abs() * size.width * 0.4) * (1 + progress * 0.5);
+    if (particles.isEmpty) return;
+    
+    for (var p in particles) {
+      // 🧠 كل نجمة لها دورة حياة مستقلة
+      final double progressSafe = progress ?? 0.0;
+      final double lifeShiftSafe = p.lifeShift ?? 0.0;
+      double t = (progressSafe + lifeShiftSafe) % 1.0;
+
+      // 1️⃣ حساب الشفافية (Fade In/Out)
+      double opacity = 0.0;
+      if (t < 0.2) {
+        opacity = t * 5;
+      } else if (t > 0.8) {
+        opacity = (1.0 - t) * 5;
+      } else {
+        opacity = 1.0;
+      }
       
-      final x = center.dx + math.cos(angle) * radius;
-      final y = center.dy + math.sin(angle) * radius;
+      opacity *= (0.6 + (assemblyProgress ?? 0.0) * 0.4);
+
+      // 2️⃣ الحركة - دوران بطيء جداً في دائرة حول البرغر
+      final speedSafe = p.speed ?? 0.2;
+      final angle = (p.x * math.pi * 2) + (t * speedSafe * math.pi * 0.4);
+      final radius = (size.width * 0.4) + (p.y * 20);
       
+      final dx = math.cos(angle) * radius;
+      final dy = math.sin(angle) * radius;
+
       final paint = Paint()
-        ..color = particle.color.withOpacity(particle.opacity * assemblyProgress)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, particle.size);
-      
+        ..color = p.color.withOpacity(opacity.clamp(0.0, 1.0))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, (p.size ?? 1.0) * 0.5);
+
+      // رسم النجمة
       canvas.drawCircle(
-        Offset(x, y),
-        particle.size,
+        Offset(
+          center.dx + dx,
+          center.dy + dy,
+        ),
+        p.size ?? 1.0,
         paint,
       );
     }
   }
 
   @override
-  bool shouldRepaint(ParticlePainter oldDelegate) => true;
+  bool shouldRepaint(ParticlePainter old) => true;
 }
-
+// 🆕 Light Ray Painter - شعاع خفيف خلف البرغر
 class LightRayPainter extends CustomPainter {
   final double progress;
   final double intensity;
+  final List<Color> colors;
 
-  LightRayPainter({required this.progress, required this.intensity});
+  LightRayPainter({
+    required this.progress,
+    required this.intensity,
+    required this.colors,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -866,13 +681,13 @@ class LightRayPainter extends CustomPainter {
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 16);
 
     for (int i = 0; i < 8; i++) {
-      // slower rotation (half speed) and softer length so rays are calmer
-      final angle = (i / 8) * math.pi * 2 + progress * math.pi;
+      // 🆕 دوران بطيء جداً جداً - نقاط هادئة وأنيقة
+      final angle = (i / 8) * math.pi * 2 + progress * math.pi * 0.15;
       final length = size.width * 0.32 * math.max(0.2, intensity);
       
       final gradient = RadialGradient(
         colors: [
-          Color(0xFFFFC837).withOpacity(0.22 * intensity),
+          colors[i % colors.length].withOpacity(0.15 * intensity),
           Colors.transparent,
         ],
       );
@@ -900,73 +715,47 @@ class LightRayPainter extends CustomPainter {
   @override
   bool shouldRepaint(LightRayPainter oldDelegate) => true;
 }
-
-class ExplosionPainter extends CustomPainter {
-  final double progress;
-
-  ExplosionPainter({required this.progress});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-
-    for (int i = 0; i < 12; i++) {
-      final angle = (i / 12) * math.pi * 2;
-      final distance = size.width * 0.5 * progress;
-      final opacity = (1 - progress) * 0.8;
-      
-      paint.color = Color(0xFFFF6B35).withOpacity(opacity);
-      
-      canvas.drawLine(
-        center,
-        Offset(
-          center.dx + math.cos(angle) * distance,
-          center.dy + math.sin(angle) * distance,
-        ),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(ExplosionPainter oldDelegate) => true;
+// 📦 MODELS
+class ScrollRange {
+  final double start;
+  final double end;
+  
+  ScrollRange({required this.start, required this.end});
 }
-
-// 🎯 DATA MODELS
 
 class BurgerLayer {
   final String asset;
-  final double entryAngle;
-  final double spinSpeed;
+  final double startAngle;  // زاوية البداية بالـ radians
+  final double explodeDistance;  // مسافة الانفجار
   final Color glowColor;
-  final double magneticStrength;
-
+  final String label;
+  final double rotationMultiplier;  // مضاعف الدوران
+  final double scaleStart;  // حجم البداية
+  
   BurgerLayer({
     required this.asset,
-    required this.entryAngle,
-    required this.spinSpeed,
+    required this.startAngle,
+    required this.explodeDistance,
     required this.glowColor,
-    required this.magneticStrength,
+    required this.label,
+    required this.rotationMultiplier,
+    required this.scaleStart,
   });
 }
 
 class Particle {
-  final double x;
-  final double y;
-  final double speed;
-  final double size;
-  final double opacity;
-  final Color color;
-
+  final double x, y; // الموقع
+  final double speed; // السرعة
+  final double size; // الحجم
+  final Color color; // اللون
+  final double lifeShift; // 🆕 توقيت خاص لكل نجمة (Phase Shift)
+  
   Particle({
     required this.x,
     required this.y,
     required this.speed,
     required this.size,
-    required this.opacity,
     required this.color,
+    required this.lifeShift,
   });
 }
