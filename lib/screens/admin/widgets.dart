@@ -90,34 +90,9 @@ class _HoverScale extends StatefulWidget {
 }
 
 class _HoverScaleState extends State<_HoverScale> {
-  bool _isHovered = false;
-
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedScale(
-        scale: _isHovered ? 1.02 : 1.0,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: kAccentBlue.withOpacity(0.2),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : [],
-          ),
-          child: widget.child,
-        ),
-      ),
-    );
+    return widget.child;
   }
 }
 
