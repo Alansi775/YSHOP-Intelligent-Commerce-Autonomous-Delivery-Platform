@@ -7,15 +7,16 @@ const router = Router();
 // Admin route - requires admin token
 router.get('/admin', verifyAdminToken, OrderController.getAdminOrders);
 
-// Get order by ID - accepts both admin and firebase tokens
-router.get('/:id', verifyToken, OrderController.getById);
-
 // All other order routes require firebase authentication
 router.use(verifyFirebaseToken);
 
+// Specific routes BEFORE generic routes to prevent /:id from matching /user
 router.post('/', OrderController.create);
+router.get('/user', OrderController.getUserOrders);
 router.get('/store/:storeId', OrderController.getStoreOrders);
-router.get('/user/orders', OrderController.getUserOrders);
+
+// Generic ID-based routes - MUST come after specific routes
+router.get('/:id', OrderController.getById);
 router.put('/:id/status', OrderController.updateStatus);
 router.post('/:id/assign', OrderController.assignToDriver);
 router.post('/:id/picked-up', OrderController.pickedUp);

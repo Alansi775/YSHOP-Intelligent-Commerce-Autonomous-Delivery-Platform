@@ -5,15 +5,16 @@ import '../state_management/cart_manager.dart';
 class CartIconWithBadge extends StatelessWidget {
   final VoidCallback? onTap;
   final double iconSize;
+  final Color? iconColor;
 
-  const CartIconWithBadge({Key? key, this.onTap, this.iconSize = 28}) : super(key: key);
+  const CartIconWithBadge({Key? key, this.onTap, this.iconSize = 28, this.iconColor}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CartManager>(
       builder: (context, cartManager, child) {
         final totalItems = cartManager.totalItems;
-        final primaryIconColor = Theme.of(context).colorScheme.onSurface;
+        final primaryIconColor = iconColor ?? Theme.of(context).colorScheme.onSurface;
 
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Stack(
@@ -33,7 +34,7 @@ class CartIconWithBadge extends StatelessWidget {
                 ),
                 child: Icon(
                   Icons.shopping_bag_outlined,
-                  color: Theme.of(context).colorScheme.onSurface,
+                  color: primaryIconColor,
                   size: iconSize,
                 ),
               ),

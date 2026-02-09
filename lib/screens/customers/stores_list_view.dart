@@ -192,10 +192,8 @@ class _StoresListViewState extends State<StoresListView> {
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 5.0),
-            child: CartIconWithBadge(),
-          ),
+          CartIconWithBadge(iconColor: Colors.white),
+          const SizedBox(width: 16),
         ],
       ),
       body: Container(

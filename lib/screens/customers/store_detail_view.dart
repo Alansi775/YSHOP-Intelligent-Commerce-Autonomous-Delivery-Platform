@@ -12,6 +12,7 @@ import '../../models/store.dart';
 import '../../models/product.dart';
 import '../../models/category.dart' as app_category;
 import '../../widgets/side_cart_view_contents.dart';
+import '../../widgets/cart_icon_with_badge.dart';
 import '../../services/api_service.dart';
 import '../customers/product_detail_view.dart';
 import '../../widgets/burger_assembly_widget.dart';
@@ -387,42 +388,10 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
           ValueListenableBuilder<double>(
             valueListenable: _burgerWelcomeOpacity,
             builder: (context, opacity, _) {
-              return Consumer<CartManager>(
-                builder: (context, cart, _) => AnimatedOpacity(
-                  opacity: 1.0 - opacity,
-                  duration: const Duration(milliseconds: 300),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      opacity > 0.1
-                          ? const SizedBox.shrink()
-                          : _buildCircleBtn(
-                              Icons.shopping_bag_outlined,
-                              () => Scaffold.of(context).openEndDrawer(),
-                              isDark,
-                            ),
-                      if (cart.totalItems > 0 && opacity <= 0.1)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: CircleAvatar(
-                            radius: 9,
-                            backgroundColor: isDark 
-                              ? const Color(0xFF4A9FFF)
-                              : const Color(0xFF2196F3),
-                            child: Text(
-                              '${cart.totalItems}',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        )
-                    ],
-                  ),
-                ),
+              return AnimatedOpacity(
+                opacity: 1.0 - opacity,
+                duration: const Duration(milliseconds: 300),
+                child: CartIconWithBadge(iconColor: Colors.white),
               );
             },
           ),

@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:ui';
 import 'package:provider/provider.dart'; 
 import '../../widgets/category_widgets.dart';
 import '../../widgets/side_menu_view_contents.dart'; 
@@ -10,9 +11,11 @@ import '../../widgets/cart_icon_with_badge.dart';
 import '../../screens/auth/sign_in_ui.dart';
 import '../../state_management/cart_manager.dart';
 import '../../state_management/theme_manager.dart';
+import '../../state_management/auth_manager.dart';
 import '../../constants/store_categories.dart';
 import '../../services/api_service.dart'; 
 import 'stores_list_view.dart';
+import '../../main.dart';
 
 class CategoryHomeView extends StatefulWidget {
   const CategoryHomeView({Key? key}) : super(key: key); 
@@ -22,6 +25,10 @@ class CategoryHomeView extends StatefulWidget {
 }
 
 class _CategoryHomeViewState extends State<CategoryHomeView> with SingleTickerProviderStateMixin {
+  // Hover States
+  bool _isExploreHovered = false;
+  bool _isProfileHovered = false;
+  
   // Hero Products Data
   final List<HeroProduct> heroProducts = [
     HeroProduct(
@@ -71,6 +78,9 @@ class _CategoryHomeViewState extends State<CategoryHomeView> with SingleTickerPr
       duration: const Duration(milliseconds: 500),
     )..forward();
     
+    // Add scroll listener to track hero section
+    _scrollController.addListener(_onScroll);
+    
     // Preload images after first frame to avoid context errors
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _preloadImages();
@@ -78,6 +88,15 @@ class _CategoryHomeViewState extends State<CategoryHomeView> with SingleTickerPr
     
     // Start auto-rotation immediately
     _startAutoRotate();
+  }
+
+  void _onScroll() {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isAboveHero = _scrollController.offset < screenHeight - 100;
+    
+    if (isAboveHero != isAboveHeroNotifier.value) {
+      isAboveHeroNotifier.value = isAboveHero;
+    }
   }
 
   // Preload all product images
@@ -121,6 +140,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView> with SingleTickerPr
   @override
   void dispose() {
     _autoRotateTimer?.cancel();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _fadeController.dispose();
     super.dispose();
@@ -133,7 +153,6 @@ class _CategoryHomeViewState extends State<CategoryHomeView> with SingleTickerPr
     
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
-      drawer: const Drawer(child: SideMenuViewContents()),
       endDrawer: const Drawer(child: SideCartViewContents()),
       body: Stack(
         children: [
@@ -451,12 +470,10 @@ class _CategoryHomeViewState extends State<CategoryHomeView> with SingleTickerPr
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Builder(
-              builder: (context) => IconButton(
-                icon: Icon(Icons.menu, color: Colors.white),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
+            // Left: Empty space (removed menu button)
+            const SizedBox(width: 48),
+            
+            // Center: Logo
             Text(
               'YSHOP',
               style: TextStyle(
@@ -467,14 +484,32 @@ class _CategoryHomeViewState extends State<CategoryHomeView> with SingleTickerPr
                 color: Colors.white,
               ),
             ),
+            
+            // Right: Profile popup
             Row(
               children: [
-                IconButton(
-                  icon: Icon(Icons.person_outline, color: Colors.white),
-                  onPressed: () {},
+                GestureDetector(
+                  onTap: () => ProfilePopupView.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Image.asset(
+                      'assets/icons/user.png',
+                      width: 20,
+                      height: 20,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                CartIconWithBadge(),
+                const SizedBox(width: 12),
+                CartIconWithBadge(iconColor: Colors.white),
               ],
             ),
           ],

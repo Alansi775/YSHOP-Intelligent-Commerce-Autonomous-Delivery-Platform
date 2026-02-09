@@ -912,11 +912,32 @@ class ApiService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final response = await _request(
       'GET',
-      '/orders/user/orders?page=$page&limit=$limit&t=$timestamp',
+      '/orders/user?page=$page&limit=$limit&t=$timestamp',
       useCache: false,
       cacheTtl: 0,
+      requiresAuth: true,
     );
     return List<dynamic>.from(response['data'] ?? []);
+  }
+
+  static Future<Map<String, dynamic>> requestOrderReturn(int orderId) async {
+    final response = await _request(
+      'PUT',
+      '/orders/$orderId/status',
+      body: {'status': 'return'},
+      requiresAuth: true,
+    );
+    return response as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> cancelOrderReturn(int orderId) async {
+    final response = await _request(
+      'PUT',
+      '/orders/$orderId/status',
+      body: {'status': 'delivered'},
+      requiresAuth: true,
+    );
+    return response as Map<String, dynamic>;
   }
 
   static Future<List<dynamic>> getStoreOrders({

@@ -1,13 +1,13 @@
+// side_menu_view.dart - TRUE DJI STYLE
+// Ultra minimal, elegant, sophisticated
+
 import 'package:flutter/material.dart';
-import 'dart:ui'; // For glassmorphism effects
+import 'dart:ui';
 import 'package:provider/provider.dart';
-import '../services/api_service.dart';
 import '../screens/customers/settings_view.dart';
+import '../screens/customers/my_orders_view.dart';
 import '../screens/auth/sign_in_view.dart'; 
-import '../screens/auth/sign_in_ui.dart'; // Import luxury theme
-import '../state_management/auth_manager.dart';
-import '../state_management/theme_manager.dart'; // Import theme manager
-import '../state_management/cart_manager.dart'; 
+import '../state_management/auth_manager.dart'; 
 
 class SideMenuViewContents extends StatefulWidget {
   const SideMenuViewContents({Key? key}) : super(key: key);
@@ -17,142 +17,95 @@ class SideMenuViewContents extends StatefulWidget {
 }
 
 class _SideMenuViewContentsState extends State<SideMenuViewContents> {
-  int _selectedCategoryIndex = 0;
-  String _name = "Guest";
-  String _surname = "User";
-  
-  final List<String> _storeTypes = ["FASHION", "PHARMACY", "RESTAURANT", "MARKET"];
-  
-  late Map<String, List<String>> categoriesByType;
-
   @override
-  void initState() {
-    super.initState();
-    
-    // Initialize categories by store type
-    categoriesByType = {
-      "FASHION": ["All", "Men", "Women", "Kids", "Shoes", "Accessories"],
-      "PHARMACY": ["All", "Pain Relief", "Cold & Flu", "Vitamins", "First Aid", "Skincare"],
-      "RESTAURANT": ["All", "Burgers", "Pizza", "Salads", "Desserts", "Beverages"],
-      "MARKET": ["All", "Fruits", "Vegetables", "Dairy", "Grains", "Beverages"],
-    };
-    
-    // Call immediately, no delay!
-    _fetchUserData();
+  Widget build(BuildContext context) {
+    return const Placeholder();
   }
+}
 
-  // منطق جلب بيانات المستخدم المصحح
-  void _fetchUserData() {
-    final authManager = Provider.of<AuthManager>(context, listen: false);
-    
-    // If not authenticated, show Guest
-    if (!authManager.isAuthenticated) {
-      if (mounted) setState(() { _name = 'Guest'; _surname = 'User'; });
-      return;
-    }
-
-    // If authenticated, get profile from cache (don't fetch from API here)
-    try {
-      final profile = authManager.userProfile;
-      if (profile != null && mounted) {
-        final display = (profile['display_name'] as String?) ?? '';
-        String first = '';
-        String last = '';
-        if (display.isNotEmpty) {
-          final parts = display.split(' ');
-          first = parts.first;
-          last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
-        }
-        
-        final name = (profile['name'] as String?) ?? (first.isNotEmpty ? first : 'User');
-        final surname = (profile['surname'] as String?) ?? last;
-        
-        debugPrint('📋 SideMenu - Updated from profile: name=$name, surname=$surname');
-        setState(() {
-          _name = name;
-          _surname = surname;
-        });
-      } else {
-        // No profile yet, use display_name
-        setState(() { _name = 'User'; _surname = ''; });
-      }
-    } catch (e) {
-      debugPrint('Error fetching user data: $e');
-      setState(() { _name = 'User'; _surname = ''; });
-    }
+// ============== TRUE DJI STYLE PROFILE ==============
+class ProfilePopupView {
+  static void show(BuildContext context) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        barrierColor: Colors.black.withOpacity(0.7),
+        transitionDuration: const Duration(milliseconds: 500),
+        reverseTransitionDuration: const Duration(milliseconds: 400),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 420, maxHeight: 680),
+              margin: const EdgeInsets.symmetric(horizontal: 32, vertical: 60),
+              child: Material(
+                color: Colors.transparent,
+                child: _ProfileDialogContent(),
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+            ),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.94, end: 1.0).animate(
+                CurvedAnimation(
+                  parent: animation,
+                  curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic),
+                ),
+              ),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
   }
+}
 
+class _ProfileDialogContent extends StatelessWidget {
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // استمع فقط للتغييرات، لا تستدعي _fetchUserData هنا
-    Provider.of<AuthManager>(context, listen: true); 
-  }
-  
-  // MARK: - Components
-
-  Widget _buildUserProfileSection(BuildContext context, bool isDark, Color liquidBg) {
-    final authManager = Provider.of<AuthManager>(context, listen: false);
-    final isLoggedIn = authManager.isAuthenticated;
-    
-    final textColor = isDark 
-        ? LuxuryTheme.kPlatinum 
-        : LuxuryTheme.kDeepNavy;
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final authManager = Provider.of<AuthManager>(context);
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(32),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
         child: Container(
           decoration: BoxDecoration(
-            color: liquidBg,
-            borderRadius: BorderRadius.circular(12),
+            color: isDark 
+              ? const Color(0xFF1A1A1A).withOpacity(0.98)  // أفتح شوي + أقوى
+              : const Color(0xFFF8F8F8).withOpacity(0.98), // أغمق شوي + أقوى
+            borderRadius: BorderRadius.circular(32),
             border: Border.all(
-              color: isDark
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.15),
+              color: isDark 
+                ? Colors.white.withOpacity(0.12)  // أوضح
+                : Colors.black.withOpacity(0.08),  // أوضح
+              width: 1,
             ),
-          ),
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: isDark 
-                    ? Colors.white.withOpacity(0.1)
-                    : Colors.black.withOpacity(0.1),
-                child: Icon(Icons.person_rounded, size: 28, color: textColor.withOpacity(0.7)), 
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),  // أقوى
+                blurRadius: 60,
+                spreadRadius: 0,
+                offset: const Offset(0, 20),
               ),
-              const SizedBox(width: 12),
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildMinimalHeader(context, isDark),
               Expanded(
-                child: VStack(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isLoggedIn ? '$_name $_surname' : 'Welcome Guest',
-                      style: TextStyle(
-                        fontFamily: 'TenorSans',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                        letterSpacing: 0.4,
-                      ),
-                      softWrap: true,
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isLoggedIn ? 'Account Settings' : 'Sign In / Register',
-                      style: TextStyle(
-                        fontFamily: 'TenorSans',
-                        fontSize: 11,
-                        color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        letterSpacing: 0.2,
-                      ),
-                      softWrap: true,
-                      maxLines: 1,
-                    ),
-                  ],
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                  child: _buildContent(context, authManager, isDark),
                 ),
               ),
             ],
@@ -162,501 +115,259 @@ class _SideMenuViewContentsState extends State<SideMenuViewContents> {
     );
   }
 
-  Widget _buildCloseButton(BuildContext context, bool isDark, Color liquidBg) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: GestureDetector( 
-          onTap: () => Navigator.of(context).pop(), 
-          child: Container(
-            width: 48, 
-            height: 48, 
-            decoration: BoxDecoration(
-              color: liquidBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withOpacity(0.1)
-                    : Colors.white.withOpacity(0.15),
-              ),
-            ),
-            child: Icon(
-              Icons.close, 
-              size: 24, 
-              color: isDark ? Colors.white70 : Colors.black54,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildCategorySelector(bool isDark, Color liquidBg, Color liquidBorder) {
+  Widget _buildMinimalHeader(BuildContext context, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            decoration: BoxDecoration(
-              color: liquidBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: liquidBorder),
-            ),
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              children: List.generate(_storeTypes.length, (index) {
-                final isSelected = _selectedCategoryIndex == index;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedCategoryIndex = index;
-                    });
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    margin: const EdgeInsets.only(bottom: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected 
-                          ? LuxuryTheme.kLightBlueAccent.withOpacity(0.8)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      _storeTypes[index],
-                      style: TextStyle(
-                        fontFamily: 'TenorSans',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                        color: isSelected 
-                            ? Colors.white 
-                            : (isDark ? Colors.white60 : Colors.black54),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildCategoryItem(String title, bool isDark, Color liquidBg, Color liquidBorder, VoidCallback onTap) {
-    final textColor = isDark 
-        ? LuxuryTheme.kPlatinum 
-        : LuxuryTheme.kDeepNavy;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      padding: const EdgeInsets.fromLTRB(32, 28, 24, 24),
+      child: Row(
+        children: [
+          const SizedBox(width: 32),
+          const Spacer(),
+          
+          // Close button - more visible
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: liquidBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: liquidBorder),
+                color: isDark 
+                  ? Colors.white.withOpacity(0.08)  // كان 0.04 - أوضح
+                  : Colors.black.withOpacity(0.05), // كان 0.02 - أوضح
+                shape: BoxShape.circle,
               ),
-              child: Row(
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: textColor,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    Icons.chevron_right, 
-                    size: 18, 
-                    color: isDark ? Colors.white38 : Colors.black26,
-                  ),
-                ],
+              child: Icon(
+                Icons.close,
+                size: 18,
+                color: isDark 
+                  ? Colors.white.withOpacity(0.80)  // كان 0.6 - أوضح
+                  : Colors.black.withOpacity(0.80), // كان 0.6 - أوضح
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildMenuFooter(BuildContext context, bool isDark, Color liquidBg, Color liquidBorder) {
-    final authManager = Provider.of<AuthManager>(context); 
-    final isLoggedIn = authManager.isAuthenticated;
-    
-    final textColor = isDark 
-        ? LuxuryTheme.kPlatinum 
-        : LuxuryTheme.kDeepNavy;
+  Widget _buildContent(BuildContext context, AuthManager authManager, bool isDark) {
+    final profile = authManager.userProfile;
+    final displayName = profile?['display_name'] ?? 'User';
+    final email = profile?['email'] ?? 'user@email.com';
 
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            decoration: BoxDecoration(
-              color: liquidBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: liquidBorder),
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        
+        // Avatar - more visible
+        Container(
+          width: 110,
+          height: 110,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDark
+              ? Colors.white.withOpacity(0.12)  // أوضح بكثير
+              : Colors.black.withOpacity(0.08), // أوضح بكثير
+          ),
+          child: Center(
+            child: Text(
+              displayName[0].toUpperCase(),
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 44,
+                fontWeight: FontWeight.w300,
+                color: isDark 
+                  ? Colors.white.withOpacity(0.95)  // أوضح
+                  : Colors.black.withOpacity(0.95), // أوضح
+                letterSpacing: 0,
+              ),
             ),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Support Button (Centered and featured)
-                _buildSupportButton(context, isDark, liquidBg, liquidBorder, textColor),
-                const SizedBox(height: 16),
-                
-                // Settings Button
-                _buildMenuButton(
-                  context,
-                  icon: Icons.settings,
-                  text: "Settings",
-                  isDark: isDark,
-                  textColor: textColor,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => const SettingsView(),
-                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                          return FadeTransition(
-                            opacity: animation.drive(Tween(begin: 0.0, end: 1.0)),
-                            child: child,
-                          );
-                        },
-                        transitionDuration: const Duration(milliseconds: 250),
-                      ),
-                    );
-                  },
-                ),
-                
-                const SizedBox(height: 16),
-                Divider(
-                  height: 1, 
-                  color: isDark 
-                      ? Colors.white.withOpacity(0.1)
-                      : Colors.black.withOpacity(0.1),
-                ), 
-                const SizedBox(height: 16),
-
-                // Logout/Login Button
-                TextButton(
-                  onPressed: () async {
-                    if (isLoggedIn) {
-                      final cartManager = context.read<CartManager>();
-                      await cartManager.clearCart();
-                      
-                      await authManager.signOut();
-                      
-                      if (mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (context) => const SignInView()),
-                          (Route<dynamic> route) => false,
-                        );
-                      }
-                    } else {
-                      Navigator.of(context).pop(); 
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => const SignInView()),
-                      );
-                    }
-                  },
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isLoggedIn 
-                              ? Colors.red.withOpacity(0.15)
-                              : Colors.green.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isLoggedIn 
-                                ? Colors.red.withOpacity(0.3)
-                                : Colors.green.withOpacity(0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              isLoggedIn ? "Logout" : "Sign In",
-                              style: TextStyle(
-                                fontFamily: 'TenorSans',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: isLoggedIn ? Colors.red[400] : Colors.green[400],
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Icon(
-                              isLoggedIn ? Icons.logout : Icons.login, 
-                              size: 18, 
-                              color: isLoggedIn ? Colors.red[400] : Colors.green[400],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+          ),
+        ),
+        
+        const SizedBox(height: 28),
+        
+        // Name - واضح تماماً
+        Text(
+          displayName,
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 26,
+            fontWeight: FontWeight.w400,
+            color: isDark ? Colors.white : Colors.black,  // 100% واضح
+            letterSpacing: -0.3,
+            height: 1.3,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        
+        const SizedBox(height: 8),
+        
+        // Email - أوضح
+        Text(
+          email,
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            color: isDark 
+              ? Colors.white.withOpacity(0.55)  // كان 0.35 - الآن أوضح
+              : Colors.black.withOpacity(0.55), // كان 0.35 - الآن أوضح
+            letterSpacing: 0.3,
+          ),
+        ),
+        
+        const SizedBox(height: 64),
+        
+        // Menu items
+        _buildCleanMenuItem(
+          context,
+          'Settings',
+          isDark,
+          () {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => const SettingsView(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+              ),
+            );
+          },
+        ),
+        
+        const SizedBox(height: 8),
+        
+        // My Orders
+        _buildCleanMenuItem(
+          context,
+          'My Orders',
+          isDark,
+          () {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => const MyOrdersView(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+              ),
+            );
+          },
+        ),
+        
+        const SizedBox(height: 56),
+        
+        // Separator - أوضح
+        Container(
+          height: 1,
+          margin: const EdgeInsets.symmetric(horizontal: 48),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.transparent,
+                isDark 
+                  ? Colors.white.withOpacity(0.15)  // كان 0.08 - أوضح
+                  : Colors.black.withOpacity(0.12), // كان 0.06 - أوضح
+                Colors.transparent,
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-  
-  Widget _buildSupportButton(BuildContext context, bool isDark, Color liquidBg, Color liquidBorder, Color textColor) {
-    return GestureDetector(
-      onTap: () {
-        // Call support number
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: liquidBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: liquidBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Support Label
-                  Text(
-                    'Support',
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: LuxuryTheme.kLightBlueAccent,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // Phone Number (Main)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.phone_rounded,
-                        size: 20,
-                        color: LuxuryTheme.kLightBlueAccent,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        '+90 539 255 4609',
-                        style: TextStyle(
-                          fontFamily: 'TenorSans',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+        
+        const SizedBox(height: 40),
+        
+        // Sign Out - واضح
+        GestureDetector(
+          onTap: () {
+            Navigator.pop(context);
+            authManager.signOut();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Text(
+              'Sign Out',
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+                color: isDark 
+                  ? const Color(0xFFEF5350)           // 100% واضح
+                  : const Color(0xFFE53935),          // 100% واضح
+                letterSpacing: 0.4,
               ),
             ),
           ),
         ),
-      ),
+        
+        const SizedBox(height: 24),
+        
+        // Phone - أوضح شوي
+        Text(
+          '+90 539 255 4609',
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: isDark 
+              ? Colors.white.withOpacity(0.35)  // كان 0.20 - أوضح
+              : Colors.black.withOpacity(0.35), // كان 0.20 - أوضح
+            letterSpacing: 0.8,
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildMenuButton(
-    BuildContext context, {
-    required IconData icon, 
-    required String text, 
-    required bool isDark,
-    required Color textColor,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildCleanMenuItem(
+    BuildContext context,
+    String label,
+    bool isDark,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isDark 
-                  ? Colors.white.withOpacity(0.03)
-                  : Colors.black.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withOpacity(0.08)
-                    : Colors.black.withOpacity(0.08),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  icon, 
-                  size: 24, 
-                  color: LuxuryTheme.kLightBlueAccent,
-                ),
-                const SizedBox(width: 16),
-                Expanded( 
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: textColor,
-                      letterSpacing: 0.5,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right, 
-                  size: 16, 
-                  color: isDark ? Colors.white.withOpacity(0.24) : Colors.black.withOpacity(0.24),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final themeManager = Provider.of<ThemeManager>(context);
-    final isDark = themeManager.isDarkMode;
-    
-    // Liquid Glass Colors
-    final backgroundColor = isDark 
-        ? LuxuryTheme.kDarkBackground 
-        : LuxuryTheme.kLightBackground;
-    
-    final liquidBg = isDark 
-        ? Colors.white.withOpacity(0.05)
-        : Colors.white.withOpacity(0.08);
-    
-    final liquidBorder = isDark 
-        ? Colors.white.withOpacity(0.1)
-        : Colors.white.withOpacity(0.15);
-    
-    final screenWidth = MediaQuery.of(context).size.width;
-    final menuWidth = screenWidth > 600 ? 300.0 : screenWidth * 0.8; 
-    
-    return SizedBox(
-      width: menuWidth, 
       child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark 
-                ? [const Color(0xFF0A0A0A), const Color(0xFF1A1A1A)]
-                : [const Color(0xFFF5F5F5), const Color(0xFFE8E8E8)],
+          color: Colors.transparent,
+          border: Border(
+            bottom: BorderSide(
+              color: isDark 
+                ? Colors.white.withOpacity(0.10)  // كان 0.05 - أوضح بكثير
+                : Colors.black.withOpacity(0.08), // كان 0.04 - أوضح
+              width: 1,
+            ),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            // Header with Liquid Glass effect
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 40, 24, 20),
-              child: Row(
-                children: [
-                  Expanded( 
-                    child: _buildUserProfileSection(context, isDark, liquidBg),
-                  ),
-                  const SizedBox(width: 10),
-                  _buildCloseButton(context, isDark, liquidBg),
-                ],
-              ),
-            ),
-            
-            // Categories and Footer
+        child: Row(
+          children: [
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildCategorySelector(isDark, liquidBg, liquidBorder),
-                    
-                    // Category Items List (Dynamic based on selected store type)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Column(
-                        children: categoriesByType[_storeTypes[_selectedCategoryIndex]]!
-                            .map((category) => Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: _buildCategoryItem(category, isDark, liquidBg, liquidBorder, () {
-                                Navigator.of(context).pop(); 
-                              }),
-                            ))
-                            .toList(),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-                    
-                    _buildMenuFooter(context, isDark, liquidBg, liquidBorder),
-                    const SizedBox(height: 20),
-                  ],
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: isDark 
+                    ? Colors.white                    // 100% واضح
+                    : Colors.black,                   // 100% واضح
+                  letterSpacing: 0.2,
                 ),
               ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 13,
+              color: isDark 
+                ? Colors.white.withOpacity(0.40)  // كان 0.25 - أوضح
+                : Colors.black.withOpacity(0.40), // كان 0.25 - أوضح
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-// VStack Helper (لا تغيير فيها)
-class VStack extends StatelessWidget {
-  final List<Widget> children;
-  final CrossAxisAlignment crossAxisAlignment;
-  const VStack({Key? key, required this.children, this.crossAxisAlignment = CrossAxisAlignment.center}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: crossAxisAlignment,
-      children: children,
     );
   }
 }

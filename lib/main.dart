@@ -14,6 +14,9 @@ import 'state_management/cart_manager.dart';
 import 'state_management/auth_manager.dart';
 import 'state_management/theme_manager.dart'; 
 
+// Global ValueNotifier for tracking hero section scroll position
+final isAboveHeroNotifier = ValueNotifier<bool>(true); 
+
 // =======================================================
 // MARK: - تعريفات الثيم (Themes Definitions)
 // =======================================================

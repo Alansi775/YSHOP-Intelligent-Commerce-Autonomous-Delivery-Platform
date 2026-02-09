@@ -146,12 +146,31 @@ export class OrderController {
       const { status } = req.body;
 
       // Validate status
-      const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+      const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'return'];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
           message: 'Invalid status',
         });
+      }
+
+      // Get the order first
+      const order = await Order.findById(id);
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: 'Order not found',
+        });
+      }
+
+      // Check authorization: user can only request returns on their own orders
+      if ((status === 'return' || status === 'delivered') && req.user) {
+        if (order.user_id !== req.user.id) {
+          return res.status(403).json({
+            success: false,
+            message: 'Forbidden: cannot modify this order',
+          });
+        }
       }
 
       await Order.updateStatus(id, status);

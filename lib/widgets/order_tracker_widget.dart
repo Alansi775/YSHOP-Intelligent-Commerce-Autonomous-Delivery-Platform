@@ -1,21 +1,24 @@
+// استبدل order_tracker_widget.dart بهذا الكود الكامل
+// نسخة كاملة مع Map Widget للتتبع المباشر
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/navigation_service.dart';
 import 'package:intl/intl.dart';
 import '../state_management/cart_manager.dart';
-import '../services/navigation_service.dart';
 import '../state_management/auth_manager.dart';
-
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/product.dart';
 import '../screens/auth/sign_in_ui.dart';
 import 'dart:ui' as ui;
+import '../main.dart';
+import 'dart:async';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
-/// Optimized Order Tracker - Fast loading, smooth UX
+/// Order Tracker - DJI Style
 class OrderTrackerWidget extends StatefulWidget {
   const OrderTrackerWidget({Key? key}) : super(key: key);
 
@@ -24,23 +27,19 @@ class OrderTrackerWidget extends StatefulWidget {
 }
 
 class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
-  // Cached order data to prevent repeated fetches
   Map<String, dynamic>? _cachedOrder;
   String? _currentOrderId;
   Timer? _pollingTimer;
   bool _isLoading = false;
   bool _isCheckingLatestOrder = false;
+  bool _isDialogOpen = false;
   String? _lastCheckedUserId;
-  DateTime? _lastClearTime;
-  DateTime? _lastCheckTime; // 🔥 Track when we last checked for orders
-  int _consecutiveAuthErrors = 0; // 🔥 Track consecutive 401 errors to stop infinite retries
+  DateTime? _lastCheckTime;
+  int _consecutiveAuthErrors = 0;
 
   @override
   void initState() {
     super.initState();
-    // 🔥 CRITICAL FIX: Don't call _checkForLatestOrder() here!
-    // The token may not be loaded yet. Wait for didChangeDependencies instead.
-    // didChangeDependencies will trigger once AuthManager is ready.
   }
 
   @override
@@ -49,31 +48,24 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     super.dispose();
   }
 
-  // Check auth changes via AuthManager
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final authManager = Provider.of<AuthManager>(context, listen: true);
     
-    // If user logged out, clear everything
     if (!authManager.isAuthenticated && _lastCheckedUserId != null) {
       _clearOrderData();
       _lastCheckedUserId = null;
-      _consecutiveAuthErrors = 0; // Reset error counter
+      _consecutiveAuthErrors = 0;
       return;
     }
     
-    // If user is authenticated and has a profile, check for orders
     if (authManager.isAuthenticated && authManager.userProfile != null) {
       final newUserId = authManager.userProfile?['uid']?.toString();
       
-      // 🔥 Only check if:
-      // 1. User ID changed (new login)
-      // 2. AND at least 5 seconds have passed
-      // 3. AND no recent 401 errors (wait for user to manually retry)
       if (newUserId != _lastCheckedUserId && newUserId != null) {
         _lastCheckedUserId = newUserId;
-        _consecutiveAuthErrors = 0; // Reset counter for new user
+        _consecutiveAuthErrors = 0;
         
         final now = DateTime.now();
         if (_lastCheckTime == null || now.difference(_lastCheckTime!).inSeconds >= 5) {
@@ -84,10 +76,8 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     }
   }
 
-  // Clear all cached order data
   void _clearOrderData() {
     _pollingTimer?.cancel();
-    // 🔥 CRITICAL: Check if mounted before setState to avoid "setState after dispose" errors
     if (mounted) {
       setState(() {
         _cachedOrder = null;
@@ -96,14 +86,11 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
         _isCheckingLatestOrder = false;
       });
     }
-    // Also clear from CartManager using Future.microtask to avoid setState during build
     Future.microtask(() {
       if (mounted) {
         try {
           Provider.of<CartManager>(context, listen: false).setLastOrderId(null);
-        } catch (e) {
-          // Silent fail - user is logging out anyway
-        }
+        } catch (e) {}
       }
     });
   }
@@ -115,106 +102,62 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     return 0.0;
   }
 
-  // Parse date from various formats
   DateTime _parseDate(dynamic raw) {
     if (raw == null) return DateTime.now();
-
-    // If already DateTime, check if it needs timezone adjustment
     if (raw is DateTime) {
       if (raw.isUtc) {
-        return DateTime(
-          raw.year,
-          raw.month,
-          raw.day,
-          raw.hour,
-          raw.minute,
-          raw.second,
-        );
+        return DateTime(raw.year, raw.month, raw.day, raw.hour, raw.minute, raw.second);
       }
       return raw;
     }
-
     if (raw is String) {
-      // Handle MySQL format: "2025-12-23 02:38:01" or with T: "2025-12-23T02:38:01"
       final sqlTs = RegExp(r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})');
       final match = sqlTs.firstMatch(raw);
       if (match != null) {
         return DateTime(
-          int.parse(match.group(1)!),
-          int.parse(match.group(2)!),
-          int.parse(match.group(3)!),
-          int.parse(match.group(4)!),
-          int.parse(match.group(5)!),
-          int.parse(match.group(6)!),
+          int.parse(match.group(1)!), int.parse(match.group(2)!), int.parse(match.group(3)!),
+          int.parse(match.group(4)!), int.parse(match.group(5)!), int.parse(match.group(6)!),
         );
       }
-
       final parsed = DateTime.tryParse(raw);
       if (parsed != null) {
-        return DateTime(
-          parsed.year,
-          parsed.month,
-          parsed.day,
-          parsed.hour,
-          parsed.minute,
-          parsed.second,
-        );
+        return DateTime(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute, parsed.second);
       }
       return DateTime.now();
     }
-
-    if (raw is int) {
-      return DateTime.fromMillisecondsSinceEpoch(raw);
-    }
-
+    if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw);
     if (raw is Map && raw.containsKey('seconds')) {
       final secs = raw['seconds'];
       if (secs is int) return DateTime.fromMillisecondsSinceEpoch(secs * 1000);
     }
-
     return DateTime.now();
   }
 
-  // NEW: Fetch the latest undelivered order for current user
   Future<void> _checkForLatestOrder() async {
-    // 🔥 CRITICAL: Check if already checking or if still authenticated
     if (_isCheckingLatestOrder) return;
+    if (_consecutiveAuthErrors >= 3) return;
     
-    // 🔥 NEW: If too many consecutive 401 errors, stop trying until next login
-    if (_consecutiveAuthErrors >= 3) {
-      debugPrint('⚠️ Too many auth errors (${_consecutiveAuthErrors}), stopping order checks. User needs to re-login.');
-      return;
-    }
-    
-    // Check if user is still logged in BEFORE making request
     final authManager = Provider.of<AuthManager>(context, listen: false);
     if (!authManager.isAuthenticated) {
       _clearOrderData();
       return;
     }
     
-    // If there's already a current order being tracked, don't fetch new ones
     if (_currentOrderId != null) return;
     
     _isCheckingLatestOrder = true;
     try {
-      // Fetch all orders and get the latest non-delivered one
       final orders = await ApiService.getUserOrders();
-      
-      // 🔥 Success = reset error counter
       _consecutiveAuthErrors = 0;
       
       if (orders != null && orders.isNotEmpty && mounted) {
-        // Find latest order that's not delivered
         Map<String, dynamic>? latestPendingOrder;
         for (final order in orders) {
           final status = _normalizeStatus(order['status']?.toString() ?? 'pending');
-          // Only track orders that are pending, processing, or out for delivery
           if (status != 'Delivered' && status != 'Cancelled') {
             if (latestPendingOrder == null) {
               latestPendingOrder = order;
             } else {
-              // Compare timestamps to find the most recent one
               final currentDate = _parseDate(order['created_at'] ?? order['createdAt']);
               final latestDate = _parseDate(latestPendingOrder['created_at'] ?? latestPendingOrder['createdAt']);
               if (currentDate.isAfter(latestDate)) {
@@ -227,63 +170,38 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
         if (latestPendingOrder != null) {
           final orderId = latestPendingOrder['id']?.toString() ?? latestPendingOrder['order_id']?.toString();
           if (orderId != null && orderId.isNotEmpty && mounted) {
-            debugPrint('Found latest pending order: $orderId');
-            // 🔥 Cache the order data directly from getUserOrders
             setState(() {
               _cachedOrder = Map<String, dynamic>.from(latestPendingOrder!);
               _currentOrderId = orderId;
             });
-            // Set it in cart manager for persistence
             Provider.of<CartManager>(context, listen: false).setLastOrderId(orderId);
-            // Start light polling for status updates only (not full order)
             _startLightPolling(orderId);
           }
         }
       }
     } catch (e) {
-      debugPrint('Error checking for latest order: $e');
-      
-      // Check if it's a 401 (unauthorized - token invalid or expired)
       if (e is ApiException && e.isUnauthorized) {
         _consecutiveAuthErrors++;
-        debugPrint('❌ Got 401 (error #$_consecutiveAuthErrors) - Token invalid or expired');
-        
-        // After 3 consecutive 401s, stop trying - user needs to re-login
-        if (_consecutiveAuthErrors >= 3) {
-          debugPrint('🛑 Too many auth errors, clearing data. User should re-login.');
-          _clearOrderData();
-        }
-      } 
-      // If 429 (rate limited), reset error counter and stop
-      else if (e is ApiException && e.isRateLimited) {
-        _consecutiveAuthErrors = 0; // Reset on 429
-        debugPrint('Got 429 - Rate limited, stopping order checks temporarily');
+        if (_consecutiveAuthErrors >= 3) _clearOrderData();
+      } else if (e is ApiException && e.isRateLimited) {
+        _consecutiveAuthErrors = 0;
         _clearOrderData();
+      } else {
+        _consecutiveAuthErrors = 0;
       }
-      // For other errors, just log
-      else {
-        _consecutiveAuthErrors = 0; // Reset on other errors
-      }
-      // For other errors, just log but don't retry automatically
     } finally {
       _isCheckingLatestOrder = false;
     }
   }
 
-  // Light polling - only fetch status, not full order
   void _startLightPolling(String orderId) {
     _pollingTimer?.cancel();
-    
-    // 🔥 Poll every 90 seconds (NOT 60) to prevent overwhelming API with rate limiting
-    // Multiple widgets + profile fetches were causing combined 429 errors
     _pollingTimer = Timer.periodic(const Duration(seconds: 90), (_) async {
-      // Check if user is still logged in
       final authManager = Provider.of<AuthManager>(context, listen: false);
       if (!authManager.isAuthenticated) {
         _clearOrderData();
         return;
       }
-
       if (!mounted) return;
       try {
         final orders = await ApiService.getUserOrders();
@@ -291,33 +209,20 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
           for (final order in orders) {
             if ((order['id']?.toString() ?? order['order_id']?.toString()) == orderId) {
               if (mounted) {
-                setState(() {
-                  _cachedOrder!['status'] = order['status'];
-                });
+                setState(() => _cachedOrder!['status'] = order['status']);
               }
               return;
             }
           }
         }
       } catch (e) {
-        debugPrint('Light polling error: $e');
-        
-        // If 401, stop polling - token is invalid
         if (e is ApiException && e.isUnauthorized) {
-          debugPrint('🛑 Got 401 during polling - stopping. User needs to re-login.');
           _pollingTimer?.cancel();
           _clearOrderData();
-          return;
-        }
-        
-        // If 429 (rate limit), stop polling and wait
-        if (e is ApiException && e.isRateLimited) {
-          debugPrint('Got rate limited (429) - pausing polling for 10 minutes');
+        } else if (e is ApiException && e.isRateLimited) {
           _pollingTimer?.cancel();
-          // Retry after 10 minutes
           Future.delayed(const Duration(minutes: 10), () {
             if (mounted && _currentOrderId == orderId) {
-              debugPrint('Retrying polling after rate limit cooldown');
               _startLightPolling(orderId);
             }
           });
@@ -326,75 +231,16 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     });
   }
 
-  TextStyle _getTenorSansStyle(BuildContext context, double size,
-      {FontWeight weight = FontWeight.normal, Color? color}) {
-    final Color primaryColor = Theme.of(context).colorScheme.primary;
-    return TextStyle(
-      fontFamily: 'TenorSans',
-      fontSize: size,
-      fontWeight: weight,
-      color: color ?? primaryColor,
-    );
-  }
-
-  // Initial fast fetch + slow polling for updates
-  void _startSmartPolling(String orderId) {
-    if (_currentOrderId == orderId && _pollingTimer != null) return;
-
-    _currentOrderId = orderId;
-    _pollingTimer?.cancel();
-
-    // First fetch immediately
-    _fetchOrder(orderId, isInitial: true);
-
-    // Then poll every 30 seconds (not 10) - status doesn't change that fast
-    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _fetchOrder(orderId, isInitial: false);
-    });
-  }
-
-  Future<void> _fetchOrder(String orderId, {bool isInitial = false}) async {
-    if (_isLoading && !isInitial) return;
-
-    try {
-      if (isInitial) setState(() => _isLoading = true);
-
-      final order = await ApiService.getOrderById(orderId);
-      if (order != null && mounted) {
-        setState(() {
-          _cachedOrder = Map<String, dynamic>.from(order);
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (e is ApiException) {
-        if (e.isUnauthorized) {
-          debugPrint('Order fetch unauthorized (401) — retrying in 30 seconds...');
-          // Don't stop polling, just wait longer before retry
-        } else {
-          debugPrint('API Error fetching order: $e');
-        }
-      } else {
-        debugPrint('Error fetching order: $e');
-      }
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final cartManager = Provider.of<CartManager>(context);
     final orderId = cartManager.lastOrderId;
 
-    //  Listen to admin role changes and hide for store owners
     return ValueListenableBuilder<String?>(
       valueListenable: ApiService.adminRoleNotifier,
       builder: (context, adminRole, child) {
-        if (adminRole != null) {
-          return const SizedBox.shrink();
-        }
+        if (adminRole != null) return const SizedBox.shrink();
 
-        // If no active order, check for latest one in background (schedule as microtask)
         if (orderId == null && !_isCheckingLatestOrder && _currentOrderId == null) {
           Future.microtask(() {
             if (mounted) _checkForLatestOrder();
@@ -407,21 +253,17 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
           return const SizedBox.shrink();
         }
 
-        // Start polling if new order (schedule as microtask)
         if (_currentOrderId != orderId) {
           Future.microtask(() {
             if (mounted) _startSmartPolling(orderId);
           });
         }
 
-        // Show cached data immediately, or loading indicator only on first load
         if (_cachedOrder == null && _isLoading) {
           return _buildLoadingIndicator(context);
         }
 
-        if (_cachedOrder == null) {
-          return const SizedBox.shrink();
-        }
+        if (_cachedOrder == null) return const SizedBox.shrink();
 
         final status = _normalizeStatus(_cachedOrder!['status']?.toString() ?? 'pending');
         return _buildTrackerIndicator(context, orderId, status);
@@ -429,23 +271,49 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     );
   }
 
+  void _startSmartPolling(String orderId) {
+    if (_currentOrderId == orderId && _pollingTimer != null) return;
+    _currentOrderId = orderId;
+    _pollingTimer?.cancel();
+    _fetchOrder(orderId, isInitial: true);
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _fetchOrder(orderId, isInitial: false);
+    });
+  }
+
+  Future<void> _fetchOrder(String orderId, {bool isInitial = false}) async {
+    if (_isLoading && !isInitial) return;
+    try {
+      if (isInitial) setState(() => _isLoading = true);
+      final order = await ApiService.getOrderById(orderId);
+      if (order != null && mounted) {
+        setState(() {
+          _cachedOrder = Map<String, dynamic>.from(order);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Widget _buildLoadingIndicator(BuildContext context) {
     return Positioned(
-      bottom: 20,
-      right: 20,
+      bottom: 24,
+      right: 24,
       child: Container(
-        width: 55,
-        height: 55,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.grey.shade700,
-          shape: BoxShape.circle,
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20),
+          ],
         ),
-        child: const Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-          ),
+        child: const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
         ),
       ),
     );
@@ -453,6 +321,7 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
 
   Widget _buildTrackerIndicator(BuildContext context, String orderId, String status) {
     Color statusColor = _getStatusColor(status);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (status == 'Delivered') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -464,137 +333,190 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     }
 
     IconData statusIcon;
+    String statusText;
+    String? statusMessage;
+    bool isReturnStatus = status == 'Return Pending';
+
     switch (status) {
       case 'Pending':
-        statusIcon = Icons.hourglass_top;
+        statusIcon = Icons.schedule;
+        statusText = 'Pending';
         break;
       case 'Processing':
-        statusIcon = Icons.kitchen_rounded;
+        statusIcon = Icons.shopping_bag_outlined;
+        statusText = 'Processing';
         break;
       case 'Out for Delivery':
-        statusIcon = Icons.delivery_dining;
+        statusIcon = Icons.local_shipping_outlined;
+        statusText = 'On the way';
+        break;
+      case 'Return Pending':
+        statusIcon = Icons.undo;
+        statusText = 'Return Pending';
+        statusMessage = 'Driver will contact you soon to pick up the return order';
         break;
       default:
-        statusIcon = Icons.error_outline;
+        statusIcon = Icons.info_outline;
+        statusText = 'Order';
     }
 
-    return Positioned(
-      bottom: 20,
-      right: 20,
-      child: GestureDetector(
-        onTap: () => _showOrderDetailsSheet(context, orderId, status),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 600),
-          curve: Curves.easeInOut,
-          width: 55,
-          height: 55,
-          decoration: BoxDecoration(
-            color: statusColor,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: statusColor.withOpacity(0.4),
-                blurRadius: 12,
-                spreadRadius: 3,
+    return ValueListenableBuilder<bool>(
+      valueListenable: isAboveHeroNotifier,
+      builder: (context, isAboveHero, child) {
+        final useWhiteBackground = isDark ? false : isAboveHero;
+        final containerColor = useWhiteBackground ? Colors.white : (isDark ? Colors.white : Colors.black);
+        final textIconColor = useWhiteBackground ? Colors.black : (isDark ? Colors.black : Colors.white);
+        final borderColor = useWhiteBackground
+          ? Colors.black.withOpacity(0.15)
+          : (isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12));
+
+        return Positioned(
+          bottom: 24,
+          right: 24,
+          child: AnimatedOpacity(
+            opacity: _isDialogOpen ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 300),
+            child: IgnorePointer(
+              ignoring: _isDialogOpen,
+              child: GestureDetector(
+                onTap: () => _showOrderDetailsDialog(context, orderId, status),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: containerColor,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: borderColor, width: 1.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: textIconColor,
+                          letterSpacing: 0.3,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(statusIcon, color: textIconColor.withOpacity(0.8), size: 18),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-          child: Center(
-            child: Icon(statusIcon, color: Colors.white, size: 28),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // OPTIMIZED: Show sheet immediately with cached data
-  void _showOrderDetailsSheet(BuildContext context, String orderId, String currentStatus) {
-    final Color cardColor = Theme.of(context).cardColor;
-
-    final navContext = NavigationService.navigatorKey.currentContext ?? context;
-    showModalBottomSheet(
-      context: navContext,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (BuildContext sheetContext) {
-        return Container(
-          height: MediaQuery.of(sheetContext).size.height * 0.8,
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(30.0),
-              topRight: Radius.circular(30.0),
             ),
-          ),
-          // Use StatefulBuilder to manage sheet state independently
-          child: _OrderDetailsSheet(
-            orderId: orderId,
-            initialData: _cachedOrder,
-            getTenorSansStyle: _getTenorSansStyle,
-            toDouble: _toDouble,
           ),
         );
       },
     );
   }
 
+  void _showOrderDetailsDialog(BuildContext context, String orderId, String currentStatus) {
+    setState(() => _isDialogOpen = true);
+    
+    final navContext = NavigationService.navigatorKey.currentContext;
+    if (navContext == null) return;
+    
+    Navigator.of(navContext).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        barrierColor: Colors.black.withOpacity(0.5),
+        transitionDuration: const Duration(milliseconds: 400),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 800),
+              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+              child: Material(
+                color: Colors.transparent,
+                child: _OrderDetailsDialog(
+                  orderId: orderId,
+                  initialData: _cachedOrder,
+                  toDouble: _toDouble,
+                  parseDate: _parseDate,
+                ),
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.92, end: 1.0).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+              child: child,
+            ),
+          );
+        },
+      ),
+    ).then((_) {
+      if (mounted) setState(() => _isDialogOpen = false);
+    });
+  }
+
   String _normalizeStatus(String raw) {
     final s = raw.trim().toLowerCase();
     switch (s) {
-      case 'pending':
-        return 'Pending';
+      case 'pending': return 'Pending';
       case 'confirmed':
-      case 'processing':
-        return 'Processing';
+      case 'processing': return 'Processing';
       case 'shipped':
       case 'out for delivery':
-      case 'out_for_delivery':
-        return 'Out for Delivery';
-      case 'delivered':
-        return 'Delivered';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return raw;
+      case 'out_for_delivery': return 'Out for Delivery';
+      case 'delivered': return 'Delivered';
+      case 'cancelled': return 'Cancelled';
+      case 'return': return 'Return Pending';
+      default: return raw;
     }
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Pending':
-        return Colors.lightBlue.shade600;
-      case 'Processing':
-        return Colors.blue.shade600;
-      case 'Out for Delivery':
-        return Colors.green.shade600;
-      case 'Delivered':
-        return Colors.green.shade700;
-      default:
-        return Colors.red.shade600;
+      case 'Pending': return Colors.orange.shade600;
+      case 'Processing': return Colors.blue.shade600;
+      case 'Out for Delivery': return Colors.green.shade600;
+      case 'Delivered': return Colors.green.shade700;
+      case 'Return Pending': return Colors.amber.shade600;
+      default: return Colors.red.shade600;
     }
   }
 }
 
-/// Separate StatefulWidget for the sheet - manages its own state
-class _OrderDetailsSheet extends StatefulWidget {
+// ============== ORDER DETAILS DIALOG ==============
+class _OrderDetailsDialog extends StatefulWidget {
   final String orderId;
   final Map<String, dynamic>? initialData;
-  final TextStyle Function(BuildContext, double, {FontWeight weight, Color? color}) getTenorSansStyle;
   final double Function(dynamic) toDouble;
+  final DateTime Function(dynamic) parseDate;
 
-  const _OrderDetailsSheet({
+  const _OrderDetailsDialog({
     required this.orderId,
     required this.initialData,
-    required this.getTenorSansStyle,
     required this.toDouble,
+    required this.parseDate,
   });
 
   @override
-  State<_OrderDetailsSheet> createState() => _OrderDetailsSheetState();
+  State<_OrderDetailsDialog> createState() => _OrderDetailsDialogState();
 }
 
-class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
+class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
   Map<String, dynamic>? _orderData;
   bool _isLoading = true;
   bool _isAugmented = false;
@@ -603,10 +525,7 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
   @override
   void initState() {
     super.initState();
-    // ALWAYS fetch the full order to ensure we have complete data with items
     _fetchFullOrder();
-
-    // Poll for status updates only (lightweight) every 30 seconds
     _statusTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshStatus());
   }
 
@@ -618,11 +537,8 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
 
   Future<void> _fetchFullOrder() async {
     try {
-      // First, try to get the full order from user's orders list (which is authenticated)
       final orders = await ApiService.getUserOrders();
-      
       if (orders != null && orders.isNotEmpty) {
-        // Find the order with matching ID
         Map<String, dynamic>? foundOrder;
         for (final order in orders) {
           final orderId = order['id']?.toString() ?? order['order_id']?.toString();
@@ -631,35 +547,28 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
             break;
           }
         }
-        
         if (foundOrder != null && mounted) {
           setState(() {
             _orderData = Map<String, dynamic>.from(foundOrder!);
             _isLoading = false;
           });
-          debugPrint('✅ Fetched order ${widget.orderId} from user orders - items: ${foundOrder["items"]?.length ?? 0}');
           _augmentOrderData();
           return;
         }
       }
-      
-      // Fallback: Try direct API call (may not have auth token)
       final order = await ApiService.getOrderById(widget.orderId);
       if (order != null && mounted) {
         setState(() {
           _orderData = Map<String, dynamic>.from(order);
           _isLoading = false;
         });
-        debugPrint('✅ Fetched order ${widget.orderId} directly - items: ${order["items"]?.length ?? 0}');
         _augmentOrderData();
       }
     } catch (e) {
-      debugPrint('Error fetching order: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Lightweight status refresh - only fetches status, not full order
   Future<void> _refreshStatus() async {
     if (_orderData == null) return;
     try {
@@ -669,10 +578,7 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
           if ((order['id']?.toString() ?? order['order_id']?.toString()) == widget.orderId) {
             final newStatus = order['status'];
             if (newStatus != _orderData!['status'] && mounted) {
-              setState(() {
-                _orderData!['status'] = newStatus;
-              });
-              debugPrint('✅ Status updated to: $newStatus');
+              setState(() => _orderData!['status'] = newStatus);
             }
             return;
           }
@@ -681,39 +587,18 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
     } catch (_) {}
   }
 
-  // Augment order data in background - doesn't block UI
   Future<void> _augmentOrderData() async {
     if (_orderData == null || _isAugmented) return;
-
     try {
       final order = _orderData!;
-
-      // Normalize field names
       order['documentId'] = order['id']?.toString() ?? order['order_id']?.toString() ?? 'N/A';
-      if (order['total_price'] != null && order['total'] == null) {
-        order['total'] = order['total_price'];
-      }
-      if (order['shipping_address'] != null && order['address_Full'] == null) {
-        order['address_Full'] = order['shipping_address'];
-      }
-      if (order['payment_method'] != null && order['paymentMethod'] == null) {
-        order['paymentMethod'] = order['payment_method'];
-      }
-      if (order['delivery_option'] != null && order['deliveryOption'] == null) {
-        order['deliveryOption'] = order['delivery_option'];
-      }
-      if (order['created_at'] != null && order['createdAt'] == null) {
-        order['createdAt'] = order['created_at'];
-      }
+      if (order['total_price'] != null && order['total'] == null) order['total'] = order['total_price'];
+      if (order['created_at'] != null && order['createdAt'] == null) order['createdAt'] = order['created_at'];
 
-      // Fetch product details for items (in parallel for speed)
       var items = (order['items'] as List<dynamic>?) ?? [];
-      debugPrint('📦 AUGMENT: Initial items count: ${items.length}');
-      
       if (items.isNotEmpty) {
         final futures = <Future>[];
         final productCache = <String, dynamic>{};
-
         for (final item in items) {
           final pid = (item['product_id'] ?? item['productId'])?.toString();
           if (pid != null && pid.isNotEmpty && !productCache.containsKey(pid)) {
@@ -722,11 +607,7 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
             }).catchError((_) {}));
           }
         }
-
-        // Wait for all product fetches in parallel
         await Future.wait(futures);
-
-        // Attach product info to items
         final updatedItems = <dynamic>[];
         for (var i = 0; i < items.length; i++) {
           final item = Map<String, dynamic>.from(items[i] as Map);
@@ -743,563 +624,98 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
               resolvedImage = Product.getFullImageUrl(rawImage.toString());
             }
             item['imageUrl'] = resolvedImage;
-            item['storeName'] = item['storeName'] ?? prod['store_name'] ?? prod['storeName'];
           }
           updatedItems.add(item);
         }
         order['items'] = updatedItems;
-        debugPrint('📦 AUGMENT: After augmentation, items count: ${order["items"].length}');
       }
-
-      // Fetch user profile for delivery instructions (only if missing)
-      if (order['delivery_instructions'] == null) {
-        try {
-          final profile = await ApiService.getUserProfile();
-          if (profile != null) {
-            order['delivery_instructions'] = profile['deliveryInstructions'] ?? profile['delivery_instructions'];
-            order['address_Full'] = order['address_Full'] ?? profile['address'];
-          }
-        } catch (_) {}
-      }
-
       if (mounted) {
         setState(() {
           _orderData = order;
           _isAugmented = true;
         });
       }
-    } catch (e) {
-      debugPrint('Error augmenting order: $e');
-    }
+    } catch (e) {}
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.secondary),
-      );
-    }
-
-    if (_orderData == null) {
-      return Center(
-        child: Text("Order not found", style: widget.getTenorSansStyle(context, 18)),
-      );
-    }
-
-    return _buildOrderDetailsContent(context, _orderData!);
-  }
-
-  Widget _buildOrderDetailsContent(BuildContext context, Map<String, dynamic> orderData) {
-    String rawStatus = (orderData['status'] as String?) ?? 'pending';
-    final status = _normalizeStatus(rawStatus);
-    final total = widget.toDouble(orderData['total_price'] ?? orderData['total']);
-
-    //  DEBUG: Print what we receive from API
-    final rawCreatedAt = orderData['createdAt'] ?? orderData['created_at'];
-    debugPrint('🕐 RAW createdAt from API: $rawCreatedAt (type: ${rawCreatedAt.runtimeType})');
-    
-    // FIXED: Proper date parsing
-    final date = _parseDate(rawCreatedAt);
-    debugPrint('🕐 PARSED date: $date');
-
-    final documentId = orderData['documentId']?.toString() ?? orderData['id']?.toString() ?? 'N/A';
-    final deliveryOption = orderData['deliveryOption'] ?? orderData['delivery_option'] ?? 'Standard';
-    final items = (orderData['items'] as List<dynamic>?) ?? [];
-    debugPrint('📦 ITEMS COUNT: ${items.length} | Items data: $items');
-    final storeName = items.isNotEmpty ? (items.first['storeName'] ?? 'Store') : 'Store';
-
-    final Color primaryColor = Theme.of(context).colorScheme.primary;
-    final timeFormat = DateFormat('h:mm a');
-    final dateFormat = DateFormat('MMM d');
-    final formattedTime = '${timeFormat.format(date)} - ${dateFormat.format(date)}';
-    debugPrint('🕐 FORMATTED time: $formattedTime');
-    
-    final paymentMethod = orderData['paymentMethod'] ?? orderData['payment_method'] ?? 'Not Specified';
-
-    final trackingSteps = [
-      {'title': 'Order Placed', 'status': 'Pending', 'icon': Icons.verified_user_outlined},
-      {'title': 'Preparation', 'status': 'Processing', 'icon': Icons.restaurant_menu_outlined},
-      {'title': 'On Delivery', 'status': 'Out for Delivery', 'icon': _getDeliveryIcon(deliveryOption)},
-      {'title': 'Delivered', 'status': 'Delivered', 'icon': Icons.home_outlined},
-    ];
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 25.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Order ID - Premium Glass Badge
-          Center(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(25),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
-                    border: Border.all(
-                      color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
-                      width: 1.2,
-                    ),
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  child: Text(
-                    "Order #$documentId",
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy,
-                      letterSpacing: 0.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? Colors.black.withOpacity(0.85) : Colors.white.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08),
+              width: 1,
             ),
-          ),
-          const SizedBox(height: 28),
-
-          // Tracking Timeline - Premium Enhanced
-          _buildTrackingTimeline(context, trackingSteps, status),
-
-          // Live Map (only when out for delivery)
-          if (status == 'Out for Delivery') ...[
-            Divider(height: 32, thickness: 0.8, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08)),
-            Center(
-              child: Text(
-                "Driver Location (Live)",
-                style: TextStyle(
-                  fontFamily: 'Didot',
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _getStatusColor(status),
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 40,
+                spreadRadius: 0,
               ),
-            ),
-            const SizedBox(height: 15),
-            DeliveryMapWidget(
-              orderData: orderData,
-              getTenorSansStyle: widget.getTenorSansStyle,
-            ),
-          ],
-
-          Divider(height: 32, thickness: 0.8, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08)),
-
-          // Order Summary - Premium Liquid Glass
-          _buildSectionHeader(context, "$storeName Order Summary"),
-          const SizedBox(height: 16),
-
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
-                    width: 1.2,
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    _buildDetailRow(context, "Order Time:", formattedTime, icon: Icons.access_time),
-                    const SizedBox(height: 14),
-                    _buildDetailRow(context, "Payment Method:", paymentMethod, icon: Icons.credit_card_outlined),
-                    const SizedBox(height: 14),
-                    _buildDetailRow(context, "Total Amount:", "\$${total.toStringAsFixed(2)}", color: Colors.deepOrange),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          Divider(height: 32, thickness: 0.8, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08)),
-
-          // Items Section - مع Badge أنيق
-          Row(
-            children: [
-              Text(
-                "Items Ordered",
-                style: TextStyle(
-                  fontFamily: 'Didot',
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy,
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (items.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.deepOrange.shade400, Colors.deepOrange.shade600],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.deepOrange.withOpacity(0.3),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    '${items.length}',
-                    style: const TextStyle(
-                      fontFamily: 'TenorSans',
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          if (items.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 30),
-              child: Center(
-                child: Text(
-                  'No items in this order',
-                  style: TextStyle(
-                    fontFamily: 'TenorSans',
-                    fontSize: 14,
-                    color: isDark ? LuxuryTheme.kPlatinum.withOpacity(0.6) : LuxuryTheme.kDeepNavy.withOpacity(0.6),
-                  ),
-                ),
+          child: Column(
+            children: [
+              _buildDialogHeader(context, isDark),
+              Expanded(
+                child: _isLoading
+                  ? Center(child: CircularProgressIndicator(color: isDark ? Colors.white : Colors.black))
+                  : _orderData == null
+                    ? Center(child: Text('Order not found', style: TextStyle(fontFamily: 'TenorSans', fontSize: 16, color: isDark ? Colors.white : Colors.black)))
+                    : _buildOrderContent(context, _orderData!, isDark),
               ),
-            )
-          else
-            ...items.map((item) => _buildProductItem(context, Map<String, dynamic>.from(item))).toList(),
-
-          Divider(height: 32, thickness: 0.8, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08)),
-
-          // Delivery Info
-          _buildSectionHeader(context, "Delivery Info"),
-          const SizedBox(height: 16),
-
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
-                    width: 1.2,
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ],
-                ),
-
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    _buildDetailRow(context, "Delivery Method:", deliveryOption, icon: _getDeliveryIcon(deliveryOption)),
-                    const SizedBox(height: 14),
-                    _buildDetailRow(
-                      context,
-                      "Address:",
-                      _formatFullAddress(orderData),
-                      isAddress: true,
-                      icon: Icons.location_on_outlined,
-                    ),
-
-                    const SizedBox(height: 14),
-                    _buildDetailRow(
-                      context,
-                      "Instructions:",
-                      orderData['delivery_instructions'] ?? 'None',
-                      icon: Icons.notes_outlined,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
-
-  // FIXED: Proper date parsing for MySQL timestamps
-  // MySQL driver may return DateTime object or String
-  DateTime _parseDate(dynamic raw) {
-    if (raw == null) return DateTime.now();
-
-    // If already DateTime, check if it needs timezone adjustment
-    if (raw is DateTime) {
-      // MySQL returns local time, but Dart might interpret it as UTC
-      // We want to display the exact hours/minutes from DB
-      // If the DateTime is UTC, it means the driver converted it
-      // We need to "undo" that by treating the UTC time as local
-      if (raw.isUtc) {
-        // The DB stored 02:38, driver made it 02:38 UTC
-        // But we want to show 02:38 local, so create local DateTime with same values
-        return DateTime(
-          raw.year,
-          raw.month,
-          raw.day,
-          raw.hour,
-          raw.minute,
-          raw.second,
-        );
-      }
-      return raw;
-    }
-
-    if (raw is String) {
-      // Handle MySQL format: "2025-12-23 02:38:01" or with T: "2025-12-23T02:38:01"
-      final sqlTs = RegExp(r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})');
-      final match = sqlTs.firstMatch(raw);
-      if (match != null) {
-        return DateTime(
-          int.parse(match.group(1)!),
-          int.parse(match.group(2)!),
-          int.parse(match.group(3)!),
-          int.parse(match.group(4)!),
-          int.parse(match.group(5)!),
-          int.parse(match.group(6)!),
-        );
-      }
-
-      // Try standard parsing
-      final parsed = DateTime.tryParse(raw);
-      if (parsed != null) {
-        // Same logic - treat as local time
-        return DateTime(
-          parsed.year,
-          parsed.month,
-          parsed.day,
-          parsed.hour,
-          parsed.minute,
-          parsed.second,
-        );
-      }
-      return DateTime.now();
-    }
-
-    if (raw is int) {
-      return DateTime.fromMillisecondsSinceEpoch(raw);
-    }
-
-    if (raw is Map && raw.containsKey('seconds')) {
-      final secs = raw['seconds'];
-      if (secs is int) return DateTime.fromMillisecondsSinceEpoch(secs * 1000);
-    }
-
-    return DateTime.now();
-  }
-
-  // Format full address - clean up N/A and duplicates
-  String _formatFullAddress(Map<String, dynamic> orderData) {
-    String baseAddress = orderData['shipping_address'] ?? 
-                        orderData['address_Full'] ?? 
-                        orderData['customer']?['address'] ?? 
-                        '';
-    
-    // Clean up the base address - remove N/A parts
-    baseAddress = baseAddress
-        .replaceAll(RegExp(r',?\s*N/A'), '')
-        .replaceAll(RegExp(r',?\s*Apt:\s*N/A'), '')
-        .replaceAll(RegExp(r',?\s*Building:\s*N/A'), '')
-        .replaceAll(RegExp(r',\s*,'), ',')  // Remove double commas
-        .replaceAll(RegExp(r',\s*$'), '')   // Remove trailing comma
-        .trim();
-    
-    final buildingInfo = orderData['building_info'] ?? 
-                         orderData['buildingInfo'] ?? 
-                         orderData['customer']?['building_info'];
-    
-    final apartmentNumber = orderData['apartment_number'] ?? 
-                            orderData['apartmentNumber'] ?? 
-                            orderData['customer']?['apartment_number'];
-    
-    // Build complete address
-    List<String> parts = [];
-    
-    if (baseAddress.isNotEmpty) {
-      parts.add(baseAddress);
-    }
-    
-    if (buildingInfo != null && 
-        buildingInfo.toString().isNotEmpty && 
-        buildingInfo.toString() != 'N/A' &&
-        !baseAddress.contains('Building: $buildingInfo')) {
-      parts.add('Building: $buildingInfo');
-    }
-    
-    if (apartmentNumber != null && 
-        apartmentNumber.toString().isNotEmpty && 
-        apartmentNumber.toString() != 'N/A' &&
-        !baseAddress.contains('Apt: $apartmentNumber')) {
-      parts.add('Apt: $apartmentNumber');
-    }
-    
-    return parts.join(', ');
-  }
-
-  Widget _buildProductItem(BuildContext context, Map<String, dynamic> item) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final price = widget.toDouble(item['price']);
-    final quantity = item['quantity'] as int? ?? 1;
-
-    final String imageUrlStr = (item['imageUrl'] as String?) ?? '';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.02),
-              border: Border.all(
-                color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
-              ),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Product Image
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    image: imageUrlStr.isNotEmpty
-                        ? DecorationImage(
-                            image: NetworkImage(imageUrlStr),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: imageUrlStr.isEmpty
-                      ? Icon(
-                          Icons.image_not_supported,
-                          color: isDark ? Colors.white.withOpacity(0.3) : Colors.black.withOpacity(0.2),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 14),
-                // Product Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item['name'] as String? ?? 'Product',
-                        style: TextStyle(
-                          fontFamily: 'TenorSans',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Qty: $quantity × \$${price.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontFamily: 'TenorSans',
-                          fontSize: 13,
-                          color: isDark ? LuxuryTheme.kPlatinum.withOpacity(0.7) : LuxuryTheme.kDeepNavy.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Total Price
-                Text(
-                  '\$${(price * quantity).toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontFamily: 'TenorSans',
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.deepOrange,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildDetailRow(BuildContext context, String label, dynamic value,
-      {Color? color, IconData? icon, bool isAddress = false}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
+  Widget _buildDialogHeader(BuildContext context, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+          ),
+        ),
+      ),
       child: Row(
-        crossAxisAlignment: isAddress ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18, color: isDark ? LuxuryTheme.kPlatinum.withOpacity(0.6) : LuxuryTheme.kDeepNavy.withOpacity(0.6)),
-            const SizedBox(width: 12),
-          ],
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'TenorSans',
-                fontSize: 13,
-                color: isDark ? LuxuryTheme.kPlatinum.withOpacity(0.7) : LuxuryTheme.kDeepNavy.withOpacity(0.7),
-                fontWeight: FontWeight.w500,
-              ),
+          Text(
+            'Order Tracking',
+            style: TextStyle(
+              fontFamily: 'TenorSans',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : Colors.black,
+              letterSpacing: 0.5,
             ),
           ),
-          Expanded(
-            child: Text(
-              value.toString(),
-              style: TextStyle(
-                fontFamily: 'TenorSans',
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: color ?? (isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                shape: BoxShape.circle,
               ),
-              textAlign: TextAlign.right,
-              maxLines: isAddress ? 4 : 2,
-              overflow: TextOverflow.ellipsis,
+              child: Icon(
+                Icons.close,
+                size: 18,
+                color: isDark ? Colors.white.withOpacity(0.8) : Colors.black.withOpacity(0.8),
+              ),
             ),
           ),
         ],
@@ -1307,86 +723,283 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
     );
   }
 
-  Widget _buildTrackingTimeline(BuildContext context, List<Map<String, dynamic>> steps, String currentStatus) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildOrderContent(BuildContext context, Map<String, dynamic> orderData, bool isDark) {
+    final status = _normalizeStatus(orderData['status']?.toString() ?? 'pending');
+    final total = widget.toDouble(orderData['total_price'] ?? orderData['total']);
+    final documentId = orderData['documentId']?.toString() ?? orderData['id']?.toString() ?? 'N/A';
+    final items = (orderData['items'] as List<dynamic>?) ?? [];
     
+    final rawCreatedAt = orderData['createdAt'] ?? orderData['created_at'];
+    final date = widget.parseDate(rawCreatedAt);
+    final timeFormat = DateFormat('h:mm a');
+    final dateFormat = DateFormat('MMM d');
+    final formattedTime = '${timeFormat.format(date)} - ${dateFormat.format(date)}';
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Order ID Badge
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+                ),
+              ),
+              child: Text(
+                'Order #$documentId',
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 32),
+          
+          // Status Timeline
+          _buildStatusTimeline(context, status, isDark),
+          
+          const SizedBox(height: 32),
+          
+          // 🗺️ MAP - Show only when Out for Delivery
+          if (status == 'Out for Delivery') ...[
+            Text(
+              'LIVE TRACKING',
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white.withOpacity(0.5) : Colors.black.withOpacity(0.5),
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _DeliveryMapWidget(orderData: orderData),
+            const SizedBox(height: 32),
+          ],
+          
+          // Order Info Card
+          _buildInfoCard(
+            context,
+            isDark,
+            [
+              _InfoRow('Time', formattedTime, Icons.access_time),
+              _InfoRow('Total', '\$${total.toStringAsFixed(2)}', Icons.payments_outlined),
+              _InfoRow('Items', '${items.length} items', Icons.shopping_bag_outlined),
+            ],
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Items List
+          if (items.isNotEmpty) ...[
+            Text(
+              'ORDER ITEMS',
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white.withOpacity(0.5) : Colors.black.withOpacity(0.5),
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...items.map((item) => _buildItemCard(context, Map<String, dynamic>.from(item), isDark)).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusTimeline(BuildContext context, String status, bool isDark) {
+    // For Return orders, show reversed steps: Done -> Driver Picked -> Returned
+    final isReturnStatus = status.toLowerCase().contains('return');
+    final steps = isReturnStatus
+      ? [
+          _TimelineStep('Delivered', 'Done', Icons.home_outlined),
+          _TimelineStep('Return Pending', 'Driver Picked Up', Icons.local_shipping_outlined),
+          _TimelineStep('Return Pending', 'Returned to Store', Icons.store_outlined),
+        ]
+      : [
+          _TimelineStep('Pending', 'Placed', Icons.check_circle_outline),
+          _TimelineStep('Processing', 'Preparing', Icons.inventory_2_outlined),
+          _TimelineStep('Out for Delivery', 'On the way', Icons.local_shipping_outlined),
+          _TimelineStep('Delivered', 'Done', Icons.home_outlined),
+        ];
+    
+    return Row(
+      children: steps.asMap().entries.map((entry) {
+        final index = entry.key;
+        final step = entry.value;
+        // For Return orders, first step is completed, others are pending
+        final isCompleted = isReturnStatus
+          ? index == 0
+          : _isStepCompleted(step.status, status);
+        final isCurrent = isReturnStatus
+          ? (index == 0) // First step is current for return
+          : (step.status == status);
+        final color = isCompleted ? _getStatusColor(step.status) : (isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08));
+        
+        return Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isCompleted ? color : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: color,
+                    width: isCurrent ? 2.5 : 1.5,
+                  ),
+                ),
+                child: Icon(
+                  step.icon,
+                  size: 20,
+                  color: isCompleted ? Colors.white : color,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                step.label,
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 10,
+                  fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                  color: isCompleted ? color : (isDark ? Colors.white.withOpacity(0.4) : Colors.black.withOpacity(0.4)),
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildInfoCard(BuildContext context, bool isDark, List<_InfoRow> rows) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+        ),
       ),
       child: Column(
-        children: [
-          SizedBox(
-            height: 100,
+        children: rows.asMap().entries.map((entry) {
+          final row = entry.value;
+          return Padding(
+            padding: EdgeInsets.only(bottom: entry.key < rows.length - 1 ? 16 : 0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: steps.asMap().entries.map((entry) {
-                final index = entry.key;
-                final step = entry.value;
-                final isCompleted = _isStepCompleted(step['status'] as String, currentStatus);
-                final isCurrent = step['status'] == currentStatus;
-                final statusColor = _getStatusColor(step['status']);
-                final icon = step['icon'] as IconData;
-
-                return Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Status Circle
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: isCompleted
-                              ? LinearGradient(
-                                  colors: [statusColor, statusColor.withOpacity(0.7)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                              : null,
-                          color: isCompleted ? null : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05)),
-                          border: Border.all(
-                            color: isCompleted ? statusColor : (isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.1)),
-                            width: isCurrent ? 2.5 : 1.5,
-                          ),
-                          boxShadow: isCurrent
-                              ? [
-                                  BoxShadow(
-                                    color: statusColor.withOpacity(0.3),
-                                    blurRadius: 12,
-                                    spreadRadius: 2,
-                                  ),
-                                ]
-                              : [],
-                        ),
-                        child: Center(
-                          child: Icon(
-                            icon,
-                            color: isCompleted ? Colors.white : (isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy),
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      // Status Label
-                      Text(
-                        step['title'] as String,
-                        style: TextStyle(
-                          fontFamily: 'TenorSans',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isCurrent ? statusColor : (isCompleted ? statusColor : (isDark ? LuxuryTheme.kPlatinum.withOpacity(0.7) : LuxuryTheme.kDeepNavy.withOpacity(0.7))),
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+              children: [
+                Icon(row.icon, size: 16, color: isDark ? Colors.white.withOpacity(0.4) : Colors.black.withOpacity(0.4)),
+                const SizedBox(width: 12),
+                Text(
+                  row.label,
+                  style: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 13,
+                    color: isDark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.6),
                   ),
-                );
-              }).toList(),
+                ),
+                const Spacer(),
+                Text(
+                  row.value,
+                  style: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildItemCard(BuildContext context, Map<String, dynamic> item, bool isDark) {
+    final price = widget.toDouble(item['price']);
+    final quantity = item['quantity'] as int? ?? 1;
+    final imageUrl = (item['imageUrl'] as String?) ?? '';
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.02),
+              borderRadius: BorderRadius.circular(10),
+              image: imageUrl.isNotEmpty
+                ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
+                : null,
+            ),
+            child: imageUrl.isEmpty
+              ? Icon(Icons.image_not_supported, color: isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.2))
+              : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item['name'] as String? ?? 'Product',
+                  style: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$quantity × \$${price.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 12,
+                    color: isDark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '\$${(price * quantity).toStringAsFixed(2)}',
+            style: TextStyle(
+              fontFamily: 'TenorSans',
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : Colors.black,
             ),
           ),
         ],
@@ -1401,81 +1014,61 @@ class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
     return currentIdx >= stepIdx;
   }
 
-  IconData _getDeliveryIcon(String deliveryOption) {
-    if (deliveryOption.toLowerCase().contains('drone')) return Icons.flight;
-    if (deliveryOption.toLowerCase().contains('express')) return Icons.flash_on;
-    return Icons.two_wheeler;
-  }
-
   String _normalizeStatus(String raw) {
     final s = raw.trim().toLowerCase();
     switch (s) {
-      case 'pending':
-        return 'Pending';
+      case 'pending': return 'Pending';
       case 'confirmed':
-      case 'processing':
-        return 'Processing';
+      case 'processing': return 'Processing';
       case 'shipped':
       case 'out for delivery':
-      case 'out_for_delivery':
-        return 'Out for Delivery';
-      case 'delivered':
-        return 'Delivered';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return raw;
+      case 'out_for_delivery': return 'Out for Delivery';
+      case 'delivered': return 'Delivered';
+      case 'cancelled': return 'Cancelled';
+      default: return raw;
     }
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Pending':
-        return Colors.lightBlue.shade600;
-      case 'Processing':
-        return Colors.blue.shade600;
-      case 'Out for Delivery':
-        return Colors.green.shade600;
-      case 'Delivered':
-        return Colors.green.shade700;
-      default:
-        return Colors.red.shade600;
+      case 'Pending': return Colors.orange.shade600;
+      case 'Processing': return Colors.blue.shade600;
+      case 'Out for Delivery': return Colors.green.shade600;
+      case 'Delivered': return Colors.green.shade700;
+      case 'Return Pending': return Colors.amber.shade600;
+      default: return Colors.red.shade600;
     }
   }
-
-  Widget _buildSectionHeader(BuildContext context, String title) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Text(
-      title,
-      style: TextStyle(
-        fontFamily: 'Didot',
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy,
-      ),
-    );
-  }
 }
 
-/// Optimized Delivery Map Widget
-class DeliveryMapWidget extends StatefulWidget {
-  final Map<String, dynamic> orderData;
-  final TextStyle Function(BuildContext, double, {FontWeight weight, Color? color}) getTenorSansStyle;
+// Helper Classes
+class _TimelineStep {
+  final String status;
+  final String label;
+  final IconData icon;
+  _TimelineStep(this.status, this.label, this.icon);
+}
 
-  const DeliveryMapWidget({
-    Key? key,
-    required this.orderData,
-    required this.getTenorSansStyle,
-  }) : super(key: key);
+class _InfoRow {
+  final String label;
+  final String value;
+  final IconData icon;
+  _InfoRow(this.label, this.value, this.icon);
+}
+
+// ============== DELIVERY MAP WIDGET ==============
+class _DeliveryMapWidget extends StatefulWidget {
+  final Map<String, dynamic> orderData;
+
+  const _DeliveryMapWidget({required this.orderData});
 
   @override
-  State<DeliveryMapWidget> createState() => _DeliveryMapWidgetState();
+  State<_DeliveryMapWidget> createState() => _DeliveryMapWidgetState();
 }
 
-class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
-  static const String MAPBOX_ACCESS_TOKEN =
-      'pk.eyJ1IjoibW9oYW1tZWRhbGFuc2kiLCJhIjoiY21ncGF5OTI0MGU2azJpczloZjI0YXRtZCJ9.W9tMyxkXcai-sHajAwp8NQ';
-
+class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
+  static const String MAPBOX_TOKEN = 'pk.eyJ1IjoibW9oYW1tZWRhbGFuc2kiLCJhIjoiY21ncGF5OTI0MGU2azJpczloZjI0YXRtZCJ9.W9tMyxkXcai-sHajAwp8NQ';
+  
   List<LatLng> _routePoints = [];
   String _eta = 'Calculating...';
   Timer? _updateTimer;
@@ -1506,7 +1099,6 @@ class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
 
   void _startPeriodicUpdate() {
     _fetchRouteAndEta();
-    // Update every 20 seconds (not 15)
     _updateTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
       try {
         final id = (widget.orderData['id'] ?? widget.orderData['documentId'])?.toString();
@@ -1549,26 +1141,21 @@ class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
       return;
     }
 
-    final coordinates =
-        '${driverLocation!.longitude},${driverLocation!.latitude};${customerLocation.longitude},${customerLocation.latitude}';
-    final url = Uri.parse(
-        'http://router.project-osrm.org/route/v1/driving/$coordinates?geometries=geojson&overview=full');
+    final coordinates = '${driverLocation!.longitude},${driverLocation!.latitude};${customerLocation.longitude},${customerLocation.latitude}';
+    final url = Uri.parse('http://router.project-osrm.org/route/v1/driving/$coordinates?geometries=geojson&overview=full');
 
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 10));
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['routes'] != null && data['routes'].isNotEmpty) {
           final route = data['routes'][0];
           final durationInSeconds = route['duration'] as double;
           final minutes = (durationInSeconds / 60).ceil();
-
           final List<dynamic> coords = route['geometry']['coordinates'];
           final newRoutePoints = coords.map<LatLng>((coord) {
             return LatLng(coord[1] as double, coord[0] as double);
           }).toList();
-
           if (mounted) {
             setState(() {
               _routePoints = newRoutePoints;
@@ -1578,7 +1165,6 @@ class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
           return;
         }
       }
-
       if (mounted) {
         setState(() {
           _eta = 'Route unavailable';
@@ -1597,61 +1183,66 @@ class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     LatLng mapCenter = driverLocation != null
         ? LatLng(
             (driverLocation!.latitude + customerLocation.latitude) / 2,
             (driverLocation!.longitude + customerLocation.longitude) / 2,
           )
         : customerLocation;
-
     double initialZoom = driverLocation != null ? 14.0 : 12.0;
 
     return Column(
       children: [
-        // ETA Bar
+        // ETA Badge
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.green.shade600.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.green.shade600),
+            color: Colors.green.shade600.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green.shade600.withOpacity(0.3)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.timer_outlined, color: Colors.green, size: 20),
+              Icon(Icons.timer_outlined, color: Colors.green.shade600, size: 18),
               const SizedBox(width: 8),
               Text(
-                'Estimated Arrival: $_eta',
-                style: widget.getTenorSansStyle(context, 15, weight: FontWeight.bold)
-                    .copyWith(color: Colors.green.shade700),
+                'ETA: $_eta',
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green.shade700,
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
-
+        const SizedBox(height: 12),
+        
         // Map
         Container(
-          height: 300,
-          clipBehavior: Clip.antiAlias,
+          height: 280,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.5)),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+            ),
           ),
+          clipBehavior: Clip.antiAlias,
           child: FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: mapCenter,
               initialZoom: initialZoom,
               interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom | InteractiveFlag.doubleTapZoom,
+                flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom,
               ),
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=$MAPBOX_ACCESS_TOKEN',
+                urlTemplate: 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=$MAPBOX_TOKEN',
                 userAgentPackageName: 'com.yshop.customer.app',
               ),
               PolylineLayer(
@@ -1659,8 +1250,8 @@ class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
                   if (_routePoints.isNotEmpty)
                     Polyline(
                       points: _routePoints,
-                      color: Colors.blue.shade600,
-                      strokeWidth: 6.0,
+                      color: Colors.blue.shade400,
+                      strokeWidth: 5.0,
                     ),
                 ],
               ),
@@ -1669,22 +1260,19 @@ class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
                   // Customer marker
                   Marker(
                     point: customerLocation,
-                    width: 50,
-                    height: 50,
+                    width: 45,
+                    height: 45,
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.black, width: 2),
                         boxShadow: [
-                          BoxShadow(color: Colors.grey.withOpacity(0.5), blurRadius: 5, spreadRadius: 1),
+                          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8),
                         ],
                       ),
-                      child: Center(
-                        child: Text(
-                          'YOU',
-                          style: widget.getTenorSansStyle(context, 14, weight: FontWeight.bold, color: Colors.black),
-                        ),
+                      child: const Center(
+                        child: Icon(Icons.person, color: Colors.black, size: 24),
                       ),
                     ),
                   ),
@@ -1692,23 +1280,19 @@ class _DeliveryMapWidgetState extends State<DeliveryMapWidget> {
                   if (driverLocation != null)
                     Marker(
                       point: driverLocation!,
-                      width: 50,
-                      height: 50,
+                      width: 45,
+                      height: 45,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.black,
+                          color: Colors.green.shade600,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                           boxShadow: [
-                            BoxShadow(color: Colors.green.withOpacity(0.7), blurRadius: 10, spreadRadius: 2),
+                            BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 12, spreadRadius: 2),
                           ],
                         ),
-                        child: Center(
-                          child: Text(
-                            'YS',
-                            style:
-                                widget.getTenorSansStyle(context, 16, weight: FontWeight.bold, color: Colors.white),
-                          ),
+                        child: const Center(
+                          child: Icon(Icons.delivery_dining, color: Colors.white, size: 24),
                         ),
                       ),
                     ),

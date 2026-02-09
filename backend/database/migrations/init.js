@@ -13,13 +13,6 @@ async function initDatabase() {
 
     logger.info('Starting database initialization...');
 
-    // Drop existing tables (optional - for development only)
-    // await connection.execute('DROP TABLE IF EXISTS order_items');
-    // await connection.execute('DROP TABLE IF EXISTS orders');
-    // await connection.execute('DROP TABLE IF EXISTS products');
-    // await connection.execute('DROP TABLE IF EXISTS stores');
-    // await connection.execute('DROP TABLE IF EXISTS users');
-
     // Create users table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS users (
@@ -93,7 +86,7 @@ async function initDatabase() {
         user_id VARCHAR(255) NOT NULL,
         store_id INT NOT NULL,
         total_price DECIMAL(10, 2) NOT NULL,
-        status ENUM('pending', 'confirmed', 'shipped', 'delivered', 'cancelled') DEFAULT 'pending',
+        status ENUM('pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'return') DEFAULT 'pending',
         shipping_address TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
