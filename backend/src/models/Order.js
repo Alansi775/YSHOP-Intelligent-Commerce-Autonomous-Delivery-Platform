@@ -6,6 +6,24 @@
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
 
+// ═══════════════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function _safeParseJSON(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch (e) {
+      logger.warn(`Failed to parse JSON: "${value}"`);
+      return null;
+    }
+  }
+  return null;
+}
+
 export class Order {
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -192,7 +210,7 @@ export class Order {
         
         driver_id: r.driver_id,
         driverId: r.driver_id,
-        driver_location: r.driver_location ? JSON.parse(r.driver_location) : null,
+        driver_location: _safeParseJSON(r.driver_location),
         
         current_offer_driver_id: r.current_offer_driver_id,
         offer_expires_at: r.offer_expires_at,
@@ -244,19 +262,37 @@ export class Order {
     const connection = await pool.getConnection();
 
     try {
-      // First get the orders for pagination
+      // First get the orders for pagination with all necessary fields
       const sql = `
-        SELECT SQL_NO_CACHE o.*, s.name as store_name 
+        SELECT SQL_NO_CACHE 
+          o.*, 
+          s.name as store_name,
+          s.latitude as store_latitude,
+          s.longitude as store_longitude,
+          s.phone as store_phone,
+          u.display_name as customer_name,
+          u.phone as customer_phone,
+          u.address as customer_address,
+          u.latitude as customer_latitude,
+          u.longitude as customer_longitude
         FROM orders o 
         LEFT JOIN stores s ON o.store_id = s.id
+        LEFT JOIN users u ON o.user_id = u.uid
         WHERE o.user_id = ? 
         ORDER BY o.created_at DESC 
         LIMIT ${l} OFFSET ${offset}`;
 
       const [rows] = await connection.execute(sql, [userId]);
       
-      // For each order, fetch its items
+      // For each order, fetch its items and process data
       for (const order of rows) {
+        // Process driver_location safely
+        order.driver_location = _safeParseJSON(order.driver_location);
+        
+        // Map customer location
+        order.location_Latitude = order.customer_latitude;
+        order.location_Longitude = order.customer_longitude;
+        
         const itemsSql = `
           SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price,
                  p.name, p.description, p.image_url as imageUrl, p.category_id

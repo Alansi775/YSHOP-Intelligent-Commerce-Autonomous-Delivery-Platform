@@ -87,7 +87,8 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     try {
       final raw = await ApiService.getStoreCategories(int.tryParse(widget.store.id) ?? 0);
       final cats = raw.map((m) => app_category.Category.fromJson(m)).toList();
-      cats.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      // ✅ Sort categories by display_order
+      cats.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
 
       final allCat = app_category.Category(
         id: null,
@@ -98,6 +99,9 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
 
       _categories = [allCat, ...cats];
       _categoryKeys = { for (var c in _categories) (c.id?.toString() ?? 'all') : GlobalKey() };
+      
+      // ✅ DEFAULT: Show ALL products (no category selected)
+      // User can then click a specific category if they want
     } catch (e) {
       _categories = [];
     }
@@ -539,9 +543,47 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     );
   }
 
+  /// Sort products by category order (display_order)
+  List<Product> _sortProductsByCategory(List<Product> products) {
+    final sorted = List<Product>.from(products);
+    
+    sorted.sort((a, b) {
+      final catIdA = int.tryParse(a.categoryId ?? '0') ?? 0;
+      final catIdB = int.tryParse(b.categoryId ?? '0') ?? 0;
+      
+      // Get category display order
+      final catA = _categories.firstWhere(
+        (c) => c.id == catIdA,
+        orElse: () => app_category.Category(
+          id: catIdA,
+          storeId: 0,
+          name: '',
+          displayName: '',
+          displayOrder: 999,
+        ),
+      );
+      
+      final catB = _categories.firstWhere(
+        (c) => c.id == catIdB,
+        orElse: () => app_category.Category(
+          id: catIdB,
+          storeId: 0,
+          name: '',
+          displayName: '',
+          displayOrder: 999,
+        ),
+      );
+      
+      // Sort by category display_order
+      return catA.displayOrder.compareTo(catB.displayOrder);
+    });
+    
+    return sorted;
+  }
+
   Widget _buildAnimatedProductGrid(bool isDark) {
     final filtered = _selectedCategoryId == null
-        ? _products
+        ? _sortProductsByCategory(_products)
         : _products.where((p) => 
             (int.tryParse(p.categoryId ?? '0') ?? 0) == _selectedCategoryId
           ).toList();

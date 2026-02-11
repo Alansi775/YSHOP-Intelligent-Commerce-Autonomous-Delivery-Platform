@@ -143,6 +143,65 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Create returned_products table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS returned_products (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        order_id INT NOT NULL,
+        product_id INT NOT NULL,
+        order_item_id INT NOT NULL,
+        user_id VARCHAR(255) NOT NULL,
+        store_id INT NOT NULL,
+        driver_id VARCHAR(255),
+        
+        product_name VARCHAR(255) NOT NULL,
+        product_description TEXT,
+        product_price DECIMAL(10, 2) NOT NULL,
+        product_currency VARCHAR(10),
+        product_image_url VARCHAR(255),
+        
+        store_name VARCHAR(255),
+        store_phone VARCHAR(20),
+        store_address TEXT,
+        store_icon_url VARCHAR(255),
+        store_owner_uid VARCHAR(255),
+        
+        driver_name VARCHAR(255),
+        driver_phone VARCHAR(20),
+        driver_email VARCHAR(255),
+        driver_national_id VARCHAR(50),
+        
+        quantity INT DEFAULT 1,
+        return_reason TEXT NOT NULL,
+        
+        photo_top VARCHAR(255),
+        photo_bottom VARCHAR(255),
+        photo_right VARCHAR(255),
+        photo_left VARCHAR(255),
+        photo_front VARCHAR(255),
+        photo_back VARCHAR(255),
+        
+        delivered_at DATETIME,
+        return_requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        
+        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (order_item_id) REFERENCES order_items(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE,
+        FOREIGN KEY (store_id) REFERENCES stores(id),
+        
+        INDEX idx_order_id (order_id),
+        INDEX idx_product_id (product_id),
+        INDEX idx_user_id (user_id),
+        INDEX idx_store_id (store_id),
+        INDEX idx_driver_id (driver_id),
+        INDEX idx_return_requested_at (return_requested_at),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     logger.info(' Database tables created successfully');
     connection.release();
   } catch (error) {

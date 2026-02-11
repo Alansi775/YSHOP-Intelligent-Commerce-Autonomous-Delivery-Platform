@@ -27,7 +27,7 @@ function getDisplayName(categoryName) {
 
 // ============================================
 // GET /stores/:storeId/categories
-// Get all categories for a store
+// Get all categories for a store (مرتبة حسب display_order)
 // ============================================
 router.get('/:storeId/categories', async (req, res) => {
   const { storeId } = req.params;
@@ -40,11 +40,12 @@ router.get('/:storeId/categories', async (req, res) => {
         name,
         display_name,
         icon,
+        display_order,
         created_at,
         updated_at
       FROM categories
       WHERE store_id = ?
-      ORDER BY created_at DESC
+      ORDER BY display_order ASC, created_at ASC
     `;
 
     const [categories] = await pool.query(query, [storeId]);
@@ -84,15 +85,25 @@ router.post('/:storeId/categories', async (req, res) => {
     return res.status(400).json({ error: 'Category name is required' });
   }
 
+  const connection = await pool.getConnection();
+  
   try {
     const displayName = getDisplayName(name);
 
+    // احصل على أعلى display_order للمتجر
+    const [maxOrderResult] = await connection.query(
+      'SELECT MAX(display_order) as max_order FROM categories WHERE store_id = ?',
+      [storeId]
+    );
+    
+    const newDisplayOrder = (maxOrderResult[0]?.max_order || 0) + 1;
+
     const query = `
-      INSERT INTO categories (store_id, name, display_name, created_at, updated_at)
-      VALUES (?, ?, ?, NOW(), NOW())
+      INSERT INTO categories (store_id, name, display_name, display_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, NOW(), NOW())
     `;
 
-    const [result] = await pool.query(query, [storeId, name, displayName]);
+    const [result] = await connection.query(query, [storeId, name, displayName, newDisplayOrder]);
 
     res.json({
       data: {
@@ -100,6 +111,7 @@ router.post('/:storeId/categories', async (req, res) => {
         store_id: parseInt(storeId),
         name,
         display_name: displayName,
+        display_order: newDisplayOrder,
         created_at: new Date(),
         updated_at: new Date(),
       },
@@ -110,6 +122,8 @@ router.post('/:storeId/categories', async (req, res) => {
       return res.status(400).json({ error: 'Category already exists' });
     }
     res.status(500).json({ error: 'Failed to create category' });
+  } finally {
+    connection.release();
   }
 });
 
@@ -206,6 +220,52 @@ router.put('/products/:productId/category', async (req, res) => {
   } catch (error) {
     console.error('❌ Error updating product category:', error);
     res.status(500).json({ error: 'Failed to update category' });
+  }
+});
+
+// ============================================
+// PUT /stores/:storeId/categories/reorder
+// إعادة ترتيب الفئات
+// Body: { categories: [{ id: 1, display_order: 1 }, ...] }
+// ============================================
+router.put('/:storeId/categories/reorder', async (req, res) => {
+  const { storeId } = req.params;
+  const { categories } = req.body;
+
+  // التحقق من البيانات
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return res.status(400).json({ error: 'Categories array is required' });
+  }
+
+  const connection = await pool.getConnection();
+  
+  try {
+    await connection.beginTransaction();
+
+    // تحديث ترتيب كل فئة
+    for (const cat of categories) {
+      if (!cat.id || cat.display_order === undefined) {
+        throw new Error('Category id and display_order are required');
+      }
+
+      await connection.query(
+        'UPDATE categories SET display_order = ?, updated_at = NOW() WHERE id = ? AND store_id = ?',
+        [cat.display_order, cat.id, storeId]
+      );
+    }
+
+    await connection.commit();
+    
+    res.json({ 
+      success: true, 
+      message: 'Categories reordered successfully' 
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('❌ Error reordering categories:', error);
+    res.status(500).json({ error: error.message || 'Failed to reorder categories' });
+  } finally {
+    connection.release();
   }
 });
 

@@ -1,22 +1,21 @@
-// lib/screens/stores/store_admin_view.dart
+// store_admin_view_dji_real.dart - REAL DJI INSPIRATION
+// Hero section + Breathing space + Minimal + Visual focus
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
-// استيراد جميع الشاشات الجديدة
+
 import '../auth/sign_in_view.dart';
 import './add_product_view.dart';
-import './edit_product_view.dart';
-import './orders_view.dart'; //  تم استيرادها
+import './orders_view.dart';
 import './chat_list_view.dart';
 import 'store_settings_view.dart';
 import './product_details_view.dart';
 import 'category_sheet_view.dart';
 import 'category_products_view.dart';
 import 'category_selector_sheet.dart';
-// Widgets and ProductS
 
-import '../../widgets/store_admin_widgets.dart'; 
+import '../../widgets/store_admin_widgets.dart';
 import '../../models/store.dart';
 import '../../models/category.dart';
 import '../../services/api_service.dart';
@@ -32,49 +31,32 @@ class StoreAdminView extends StatefulWidget {
 }
 
 class _StoreAdminViewState extends State<StoreAdminView> {
-  // MARK: - State Variables
   String _storeName = "";
   String _storeIconUrl = "";
-  String _storeType = ""; //  متغير نوع المتجر
-  String _storeOwnerUid = "";  //  Track the actual store owner UID
-  int _storeId = 0; //  Store ID for categories
-  List<ProductS> _products = []; 
+  String _storeType = "";
+  String _storeOwnerUid = "";
+  int _storeId = 0;
+  List<ProductS> _products = [];
   List<ProductS> _filteredProducts = [];
-  List<Category> _categories = []; //  الفئات
-  int _totalProductsCount = 0; //  إجمالي المنتجات (مع وبدون categories)
+  List<Category> _categories = [];
+  int _totalProductsCount = 0;
   bool _isLoading = false;
-  String _searchQuery = ""; //  متغير البحث
-  Timer? _pollingTimer; //  تحديث تلقائي
+  String _searchQuery = "";
+  Timer? _pollingTimer;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    //  COMPLETE RESET - clear everything
-    _storeName = "";
-    _storeIconUrl = "";
-    _storeType = "";
-    _storeOwnerUid = "";
-    _storeId = 0;
-    _products = [];
-    _filteredProducts = [];
-    _categories = [];
-    _totalProductsCount = 0;
-    _searchQuery = "";
-    
-    // Clear any cached requests AND the entire cache
     ApiService.clearCache();
-    
-    // Fetch FRESH data immediately
     _fetchStoreNameAndProducts();
-    
-    //  Start polling: تحديث البيانات كل 5 ثانية
     _startPolling();
   }
   
   @override
   void dispose() {
-    //  إيقاف الـ polling عند الخروج
     _pollingTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
   
@@ -86,117 +68,69 @@ class _StoreAdminViewState extends State<StoreAdminView> {
     });
   }
   
-  ///  دالة البحث والتصفية
   void _filterProducts(String query) {
     setState(() {
       _searchQuery = query.toLowerCase();
-      if (_searchQuery.isEmpty) {
-        _filteredProducts = _products;
-      } else {
-        _filteredProducts = _products.where((product) {
-          return product.name.toLowerCase().contains(_searchQuery) ||
-              product.description.toLowerCase().contains(_searchQuery) ||
-              product.price.toLowerCase().contains(_searchQuery);
-        }).toList();
-      }
+      _filteredProducts = _searchQuery.isEmpty
+        ? _products
+        : _products.where((p) =>
+            p.name.toLowerCase().contains(_searchQuery) ||
+            p.description.toLowerCase().contains(_searchQuery)).toList();
     });
   }
   
-  /// جلب المنتجات بدون إظهار Loading (للـ polling)
   Future<void> _fetchProductsQuietly() async {
     try {
       final response = await ApiService.getStoreProducts(_storeOwnerUid, bypassCache: true);
       
       if (response is List && mounted) {
-        // حفظ الإجمالي الكلي
         _totalProductsCount = response.length;
         
-        // تصفية المنتجات التي ليس لها فئة فقط (category_id == null أو 0)
         final productsWithoutCategory = response.where((item) {
           final categoryId = item['category_id'];
           return categoryId == null || categoryId == 0 || categoryId == '';
         }).toList();
         
-        // Compare with current products to detect changes
-        final newProductData = productsWithoutCategory
-            .map((p) => '${p['id']}_${p['name']}_${p['price']}_${p['currency']}')
-            .toList();
-        final oldProductData = _products
-            .map((p) => '${p.id}_${p.name}_${p.price}_${p.currency}')
-            .toList();
-        
-        final hasChanges = newProductData.join('|') != oldProductData.join('|');
-        
-        // فقط طبع وحدّث عند حدوث تغييرات
-        if (hasChanges) {
-          debugPrint(' CHANGE DETECTED: Old=${oldProductData.length}, New=${newProductData.length}');
-        }
-        
-        // تحديث الـ state بدون إظهار مؤشر التحميل
         setState(() {
-          _products = productsWithoutCategory.map((item) {
-            return ProductS(
-              id: item['id'].toString(),
-              storeName: _storeName,
-              name: item['name'] ?? '',
-              price: item['price'].toString(),
-              description: item['description'] ?? '',
-              imageUrl: Store.getFullImageUrl(item['image_url']),
-              approved: item['status'] == 'approved',
-              status: item['status'] ?? 'pending',
-              storeOwnerEmail: item['owner_email'] ?? '',
-              storePhone: '',
-              customerID: _storeOwnerUid,
-              stock: item['stock'],
-              currency: item['currency'] ?? 'USD',
-            );
-          }).toList();
+          _products = productsWithoutCategory.map((item) => ProductS(
+            id: item['id'].toString(),
+            storeName: _storeName,
+            name: item['name'] ?? '',
+            price: item['price'].toString(),
+            description: item['description'] ?? '',
+            imageUrl: Store.getFullImageUrl(item['image_url']),
+            approved: item['status'] == 'approved',
+            status: item['status'] ?? 'pending',
+            storeOwnerEmail: item['owner_email'] ?? '',
+            storePhone: '',
+            customerID: _storeOwnerUid,
+            stock: item['stock'],
+            currency: item['currency'] ?? 'USD',
+          )).toList();
           
-          // تحديث الـ filtered list
-          if (_searchQuery.isEmpty) {
-            _filteredProducts = _products;
-          } else {
-            _filteredProducts = _products.where((product) {
-              return product.name.toLowerCase().contains(_searchQuery) ||
-                  product.description.toLowerCase().contains(_searchQuery) ||
-                  product.price.toLowerCase().contains(_searchQuery);
-            }).toList();
-          }
+          _filteredProducts = _searchQuery.isEmpty ? _products : _products.where((p) =>
+            p.name.toLowerCase().contains(_searchQuery)).toList();
         });
       }
-    } catch (e, stack) {
-      debugPrint('❌ Polling error: $e\n$stack');
+    } catch (e) {
+      debugPrint('Error: $e');
     }
   }
-
-  // MARK: - Data Methods (كود جلب وحذف البيانات كما هو)
 
   Future<void> _fetchStoreNameAndProducts() async {
     if (!mounted) return;
     
     setState(() => _isLoading = true);
     try {
-      // First, try to get UID from AuthManager (already logged in)
       final authManager = Provider.of<AuthManager>(context, listen: false);
       final uidFromAuth = authManager.userProfile?['uid'] as String? ?? '';
-      final userProfile = authManager.userProfile;
       
-      debugPrint(' Loading store for UID: $uidFromAuth');
-      
-      // Try to fetch store data from API
-      dynamic storeData;
-      try {
-        storeData = await ApiService.getUserStore(uid: uidFromAuth);
-      } catch (e) {
-        debugPrint('⚠️ API getUserStore failed: $e');
-        storeData = null;
-      }
+      dynamic storeData = await ApiService.getUserStore(uid: uidFromAuth);
       
       if (storeData != null && storeData is Map && storeData.isNotEmpty) {
-        // Store data from API - cast to Map<String, dynamic>
         final storeDataMap = Map<String, dynamic>.from(storeData);
         final store = Store.fromJson(storeDataMap);
-        final ownerUid = (store.uid ?? storeDataMap['uid']?.toString() ?? storeDataMap['owner_uid']?.toString() ?? uidFromAuth).trim();
+        final ownerUid = (store.uid ?? storeDataMap['uid']?.toString() ?? uidFromAuth).trim();
         final storeId = storeDataMap['id'] as int? ?? 0;
         final storeType = storeDataMap['store_type'] as String? ?? '';
         
@@ -208,193 +142,90 @@ class _StoreAdminViewState extends State<StoreAdminView> {
           _storeType = storeType;
         });
         
-        debugPrint(' ✅ Store loaded from API: ${store.storeName} | UID: $ownerUid');
-        
-        // Fetch products and categories
-        if (ownerUid.isNotEmpty) {
-          await _fetchProducts(ownerUid);
-        }
-        if (storeId > 0) {
-          await _fetchCategories(storeId);
-        }
-      } else {
-        // Fallback: Use data from AuthManager (userProfile)
-        debugPrint('⚠️ No store data from API, using AuthManager fallback');
-        
-        final storeName = userProfile?['name'] as String? ?? widget.initialStoreName;
-        final storeIcon = userProfile?['store_icon'] as String? ?? '';
-        
-        setState(() {
-          _storeName = storeName.isNotEmpty ? storeName : widget.initialStoreName;
-          _storeIconUrl = storeIcon;
-          _storeOwnerUid = uidFromAuth;
-          _storeType = userProfile?['store_type'] as String? ?? '';
-          _storeId = 0;
-          _products = [];
-          _categories = [];
-        });
-        
-        debugPrint(' Using fallback store name: $_storeName | UID: $uidFromAuth');
-        
-        // Try to fetch products anyway
-        if (uidFromAuth.isNotEmpty) {
-          await _fetchProducts(uidFromAuth);
-        }
+        if (ownerUid.isNotEmpty) await _fetchProducts(ownerUid);
+        if (storeId > 0) await _fetchCategories(storeId);
       }
-    } catch (e, stackTrace) {
-      debugPrint("❌ Critical error in _fetchStoreNameAndProducts: $e\n$stackTrace");
-      
-      // Ultimate fallback - use initial store name
-      setState(() {
-        _storeName = widget.initialStoreName;
-        _storeIconUrl = "";
-        _storeOwnerUid = "";
-        _storeType = "";
-        _storeId = 0;
-        _products = [];
-        _categories = [];
-      });
+    } catch (e) {
+      debugPrint("Error: $e");
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _fetchProducts([String? ownerUidParam]) async {
-    //  Use parameter first, then state (to handle both refresh and initial load)
     final uidToFetch = ownerUidParam ?? _storeOwnerUid;
-    
-    if (uidToFetch.isEmpty) {
-      debugPrint('❌ No store owner UID');
-      return;
-    }
-
-    debugPrint(' Fetching products for Store Owner UID: $uidToFetch');
+    if (uidToFetch.isEmpty) return;
 
     try {
-      // Fetch products from MySQL API using the store owner UID
       final response = await ApiService.getStoreProducts(uidToFetch, bypassCache: true);
-      debugPrint(' API Response: $response');
       
       if (response is List) {
-        // حفظ الإجمالي الكلي
         _totalProductsCount = response.length;
-        debugPrint(' Total products: $_totalProductsCount');
         
-        // تصفية المنتجات التي ليس لها فئة فقط (category_id == null أو 0)
         final productsWithoutCategory = response.where((item) {
           final categoryId = item['category_id'];
           return categoryId == null || categoryId == 0 || categoryId == '';
         }).toList();
         
-        debugPrint(' Got ${productsWithoutCategory.length} products without category');
         setState(() {
-          _products = productsWithoutCategory.map((item) {
-            debugPrint('Processing product: ${item['name']} - Status: ${item['status']}');
-            return ProductS(
-              id: item['id'].toString(),
-              storeName: _storeName,
-              name: item['name'] ?? '',
-              price: item['price'].toString(),
-              description: item['description'] ?? '',
-              imageUrl: Store.getFullImageUrl(item['image_url']),
-              approved: item['status'] == 'approved',
-              status: item['status'] ?? 'pending',
-              storeOwnerEmail: item['owner_email'] ?? '',
-              storePhone: '',
-              customerID: uidToFetch,
-              stock: item['stock'],
-              currency: item['currency'] ?? 'USD',
-            );
-          }).toList();
+          _products = productsWithoutCategory.map((item) => ProductS(
+            id: item['id'].toString(),
+            storeName: _storeName,
+            name: item['name'] ?? '',
+            price: item['price'].toString(),
+            description: item['description'] ?? '',
+            imageUrl: Store.getFullImageUrl(item['image_url']),
+            approved: item['status'] == 'approved',
+            status: item['status'] ?? 'pending',
+            storeOwnerEmail: item['owner_email'] ?? '',
+            storePhone: '',
+            customerID: uidToFetch,
+            stock: item['stock'],
+            currency: item['currency'] ?? 'USD',
+          )).toList();
           
-          // تحديث الـ filtered list
-          if (_searchQuery.isEmpty) {
-            _filteredProducts = _products;
-          } else {
-            _filteredProducts = _products.where((product) {
-              return product.name.toLowerCase().contains(_searchQuery) ||
-                  product.description.toLowerCase().contains(_searchQuery) ||
-                  product.price.toLowerCase().contains(_searchQuery);
-            }).toList();
-          }
+          _filteredProducts = _searchQuery.isEmpty ? _products : _products.where((p) =>
+            p.name.toLowerCase().contains(_searchQuery)).toList();
         });
-      } else {
-        debugPrint('⚠️ Response is not a list: $response');
       }
     } catch (e) {
-      debugPrint("❌ Error fetching products: $e");
+      debugPrint("Error: $e");
     }
   }
 
-  /// جلب الفئات للمتجر
   Future<void> _fetchCategories(int storeId) async {
     try {
-      // حمل الفئات من قاعدة البيانات فقط
       final response = await ApiService.getStoreCategories(storeId, bypassCache: true);
       if (mounted) {
-        setState(() {
-          _categories = response.map((item) => Category.fromJson(item)).toList();
-        });
+        final categories = response.map((item) => Category.fromJson(item)).toList();
+        categories.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+        setState(() => _categories = categories);
       }
     } catch (e) {
-      debugPrint('❌ Error fetching categories: $e');
+      debugPrint('Error: $e');
     }
   }
 
-  List<Category> _getRestaurantCategories() {
-    return [
-      Category(id: 100, name: 'Burgers', displayName: 'Burgers', storeId: _storeId),
-      Category(id: 101, name: 'Pizzas', displayName: 'Pizzas', storeId: _storeId),
-      Category(id: 102, name: 'Sandwiches', displayName: 'Sandwiches', storeId: _storeId),
-      Category(id: 103, name: 'Pasta', displayName: 'Pasta', storeId: _storeId),
-      Category(id: 104, name: 'Rice Dishes', displayName: 'Rice Dishes', storeId: _storeId),
-      Category(id: 105, name: 'Fries', displayName: 'Fries', storeId: _storeId),
-      Category(id: 106, name: 'Chicken', displayName: 'Chicken', storeId: _storeId),
-      Category(id: 107, name: 'Meat', displayName: 'Meat', storeId: _storeId),
-      Category(id: 108, name: 'Seafood', displayName: 'Seafood', storeId: _storeId),
-      Category(id: 109, name: 'Salads', displayName: 'Salads', storeId: _storeId),
-      Category(id: 110, name: 'Soups', displayName: 'Soups', storeId: _storeId),
-      Category(id: 111, name: 'Appetizers', displayName: 'Appetizers', storeId: _storeId),
-      Category(id: 112, name: 'Sides', displayName: 'Sides', storeId: _storeId),
-      Category(id: 113, name: 'Sauces', displayName: 'Sauces', storeId: _storeId),
-      Category(id: 114, name: 'Desserts', displayName: 'Desserts', storeId: _storeId),
-      Category(id: 115, name: 'Drinks', displayName: 'Drinks', storeId: _storeId),
-      Category(id: 116, name: 'Juices', displayName: 'Juices', storeId: _storeId),
-      Category(id: 117, name: 'Coffee', displayName: 'Coffee', storeId: _storeId),
-      Category(id: 118, name: 'Smoothies', displayName: 'Smoothies', storeId: _storeId),
-      Category(id: 119, name: 'Milkshakes', displayName: 'Milkshakes', storeId: _storeId),
-    ];
+  Future<void> _saveAndReorderCategories() async {
+    try {
+      final categoriesToSend = _categories
+          .asMap()
+          .entries
+          .map((entry) => {
+            'id': entry.value.id,
+            'display_order': entry.key + 1,
+          })
+          .toList();
+      await ApiService.reorderCategories(_storeId, categoriesToSend);
+    } catch (e) {
+      debugPrint('Error: $e');
+    }
   }
 
-  List<Category> _getPharmacyCategories() {
-    return [
-      Category(id: 200, name: 'Medicines', displayName: 'Medicines', storeId: _storeId),
-      Category(id: 201, name: 'Supplements', displayName: 'Supplements', storeId: _storeId),
-      Category(id: 202, name: 'First Aid', displayName: 'First Aid', storeId: _storeId),
-      Category(id: 203, name: 'Medical Devices', displayName: 'Medical Devices', storeId: _storeId),
-      Category(id: 204, name: 'Personal Care', displayName: 'Personal Care', storeId: _storeId),
-      Category(id: 205, name: 'Vitamins', displayName: 'Vitamins', storeId: _storeId),
-    ];
-  }
-
-  List<Category> _getClothingCategories() {
-    return [
-      Category(id: 300, name: 'Men', displayName: 'Men', storeId: _storeId),
-      Category(id: 301, name: 'Women', displayName: 'Women', storeId: _storeId),
-      Category(id: 302, name: 'Kids', displayName: 'Kids', storeId: _storeId),
-      Category(id: 303, name: 'Accessories', displayName: 'Accessories', storeId: _storeId),
-      Category(id: 304, name: 'Shoes', displayName: 'Shoes', storeId: _storeId),
-      Category(id: 305, name: 'Sports', displayName: 'Sports', storeId: _storeId),
-    ];
-  }
-
-  /// عرض شاشة اختيار الفئة
   void _showCreateCategorySheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0F0F0F),
+      backgroundColor: const Color(0xFF0A0A0A),
       isScrollControlled: true,
       builder: (context) => CategorySheetView(
         storeId: _storeId,
@@ -403,19 +234,13 @@ class _StoreAdminViewState extends State<StoreAdminView> {
       ),
     ).then((result) {
       if (result is Category && mounted) {
-        setState(() {
-          _categories.add(result);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Category created: ${result.displayName}')),
-        );
+        setState(() => _categories.add(result));
       }
     });
   }
 
-  /// عرض منتجات الفئة
   void _showCategoryProducts(Category category) {
-    Navigator.of(context).push(MaterialPageRoute(
+    Navigator.push(context, MaterialPageRoute(
       builder: (context) => CategoryProductsView(
         category: category,
         storeId: _storeId,
@@ -423,42 +248,24 @@ class _StoreAdminViewState extends State<StoreAdminView> {
         storeOwnerEmail: _storeOwnerUid,
         storePhone: '',
         onCategoryDeleted: () {
-          // إعادة تحميل الفئات والمنتجات بعد حذف الفئة
           _fetchCategories(_storeId);
           _fetchProducts();
         },
-        onProductRemoved: (productId) {
-          // إضافة المنتج مرة أخرى عند إزالته من الفئة
-          _fetchProducts();
-        },
+        onProductRemoved: (productId) => _fetchProducts(),
       ),
     ));
   }
 
-  /// نقل المنتج للفئة
   void _assignProductToCategory(ProductS product) {
     showDialog(
       context: context,
-      barrierDismissible: true,
       builder: (context) => CategorySelectorSheet(
         categories: _categories,
         onCategorySelected: (category) async {
           Navigator.pop(context);
-          
           final success = await ApiService.assignProductToCategory(
-            int.parse(product.id),
-            category.id!,
-          );
-          
+            int.parse(product.id), category.id!);
           if (success && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '${product.name} added to ${category.displayName}',
-                ),
-              ),
-            );
-            // إزالة المنتج من قائمة "Products without category"
             setState(() {
               _products.removeWhere((p) => p.id == product.id);
               _filteredProducts.removeWhere((p) => p.id == product.id);
@@ -468,393 +275,733 @@ class _StoreAdminViewState extends State<StoreAdminView> {
       ),
     );
   }
-          
 
   Future<void> _deleteProduct(String productId) async {
     setState(() => _isLoading = true);
     try {
       await ApiService.deleteProduct(productId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Product deleted successfully')),
-      );
       await _fetchProducts();
-    } catch (e) {
-      print("Error deleting product: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting product: $e')),
-      );
     } finally {
       setState(() => _isLoading = false);
     }
   }
   
   void _logout() async {
-    //  Clear admin role when logging out
     ApiService.setAdminRole(null);
     ApiService.setAdminProfile(null);
-    
     final authManager = Provider.of<AuthManager>(context, listen: false);
     await authManager.signOut();
-    
     if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
+      Navigator.pushAndRemoveUntil(
+        context,
         MaterialPageRoute(builder: (context) => const SignInView()),
-        (Route<dynamic> route) => false,
+        (route) => false,
       );
     }
   }
 
-  // MARK: - Navigation Methods (التصحيح هنا)
-
-  void _onAddProduct() {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (context) => const AddProductView(),
-    )).then((_) {
-      // تحديث البيانات عند الرجوع من AddProductView
-      _fetchStoreNameAndProducts();
-    });
-  }
-
-  //  التصحيح: جلب البريد الإلكتروني وتمريره إلى OrdersView 
-  void _onOrders() {
-    final authManager = Provider.of<AuthManager>(context, listen: false);
-    final storeEmail = authManager.userProfile?['email'] as String?;
-
-    if (storeEmail != null) {
-      Navigator.of(context).push(MaterialPageRoute(
-        //  تمرير المعامل المطلوب
-        builder: (context) => OrdersView(storeEmail: storeEmail),
-      ));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error: Store owner email not found."))
-      );
-    }
-  }
-
-  void _onMessages() {
-    final authManager = Provider.of<AuthManager>(context, listen: false);
-    final email = authManager.userProfile?['email'] as String?;
-    
-    if (email != null) {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (context) => ChatListView(storeOwnerID: email),
-      ));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Error: User email not found."))
-      );
-    }
-  }
-
-  void _onSettings() {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (context) => const StoreSettingsView(),
-    ));
-  }
-  
-  void _onProductTap(ProductS product) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (context) => ProductDetailsView(product: product),
-    ));
-  }
-
-  void _onEditProduct(ProductS product) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (context) => EditProductView(product: product),
-    )).then((result) {
-      // تحديث البيانات عند الرجوع من EditProductView
-      if (result == true) {
-        // Product was updated, refresh with cache bypass
-        _fetchStoreNameAndProducts();
-      }
-    });
-  }
-
-  // MARK: - Build Method
   @override
   Widget build(BuildContext context) {
-    const double _maxWidth = 1100.0; 
-    
     final screenWidth = MediaQuery.of(context).size.width;
-    int productCrossAxisCount;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isDesktop = screenWidth > 900;
 
-    if (screenWidth > 1000) {
-      productCrossAxisCount = 4;
-    } else if (screenWidth > 600) {
-      productCrossAxisCount = 3;
-    } else {
-      productCrossAxisCount = 2;
+    if (_isLoading && _storeName.isEmpty) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
+        body: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Colors.white.withOpacity(0.5),
+          ),
+        ),
+      );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Store Dashboard"),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        actions: [
-          //  ربط زر الإعدادات بالدالة الجديدة
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _onSettings,
-          ),
-        ],
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F0F0F).withOpacity(0.8),
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.white.withOpacity(0.05),
-                width: 1,
-              ),
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: const Color(0xFF0A0A0A),
       body: Stack(
         children: [
-          Container(color: const Color(0xFF0F0F0F)), //  أسود أغمق
-          
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _maxWidth),
-              child: RefreshIndicator(
-                onRefresh: _fetchStoreNameAndProducts,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                  child: Column(
+          // Main Content
+          CustomScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              // Transparent App Bar
+              SliverAppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                floating: true,
+                automaticallyImplyLeading: false,
+                toolbarHeight: 70,
+                flexibleSpace: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isDesktop ? 80 : 24,
+                    vertical: 16,
+                  ),
+                  child: Row(
                     children: [
-                      HeaderSection(
-                        storeName: _storeName,
-                        storeIconUrl: _storeIconUrl,
-                        storeOwnerUid: Provider.of<AuthManager>(context, listen: false).userProfile?['uid'] as String? ?? '',
-                      ),
-                      
-                      QuickActionGrid(
-                        //  ربط الإجراءات بأحدث الدوال
-                        onAddProduct: _onAddProduct,
-                        onOrders: _onOrders, //  تم تحديث دالة _onOrders
-                        onMessages: _onMessages,
-                        // الإجراءات الأخرى في QuickActionGrid لم يتم تحديد توجيه لها في Swift، سنتركها مؤقتًا كما هي
-                        onAnalytics: () { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Analytics View"))); },
-                        onNotifications: () { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Notifications View"))); },
-                      ),
-                      
-                      //  عرض زر إضافة الفئات لجميع الأنواع ما عدا الـ market
-                      if (_storeType.isNotEmpty && _storeType.toLowerCase() != 'market') ...[
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Categories',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: _showCreateCategorySheet,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add Category'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2979FF),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // عرض الفئات في Grid
-                        if (_categories.isNotEmpty) ...[
-                          SizedBox(
-                            height: 200,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _categories.length,
-                              itemBuilder: (context, index) {
-                                final category = _categories[index];
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 12),
-                                  child: CategoryCard(
-                                    category: category,
-                                    onTap: () => _showCategoryProducts(category),
-                                  ),
-                                );
-                              },
+                      // Store Logo & Name
+                      if (_storeIconUrl.isNotEmpty)
+                        Container(
+                          width: 40,
+                          height: 40,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.1),
+                              width: 1,
                             ),
                           ),
-                        ] else ...[
-                          Center(
-                            child: Text(
-                              'No categories yet. Create one to organize your products!',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 14,
+                          child: ClipOval(
+                            child: Image.network(
+                              _storeIconUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.store,
+                                size: 20,
+                                color: Colors.white.withOpacity(0.3),
                               ),
                             ),
                           ),
-                        ],
-                        const SizedBox(height: 20),
-                      ],
-                      
-                      //  حقل البحث
-                      const SizedBox(height: 20),
-                      SearchBar(
-                        query: _searchQuery,
-                        onChanged: _filterProducts,
+                        ),
+                      Text(
+                        _storeName.isEmpty ? 'Store' : _storeName,
+                        style: const TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white,
+                          letterSpacing: -0.2,
+                        ),
                       ),
-                      const SizedBox(height: 20),
-                      
-                      // عنوان للمنتجات بدون فئات
-                      if (_storeType.toLowerCase() == 'market' && _categories.isNotEmpty) ...[
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Products without category',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey[400],
-                            ),
-                          ),
+                      const Spacer(),
+                      // Settings Icon
+                      IconButton(
+                        onPressed: () => Navigator.push(context, 
+                          MaterialPageRoute(builder: (_) => const StoreSettingsView())),
+                        icon: Icon(
+                          Icons.settings_outlined,
+                          color: Colors.white.withOpacity(0.7),
+                          size: 22,
                         ),
-                        const SizedBox(height: 12),
-                      ],
-                      
-                      // عرض المنتجات أو رسالة "لا توجد منتجات"
-                      if (_totalProductsCount == 0)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 60),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.shopping_bag_outlined,
-                                  size: 80,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(height: 20),
-                                Text(
-                                  'No Products Yet',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey[300],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Start by adding your first product',
-                                  style: TextStyle(
-                                    color: Colors.grey[500],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        ProductsSection(
-                          products: _filteredProducts,
-                          onDelete: _deleteProduct,
-                          onProductTap: _onProductTap,
-                          onEdit: _onEditProduct,
-                          onAssignCategory: _assignProductToCategory,
-                          crossAxisCount: productCrossAxisCount,
-                          searchQuery: _searchQuery,
-                          totalProductsCount: _totalProductsCount,
-                        ),
-                      BottomActionButtons(onLogout: _logout),
+                      ),
                     ],
                   ),
                 ),
               ),
-            ),
+
+              // Hero Section
+              SliverToBoxAdapter(
+                child: Container(
+                  height: screenHeight * 0.65,
+                  padding: EdgeInsets.symmetric(horizontal: isDesktop ? 120 : 32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Store Icon - Large
+                      if (_storeIconUrl.isNotEmpty)
+                        Container(
+                          width: 120,
+                          height: 120,
+                          margin: const EdgeInsets.only(bottom: 32),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.08),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 40,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: Image.network(
+                              _storeIconUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.store,
+                                size: 60,
+                                color: Colors.white.withOpacity(0.2),
+                              ),
+                            ),
+                          ),
+                        ),
+                      
+                      // Store Name - Large
+                      Text(
+                        _storeName.isEmpty ? 'Your Store' : _storeName,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 48,
+                          fontWeight: FontWeight.w300,
+                          color: Colors.white,
+                          letterSpacing: -1,
+                          height: 1.1,
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Tagline
+                      Text(
+                        'Manage Your Business',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 18,
+                          color: Colors.white.withOpacity(0.5),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 48),
+                      
+                      // Action Buttons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildHeroButton(
+                            'Add Product',
+                            () => Navigator.push(context, 
+                              MaterialPageRoute(builder: (_) => const AddProductView()))
+                                .then((_) => _fetchStoreNameAndProducts()),
+                            isPrimary: true,
+                          ),
+                          const SizedBox(width: 16),
+                          _buildHeroButton(
+                            'View Orders',
+                            () {
+                              final email = Provider.of<AuthManager>(context, listen: false)
+                                .userProfile?['email'] as String?;
+                              if (email != null) {
+                                Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => OrdersView(storeEmail: email)));
+                              }
+                            },
+                            isPrimary: false,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Categories Section
+              if (_storeType.isNotEmpty && _storeType.toLowerCase() != 'market')
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? 120 : 32,
+                      vertical: 80,
+                    ),
+                    child: _buildCategoriesSection(context, isDesktop),
+                  ),
+                ),
+
+              // Products Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isDesktop ? 120 : 32,
+                    vertical: 80,
+                  ),
+                  child: _buildProductsSection(context, isDesktop),
+                ),
+              ),
+
+              // Footer
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _logout,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(
+                              color: Colors.red.withOpacity(0.4),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.logout,
+                                color: Colors.red.withOpacity(0.7),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Sign Out',
+                                style: TextStyle(
+                                  fontFamily: 'TenorSans',
+                                  fontSize: 14,
+                                  color: Colors.red.withOpacity(0.7),
+                                  letterSpacing: 0.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          
-          
-          if (_isLoading) const LoadingOverlay(), 
+
+          // Search Removed - Now integrated above Products section
         ],
       ),
     );
   }
-}
 
-//  Widget البحث
-class SearchBar extends StatelessWidget {
-  final String query;
-  final Function(String) onChanged;
-
-  const SearchBar({
-    Key? key,
-    required this.query,
-    required this.onChanged,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E), // 🔘 نفس لون البطاقات
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+  Widget _buildHeroButton(String text, VoidCallback onTap, {required bool isPrimary}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        decoration: BoxDecoration(
+          color: isPrimary ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: isPrimary ? Colors.transparent : Colors.white.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: isPrimary ? Colors.black : Colors.white,
+            letterSpacing: 0.3,
+          ),
         ),
       ),
-      child: TextField(
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          hintText: 'Search products (name, description, price...)',
-          hintStyle: TextStyle(
-            color: Colors.grey[500],
-          ),
-          prefixIcon: Icon(
-            Icons.search,
-            color: Colors.grey[400],
-          ),
-          suffixIcon: query.isNotEmpty
-              ? IconButton(
-                  icon: Icon(
-                    Icons.close,
-                    color: Colors.grey[400],
+    );
+  }
+
+  Widget _buildCategoriesSection(BuildContext context, bool isDesktop) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Categories',
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 32,
+                fontWeight: FontWeight.w300,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
+            GestureDetector(
+              onTap: _showCreateCategorySheet,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.1),
+                    width: 1,
                   ),
-                  onPressed: () => onChanged(''),
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text(
+                      'Add Category',
+                      style: TextStyle(
+                        fontFamily: 'TenorSans',
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        style: const TextStyle(
-          color: Colors.white,
+        
+        const SizedBox(height: 12),
+        
+        Text(
+          'Drag to reorder',
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 13,
+            color: Colors.white.withOpacity(0.3),
+            letterSpacing: 0.3,
+          ),
+        ),
+        
+        const SizedBox(height: 40),
+        
+        if (_categories.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(60),
+              child: Text(
+                'No categories yet',
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 16,
+                  color: Colors.white.withOpacity(0.25),
+                ),
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 320,
+            child: ReorderableListView(
+              scrollDirection: Axis.horizontal,
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final item = _categories.removeAt(oldIndex);
+                  _categories.insert(newIndex, item);
+                });
+                _saveAndReorderCategories();
+              },
+              children: [
+                for (int i = 0; i < _categories.length; i++)
+                  Padding(
+                    key: ValueKey(_categories[i].id ?? 'new_$i'),
+                    padding: EdgeInsets.only(right: i < _categories.length - 1 ? 24 : 0),
+                    child: _CategoryCardLarge(
+                      category: _categories[i],
+                      orderNumber: i + 1,
+                      onTap: () => _showCategoryProducts(_categories[i]),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProductsSection(BuildContext context, bool isDesktop) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Search Bar
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.02),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+          child: TextField(
+            onChanged: _filterProducts,
+            style: const TextStyle(
+              fontFamily: 'TenorSans',
+              fontSize: 16,
+              color: Colors.white,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Search products...',
+              hintStyle: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 16,
+                color: Colors.white.withOpacity(0.3),
+              ),
+              prefixIcon: Icon(
+                Icons.search,
+                color: Colors.white.withOpacity(0.3),
+              ),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.close,
+                        color: Colors.white.withOpacity(0.3),
+                      ),
+                      onPressed: () => _filterProducts(''),
+                    )
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 40),
+        
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Products',
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 32,
+                fontWeight: FontWeight.w300,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
+            Text(
+              '${_filteredProducts.length}',
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 18,
+                color: Colors.white.withOpacity(0.4),
+              ),
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 40),
+        
+        if (_totalProductsCount == 0)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(80),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.shopping_bag_outlined,
+                    size: 80,
+                    color: Colors.white.withOpacity(0.1),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'No products yet',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 20,
+                      color: Colors.white.withOpacity(0.25),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (_filteredProducts.isEmpty && _searchQuery.isNotEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(80),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.search_off,
+                    size: 80,
+                    color: Colors.white.withOpacity(0.1),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'No products found',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 20,
+                      color: Colors.white.withOpacity(0.25),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Try searching with different keywords',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.15),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isDesktop ? 4 : 2,
+              crossAxisSpacing: 24,
+              mainAxisSpacing: 24,
+              childAspectRatio: 0.7,
+            ),
+            itemCount: _filteredProducts.length,
+            itemBuilder: (context, index) => _buildProductCardLarge(_filteredProducts[index]),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProductCardLarge(ProductS product) {
+    return GestureDetector(
+      onTap: () => Navigator.push(context,
+        MaterialPageRoute(builder: (_) => ProductDetailsView(product: product))),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.05),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.01),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: product.imageUrl.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                      child: Image.network(
+                        product.imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                      ),
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.image_outlined,
+                        size: 48,
+                        color: Colors.white.withOpacity(0.1),
+                      ),
+                    ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${product.currency} ${product.price}',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSearchDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.8),
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFF0A0A0A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                autofocus: true,
+                onChanged: (value) {
+                  _filterProducts(value);
+                  Navigator.pop(context);
+                },
+                style: const TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 18,
+                  color: Colors.white,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search products or categories...',
+                  hintStyle: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 18,
+                    color: Colors.white.withOpacity(0.3),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: Colors.white.withOpacity(0.5),
+                  ),
+                  border: InputBorder.none,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-//  Category Card Widget - with last product image and delete button on hover/long press
-class CategoryCard extends StatefulWidget {
+// Large Category Card
+class _CategoryCardLarge extends StatefulWidget {
   final Category category;
+  final int orderNumber;
   final VoidCallback onTap;
 
-  const CategoryCard({
-    Key? key,
+  const _CategoryCardLarge({
     required this.category,
+    required this.orderNumber,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
-  State<CategoryCard> createState() => _CategoryCardState();
+  State<_CategoryCardLarge> createState() => _CategoryCardLargeState();
 }
 
-class _CategoryCardState extends State<CategoryCard> {
+class _CategoryCardLargeState extends State<_CategoryCardLarge> {
   String? _lastProductImage;
   bool _isLoading = true;
-  bool _isHovering = false;
 
   @override
   void initState() {
@@ -870,9 +1017,7 @@ class _CategoryCardState extends State<CategoryCard> {
           final lastProduct = products.last;
           final imageUrl = lastProduct['image_url'] as String? ?? '';
           setState(() {
-            _lastProductImage = imageUrl.isNotEmpty
-                ? Store.getFullImageUrl(imageUrl)
-                : null;
+            _lastProductImage = imageUrl.isNotEmpty ? Store.getFullImageUrl(imageUrl) : null;
             _isLoading = false;
           });
         } else if (mounted) {
@@ -880,224 +1025,124 @@ class _CategoryCardState extends State<CategoryCard> {
         }
       }
     } catch (e) {
-      debugPrint('Error loading category image: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _deleteCategory() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          'Delete Category?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'All products in this category will be returned to "Products without category"',
-              style: TextStyle(color: Colors.grey[300]),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'This action cannot be undone.',
-              style: TextStyle(
-                color: Colors.red[400],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        final success =
-            await ApiService.deleteCategory(widget.category.storeId ?? 0, widget.category.id!);
-        if (success && mounted) {
-          // Refresh the store admin view
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${widget.category.displayName} deleted')),
-          );
-        }
-      } catch (e) {
-        debugPrint('Error deleting category: $e');
-      }
-    }
-  }
-
-  void _showDeleteMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text(
-                'Delete Category',
-                style: TextStyle(color: Colors.red),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _deleteCategory();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.close, color: Colors.grey),
-              title: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.grey),
-              ),
-              onTap: () => Navigator.pop(context),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final emoji = widget.category.displayName.split(' ').last;
-    final categoryName = widget.category.displayName.replaceAll(RegExp(r' [^\s]*$'), '');
-    final isDesktop = MediaQuery.of(context).size.width > 600;
-
     return GestureDetector(
       onTap: widget.onTap,
-      onLongPress: isDesktop ? null : _showDeleteMenu,
-      child: MouseRegion(
-        onEnter: (_) => isDesktop ? setState(() => _isHovering = true) : null,
-        onExit: (_) => isDesktop ? setState(() => _isHovering = false) : null,
-        child: Container(
-          width: 160,
-          height: 200,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.1),
-            ),
+      child: Container(
+        width: 240,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.05),
+            width: 1,
           ),
-          child: Column(
-            children: [
-              // Image or Emoji with delete button on hover
-              SizedBox(
-                height: 140,
-                child: Stack(
-                  children: [
-                    ClipRRect(
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.01),
                       borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
-                      ),
-                      child: Container(
-                        width: double.infinity,
-                        height: double.infinity,
-                        color: Colors.grey[800],
-                        child: _isLoading
-                            ? const Center(
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              )
-                            : _lastProductImage != null
-                                ? Image.network(
-                                    _lastProductImage!,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Center(
-                                        child: Text(
-                                          emoji,
-                                          style: const TextStyle(fontSize: 28),
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : Center(
-                                    child: Text(
-                                      emoji,
-                                      style: const TextStyle(fontSize: 28),
-                                    ),
-                                  ),
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
                       ),
                     ),
-                    // Delete button on hover (desktop only)
-                    if (isDesktop && _isHovering)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Tooltip(
-                          message: 'Delete category',
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.red.withOpacity(0.5),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
+                    child: _isLoading
+                      ? Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white.withOpacity(0.2),
                             ),
-                            child: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.white, size: 16),
-                              onPressed: _deleteCategory,
-                              style: IconButton.styleFrom(
-                                padding: const EdgeInsets.all(6),
+                          ),
+                        )
+                      : _lastProductImage != null
+                          ? ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(16),
+                                topRight: Radius.circular(16),
+                              ),
+                              child: Image.network(
+                                _lastProductImage!,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (_, __, ___) => Center(
+                                  child: Icon(
+                                    Icons.category_outlined,
+                                    size: 60,
+                                    color: Colors.white.withOpacity(0.1),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Icon(
+                                Icons.category_outlined,
+                                size: 60,
+                                color: Colors.white.withOpacity(0.1),
                               ),
                             ),
+                  ),
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${widget.orderNumber}',
+                          style: const TextStyle(
+                            fontFamily: 'TenorSans',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ),
-              // Category name
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: Text(
-                  categoryName,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
+                    ),
                   ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                widget.category.displayName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
+                  height: 1.4,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

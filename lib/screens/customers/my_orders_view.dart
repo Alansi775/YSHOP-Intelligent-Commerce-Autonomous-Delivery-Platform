@@ -9,6 +9,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../state_management/auth_manager.dart';
 import '../../state_management/theme_manager.dart';
 import '../../services/api_service.dart';
+import 'return_request_dialog.dart';
 
 class MyOrdersView extends StatefulWidget {
   const MyOrdersView({Key? key}) : super(key: key);
@@ -588,19 +589,16 @@ class _MyOrdersViewState extends State<MyOrdersView> {
   }
 
   void _handleReturn(int orderId, bool isDark) async {
-    try {
-      final result = await ApiService.requestOrderReturn(orderId);
-      if (result['success'] == true) {
-        _loadOrders();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    showDialog(
+      context: context,
+      builder: (context) => ReturnRequestDialog(
+        orderId: orderId,
+        orderData: {},
+        onSuccess: () {
+          _loadOrders();
+        },
+      ),
+    );
   }
 
   void _handleCancelReturn(int orderId, bool isDark) async {

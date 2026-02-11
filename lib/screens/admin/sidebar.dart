@@ -188,6 +188,12 @@ class _AdminSidebarState extends State<AdminSidebar> with SingleTickerProviderSt
           label: 'Orders',
           gradient: AppGradients.success,
         ),
+        _buildNavItem(
+          index: 8,
+          icon: Icons.assignment_return_rounded,
+          label: 'Returns',
+          gradient: AppGradients.danger,
+        ),
 
         const SizedBox(height: 16),
         if (!_collapsed) _buildSectionLabel('MANAGEMENT'),

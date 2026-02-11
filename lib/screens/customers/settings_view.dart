@@ -1,16 +1,16 @@
+// settings_view.dart - TRUE DJI STYLE
+// Ultra minimal, clean, elegant
+
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import '../../services/api_service.dart';
 import 'package:provider/provider.dart'; 
 import 'package:latlong2/latlong.dart'; 
 
-// استيراد المكونات المساعدة
 import '../../widgets/settings_widgets.dart'; 
 import '../../widgets/map_picker_sheet.dart'; 
 import '../../state_management/theme_manager.dart';
 import '../../state_management/auth_manager.dart';
-import '../auth/sign_in_ui.dart'; // LuxuryTheme colors 
-
 
 class SettingsView extends StatefulWidget {
   const SettingsView({Key? key}) : super(key: key);
@@ -20,7 +20,6 @@ class SettingsView extends StatefulWidget {
 }
 
 class _SettingsViewState extends State<SettingsView> {
-  // ... (State variables remain the same)
   String _name = "";
   String _surname = "";
   String _address = "";
@@ -47,11 +46,9 @@ class _SettingsViewState extends State<SettingsView> {
     return 0.0;
   }
 
-
   @override
   void initState() {
     super.initState();
-    // Fetch customer info asynchronously
     _fetchCustomerInfo();
   }
   
@@ -71,62 +68,43 @@ class _SettingsViewState extends State<SettingsView> {
     super.dispose();
   }
 
-  // MARK: - Firebase Ops (No change)
   void _fetchCustomerInfo() async {
-    // 🔥 CRITICAL FIX: ALWAYS fetch from API first - cache may be incomplete!
-    // The cached profile from login might not have all fields (name, surname, etc.)
-    
     final authManager = Provider.of<AuthManager>(context, listen: false);
     Map<String, dynamic>? cachedProfile = authManager.userProfile;
     
-    // If we have cached profile, show it immediately while fetching fresh data
     if (cachedProfile != null && cachedProfile.containsKey('name')) {
-      debugPrint('📋 SettingsView - Showing cached profile, fetching fresh data...');
       _updateProfileData(cachedProfile);
     }
 
-    // ALWAYS fetch fresh from API to ensure complete/updated data
     setState(() => _isLoading = true);
     try {
-      debugPrint('📋 SettingsView - Fetching fresh profile from API...');
       Map<String, dynamic>? apiProfile = await ApiService.getUserProfile();
-      debugPrint('📋 SettingsView - API Response: ${apiProfile != null ? apiProfile.keys.toString() : 'NULL'}');
       
       if (apiProfile != null && mounted) {
-        // Update UI with fresh data
         _updateProfileData(apiProfile);
-        // 🔥 CRITICAL: Update AuthManager cache with complete profile
         authManager.updateCachedProfile(apiProfile);
-        debugPrint(' SettingsView - Profile updated from API and cached');
       } else {
-        debugPrint('❌ SettingsView - API returned null');
-        if (mounted) setState(() { _errorMessage = "Could not load profile data from server"; });
+        if (mounted) setState(() { _errorMessage = "Could not load profile"; });
       }
     } catch (e) {
-      debugPrint('❌ SettingsView - Error: $e');
       if (mounted) setState(() { _errorMessage = "Error: $e"; });
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
   
-  /// Helper to update profile data (used by both cache and API paths)
   void _updateProfileData(Map<String, dynamic> profile) {
     if (!mounted) return;
     
-    debugPrint('📋 SettingsView._updateProfileData - Profile data: name=${profile['name']}, phone=${profile['phone']}, address=${profile['address']}');
     setState(() {
       final dn = (profile['display_name'] as String?) ?? (profile['displayName'] as String?) ?? "";
-      // Prefer explicit fields when available
       _name = (profile['name'] as String?) ?? "";
       _surname = (profile['surname'] as String?) ?? "";
 
-      // If `name` is empty, derive first name from display_name (use first token)
       if (_name.isEmpty) {
         final parts = dn.trim().split(RegExp(r'\s+'));
         if (parts.isNotEmpty) {
           _name = parts.first;
-          // If surname missing, take last token as surname
           if (_surname.isEmpty && parts.length > 1) {
             _surname = parts.last;
           }
@@ -141,13 +119,11 @@ class _SettingsViewState extends State<SettingsView> {
       _buildingInfo = (profile['building_info'] as String?) ?? (profile['buildingInfo'] as String?) ?? "";
       _apartmentNumber = (profile['apartment_number'] as String?) ?? (profile['apartmentNumber'] as String?) ?? "";
       _deliveryInstructions = (profile['delivery_instructions'] as String?) ?? (profile['deliveryInstructions'] as String?) ?? "";
-      debugPrint('📋 SettingsView._updateProfileData - State updated: _name=$_name, _contactNumber=$_contactNumber, _address=$_address');
     });
     _updateControllers();
   }
 
   void _updateAddress() async {
-    // ... (منطق تحديث البيانات يبقى كما هو)
     setState(() { 
       _isLoading = true;
       _errorMessage = "";
@@ -155,41 +131,19 @@ class _SettingsViewState extends State<SettingsView> {
     });
 
     try {
-      // 🔥 CRITICAL: Only send non-empty values to API
-      // Empty values will cause "undefined parameters" error in backend
-      
       final updatePayload = <String, dynamic>{};
       
-      // Add displayName if not empty
       final displayName = _name.trim().isNotEmpty ? '$_name ${_surname.trim()}'.trim() : null;
       if (displayName != null) updatePayload['displayName'] = displayName;
-      
-      // Add surname if not empty
       if (_surname.trim().isNotEmpty) updatePayload['surname'] = _surname.trim();
-      
-      // Add phone if not empty
       if (_contactNumber.trim().isNotEmpty) updatePayload['phone'] = _contactNumber.trim();
-      
-      // Add address if not empty
       if (_addressController.text.trim().isNotEmpty) updatePayload['address'] = _addressController.text.trim();
-      
-      // Add latitude/longitude if not 0
       if (_latitude != 0.0) updatePayload['latitude'] = _latitude;
       if (_longitude != 0.0) updatePayload['longitude'] = _longitude;
-      
-      // Add nationalId if not empty
       if (_nationalID.trim().isNotEmpty) updatePayload['nationalId'] = _nationalID.trim();
-      
-      // Add building info if not empty
       if (_buildingController.text.trim().isNotEmpty) updatePayload['buildingInfo'] = _buildingController.text.trim();
-      
-      // Add apartment number if not empty
       if (_apartmentController.text.trim().isNotEmpty) updatePayload['apartmentNumber'] = _apartmentController.text.trim();
-      
-      // Add delivery instructions if not empty
       if (_instructionsController.text.trim().isNotEmpty) updatePayload['deliveryInstructions'] = _instructionsController.text.trim();
-      
-      debugPrint(' SettingsView._updateAddress - Sending payload: $updatePayload');
       
       await ApiService.updateUserProfile(
         displayName: updatePayload['displayName'] as String?,
@@ -206,7 +160,7 @@ class _SettingsViewState extends State<SettingsView> {
 
       if (mounted) {
         setState(() {
-          _errorMessage = "Address updated successfully!";
+          _errorMessage = "Saved successfully";
           _isSuccessMessage = true;
         });
         Future.delayed(const Duration(seconds: 2), () {
@@ -221,7 +175,6 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _showMapPicker() async {
-    // ... (منطق عرض الخريطة يبقى كما هو)
     final defaultLat = 24.7136; 
     final defaultLng = 46.6753;
     
@@ -247,449 +200,455 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  // MARK: - Theme Section (Luxury Glass Style)
-
-  Widget _buildThemeSection(BuildContext context, bool isDark, Color liquidBg, Color liquidBorder, Color textColor) {
-    final themeManager = Provider.of<ThemeManager>(context);
-
-    return _buildLuxurySection(
-        context: context,
-        title: "App Settings",
-        isDark: isDark,
-        liquidBg: liquidBg,
-        liquidBorder: liquidBorder,
-        textColor: textColor,
-        children: [
-            _buildThemeToggleButtons(context, isDark, themeManager, textColor),
-        ]
-    );
-  }
-
-  // Theme Toggle Buttons - Elegant Two-Button Design
-  Widget _buildThemeToggleButtons(BuildContext context, bool isDark, ThemeManager themeManager, Color textColor) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (!isDark) themeManager.switchTheme();
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? LuxuryTheme.kLightBlueAccent.withOpacity(0.25)
-                          : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark
-                            ? LuxuryTheme.kLightBlueAccent.withOpacity(0.4)
-                            : Colors.grey.withOpacity(0.3),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.nightlight_round,
-                          color: isDark ? LuxuryTheme.kLightBlueAccent : Colors.grey.withOpacity(0.6),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "Dark",
-                          style: TextStyle(
-                            fontFamily: 'TenorSans',
-                            fontSize: 14,
-                            fontWeight: isDark ? FontWeight.w700 : FontWeight.w500,
-                            color: isDark ? LuxuryTheme.kLightBlueAccent : Colors.grey.withOpacity(0.7),
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (!isDark) return;
-                themeManager.switchTheme();
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: !isDark
-                          ? LuxuryTheme.kLightBlueAccent.withOpacity(0.25)
-                          : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: !isDark
-                            ? LuxuryTheme.kLightBlueAccent.withOpacity(0.4)
-                            : Colors.grey.withOpacity(0.3),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.wb_sunny_rounded,
-                          color: !isDark ? LuxuryTheme.kLightBlueAccent : Colors.grey.withOpacity(0.6),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "Light",
-                          style: TextStyle(
-                            fontFamily: 'TenorSans',
-                            fontSize: 14,
-                            fontWeight: !isDark ? FontWeight.w700 : FontWeight.w500,
-                            color: !isDark ? LuxuryTheme.kLightBlueAccent : Colors.grey.withOpacity(0.7),
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // MARK: - Luxury Glass Containers
-
-  Widget _buildLuxurySection({
-    required BuildContext context,
-    required String title,
-    required bool isDark,
-    required Color liquidBg,
-    required Color liquidBorder,
-    required Color textColor,
-    required List<Widget> children,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: liquidBg,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: liquidBorder, width: 1.2),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontFamily: 'Didot',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Container(
-                    height: 1,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          isDark ? LuxuryTheme.kPlatinum.withOpacity(0.4) : LuxuryTheme.kDeepNavy.withOpacity(0.3),
-                          isDark ? LuxuryTheme.kPlatinum.withOpacity(0.1) : LuxuryTheme.kDeepNavy.withOpacity(0.1),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                ...children.map((child) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: child,
-                )).toList(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // MARK: - Build Method
-
   @override
   Widget build(BuildContext context) {
     final themeManager = Provider.of<ThemeManager>(context);
     final isDark = themeManager.isDarkMode;
-    
-    // Luxury Colors
-    final bgColor = isDark ? LuxuryTheme.kDarkBackground : LuxuryTheme.kLightBackground;
-    final surfaceColor = isDark ? LuxuryTheme.kDarkSurface : LuxuryTheme.kLightSurface;
-    final textColor = isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy;
-    final liquidBgColor = isDark 
-        ? Colors.white.withOpacity(0.08)
-        : Colors.black.withOpacity(0.05);
-    final liquidBorderColor = isDark
-        ? Colors.white.withOpacity(0.15)
-        : Colors.black.withOpacity(0.1);
-    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth > 900;
+
     return Scaffold(
-      backgroundColor: bgColor,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          "Settings",
+      backgroundColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFFAFAFA),
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // Minimal App Bar
+          SliverAppBar(
+            backgroundColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFFAFAFA),
+            elevation: 0,
+            pinned: true,
+            expandedHeight: 120,
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: Icon(
+                  Icons.arrow_back_ios,
+                  size: 20,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+            ),
+            flexibleSpace: FlexibleSpaceBar(
+              centerTitle: false,
+              titlePadding: EdgeInsets.only(
+                left: isDesktop ? 80 : 60,
+                bottom: 20,
+              ),
+              title: Text(
+                'Settings',
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 32,
+                  fontWeight: FontWeight.w300,
+                  color: isDark ? Colors.white : Colors.black,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+          ),
+
+          // Content
+          if (_isLoading && _name.isEmpty)
+            SliverFillRemaining(
+              child: Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: isDark ? Colors.white.withOpacity(0.5) : Colors.black.withOpacity(0.5),
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 80 : 24,
+                vertical: 32,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 600),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Personal Info Section
+                          _buildSection(
+                            isDark,
+                            'Personal Information',
+                            [
+                              _buildInfoRow(isDark, 'Name', '$_name $_surname'),
+                              _buildInfoRow(isDark, 'Phone', _contactNumber),
+                              _buildInfoRow(isDark, 'National ID', _nationalID),
+                            ],
+                          ),
+                          
+                          const SizedBox(height: 48),
+                          
+                          // Theme Section
+                          _buildSection(
+                            isDark,
+                            'Appearance',
+                            [_buildThemeToggle(isDark, themeManager)],
+                          ),
+                          
+                          const SizedBox(height: 48),
+                          
+                          // Address Section
+                          _buildSection(
+                            isDark,
+                            'Delivery Address',
+                            [
+                              _buildTextField(isDark, 'Address', _addressController, readOnly: true),
+                              const SizedBox(height: 20),
+                              _buildMapButton(isDark),
+                              const SizedBox(height: 20),
+                              _buildTextField(isDark, 'Building', _buildingController),
+                              const SizedBox(height: 16),
+                              _buildTextField(isDark, 'Apartment', _apartmentController),
+                              const SizedBox(height: 16),
+                              _buildTextField(isDark, 'Instructions', _instructionsController),
+                            ],
+                          ),
+                          
+                          if (_errorMessage.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            Center(
+                              child: Text(
+                                _errorMessage,
+                                style: TextStyle(
+                                  fontFamily: 'TenorSans',
+                                  fontSize: 13,
+                                  color: _isSuccessMessage ? Colors.green : Colors.red,
+                                ),
+                              ),
+                            ),
+                          ],
+                          
+                          const SizedBox(height: 48),
+                          
+                          // Save Button
+                          _buildSaveButton(isDark),
+                        ],
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(bool isDark, String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
           style: TextStyle(
-            fontFamily: 'Didot',
-            fontSize: 24,
-            fontWeight: FontWeight.w600,
-            color: textColor,
+            fontFamily: 'TenorSans',
+            fontSize: 22,
+            fontWeight: FontWeight.w500,  // كان 400 - أقوى!
+            color: isDark ? Colors.white : Colors.black,
+            letterSpacing: -0.3,
           ),
         ),
-        centerTitle: true,
+        const SizedBox(height: 20),  // كان 24 - أقرب شوي
+        Container(
+          padding: const EdgeInsets.all(28),  // كان 24 - أكبر
+          decoration: BoxDecoration(
+            color: isDark 
+              ? Colors.white.withOpacity(0.04)  // كان 0.02 - أوضح!
+              : Colors.white.withOpacity(0.75), // كان 0.6 - أبيض أكثر!
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark 
+                ? Colors.white.withOpacity(0.10)  // كان 0.06 - أوضح!
+                : Colors.black.withOpacity(0.10), // كان 0.06 - أوضح!
+              width: 1.5,  // كان 1 - أسمك!
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark 
+                  ? Colors.black.withOpacity(0.2)
+                  : Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: children,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(bool isDark, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),  // كان 20 - أقرب شوي
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,  // كان 110 - أصغر شوي
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,  // كان normal - أقوى!
+                color: isDark 
+                  ? Colors.white.withOpacity(0.55)  // كان 0.45 - أوضح!
+                  : Colors.black.withOpacity(0.55), // كان 0.45 - أوضح!
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 15,  // كان 14 - أكبر!
+                fontWeight: FontWeight.w600,  // كان 500 - أقوى!
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
+          ),
+        ],
       ),
-      body: Container(
+    );
+  }
+
+  Widget _buildThemeToggle(bool isDark, ThemeManager themeManager) {
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              if (!isDark) themeManager.switchTheme();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 18),  // كان 16 - أكبر
+              decoration: BoxDecoration(
+                color: isDark 
+                  ? Colors.white.withOpacity(0.12)  // كان 0.08 - أوضح!
+                  : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark 
+                    ? Colors.white.withOpacity(0.25)  // كان 0.15 - أقوى!
+                    : Colors.black.withOpacity(0.12), // كان 0.08 - أقوى!
+                  width: 1.5,  // كان 1 - أسمك!
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  'Dark',
+                  style: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 15,  // كان 14 - أكبر
+                    fontWeight: isDark ? FontWeight.w700 : FontWeight.w400,  // كان 600 - أقوى!
+                    color: isDark 
+                      ? Colors.white 
+                      : Colors.black.withOpacity(0.35),  // كان 0.4 - أخف
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              if (isDark) themeManager.switchTheme();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 18),  // كان 16 - أكبر
+              decoration: BoxDecoration(
+                color: !isDark 
+                  ? Colors.black.withOpacity(0.06)  // كان 0.04 - أوضح!
+                  : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: !isDark 
+                    ? Colors.black.withOpacity(0.18)  // كان 0.12 - أقوى!
+                    : Colors.white.withOpacity(0.12), // كان 0.08 - أقوى!
+                  width: 1.5,  // كان 1 - أسمك!
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  'Light',
+                  style: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 15,  // كان 14 - أكبر
+                    fontWeight: !isDark ? FontWeight.w700 : FontWeight.w400,  // كان 600 - أقوى!
+                    color: !isDark 
+                      ? Colors.black 
+                      : Colors.white.withOpacity(0.35),  // كان 0.4 - أخف
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTextField(bool isDark, String label, TextEditingController controller, {bool readOnly = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 13,
+            fontWeight: FontWeight.w500,  // كان normal - أقوى!
+            color: isDark 
+              ? Colors.white.withOpacity(0.55)  // كان 0.45 - أوضح!
+              : Colors.black.withOpacity(0.55), // كان 0.45 - أوضح!
+          ),
+        ),
+        const SizedBox(height: 10),  // كان 8 - أكبر شوي
+        TextField(
+          controller: controller,
+          readOnly: readOnly,
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 15,  // كان 14 - أكبر!
+            fontWeight: FontWeight.w500,  // أضفته!
+            color: isDark ? Colors.white : Colors.black,
+          ),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: isDark 
+              ? Colors.white.withOpacity(0.05)  // كان 0.03 - أوضح!
+              : Colors.black.withOpacity(0.03), // كان 0.02 - أوضح!
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark 
+                  ? Colors.white.withOpacity(0.15)  // كان 0.08 - أوضح!
+                  : Colors.black.withOpacity(0.12), // كان 0.08 - أوضح!
+                width: 1.5,  // كان 1 - أسمك!
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark 
+                  ? Colors.white.withOpacity(0.15)  // كان 0.08 - أوضح!
+                  : Colors.black.withOpacity(0.12), // كان 0.08 - أوضح!
+                width: 1.5,  // كان 1 - أسمك!
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark 
+                  ? Colors.white.withOpacity(0.35)  // كان 0.2 - أقوى!
+                  : Colors.black.withOpacity(0.30), // كان 0.2 - أقوى!
+                width: 2,  // كان 1 - أسمك!
+              ),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),  // كان 16, 14 - أكبر!
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMapButton(bool isDark) {
+    return GestureDetector(
+      onTap: _showMapPicker,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),  // كان 14 - أكبر
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF0A0A0A), const Color(0xFF1A1A1A)]
-                : [const Color(0xFFF5F5F5), const Color(0xFFE8E8E8)],
+          color: isDark 
+            ? Colors.white.withOpacity(0.08)  // كان 0.06 - أوضح!
+            : Colors.black.withOpacity(0.06), // كان 0.04 - أوضح!
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark 
+              ? Colors.white.withOpacity(0.18)  // كان 0.12 - أقوى!
+              : Colors.black.withOpacity(0.15), // كان 0.08 - أقوى!
+            width: 1.5,  // كان 1 - أسمك!
           ),
         ),
         child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: _isLoading && _name.isEmpty 
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(vertical: 120, horizontal: 16),
-                    child: Column(
-                      children: [
-                        // 1. Personal Info Section - Luxury Glass
-                        _buildLuxurySection(
-                          context: context,
-                          title: "Personal Information",
-                          isDark: isDark,
-                          liquidBg: liquidBgColor,
-                          liquidBorder: liquidBorderColor,
-                          textColor: textColor,
-                          children: [
-                            IconTextRow(
-                              icon: Icons.person_rounded, 
-                              label: "Name", 
-                              value: "$_name $_surname"
-                            ),
-                            IconTextRow(
-                              icon: Icons.phone_android_rounded, 
-                              label: "Phone", 
-                              value: _contactNumber
-                            ),
-                            IconTextRow(
-                              icon: Icons.credit_card_rounded, 
-                              label: "National ID", 
-                              value: _nationalID
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 28),
-
-                        _buildThemeSection(context, isDark, liquidBgColor, liquidBorderColor, textColor), 
-                        
-                        const SizedBox(height: 28),
-                        
-                        // 2. Address Form Section - Luxury Glass
-                        _buildLuxurySection(
-                          context: context,
-                          title: "Address Details",
-                          isDark: isDark,
-                          liquidBg: liquidBgColor,
-                          liquidBorder: liquidBorderColor,
-                          textColor: textColor,
-                          children: [
-                            LabeledTextField(
-                              icon: Icons.house_rounded, 
-                              placeholder: "Enter your full address", 
-                              controller: _addressController,
-                              readOnly: true, 
-                            ),
-                            
-                            _buildMapButton(isDark),
-                            
-                            LabeledTextField(
-                              icon: Icons.business_rounded, 
-                              placeholder: "Building Info", 
-                              controller: _buildingController,
-                            ),
-                            LabeledTextField(
-                              icon: Icons.dialpad_rounded, 
-                              placeholder: "Apartment Number", 
-                              controller: _apartmentController,
-                            ),
-                            LabeledTextField(
-                              icon: Icons.edit_note_rounded, 
-                              placeholder: "Delivery Instructions", 
-                              controller: _instructionsController,
-                            ),
-
-                            if (_errorMessage.isNotEmpty)
-                              AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 300),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    _errorMessage,
-                                    key: ValueKey(_errorMessage),
-                                    style: TextStyle(
-                                      fontFamily: 'TenorSans',
-                                      fontSize: 13,
-                                      color: _isSuccessMessage ? Colors.green : Colors.red,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 32),
-                        
-                        // 3. Save Button
-                        _buildSaveButton(isDark, liquidBgColor, textColor),
-                        const SizedBox(height: 32),
-                      ],
-                    ),
-                  ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.location_on_outlined,
+                size: 20,  // كان 18 - أكبر
+                color: isDark 
+                  ? Colors.white.withOpacity(0.85)  // كان 0.7 - أوضح!
+                  : Colors.black.withOpacity(0.85), // كان 0.7 - أوضح!
+              ),
+              const SizedBox(width: 10),  // كان 8 - أكبر
+              Text(
+                'Select Location',
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 15,  // كان 14 - أكبر
+                  fontWeight: FontWeight.w600,  // كان 500 - أقوى!
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-
-
-  Widget _buildMapButton(bool isDark) {
-    final textColor = isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy;
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(
-        children: [
-          // Location icon - standalone above button
-          Icon(
-            Icons.location_on_rounded,
-            size: 42,
-            color: LuxuryTheme.kLightBlueAccent.withOpacity(0.85),
+  Widget _buildSaveButton(bool isDark) {
+    return GestureDetector(
+      onTap: _isLoading ? null : _updateAddress,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 18),  // كان 16 - أكبر
+        decoration: BoxDecoration(
+          color: isDark 
+            ? Colors.white.withOpacity(_isLoading ? 0.06 : 0.14)  // كان 0.05 : 0.1 - أوضح!
+            : Colors.black.withOpacity(_isLoading ? 0.04 : 0.10), // كان 0.03 : 0.08 - أوضح!
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark 
+              ? Colors.white.withOpacity(_isLoading ? 0.10 : 0.28)  // كان 0.08 : 0.2 - أقوى!
+              : Colors.black.withOpacity(_isLoading ? 0.06 : 0.20), // كان 0.05 : 0.15 - أقوى!
+            width: 1.5,  // كان 1 - أسمك!
           ),
-          const SizedBox(height: 12),
-          // Map button
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: ElevatedButton(
-                onPressed: _showMapPicker,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: LuxuryTheme.kLightBlueAccent.withOpacity(0.85),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  shadowColor: LuxuryTheme.kLightBlueAccent.withOpacity(0.3),
-                  elevation: 6,
+        ),
+        child: Center(
+          child: _isLoading
+            ? SizedBox(
+                width: 22,  // كان 20 - أكبر
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,  // كان 2 - أسمك
+                  color: isDark ? Colors.white : Colors.black,
                 ),
-                child: Text(
-                  "Select Location",
-                  style: TextStyle(
-                    fontFamily: 'TenorSans',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    letterSpacing: 0.5,
-                  ),
+              )
+            : Text(
+                'Save Changes',
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 16,  // كان 15 - أكبر
+                  fontWeight: FontWeight.w600,  // كان 500 - أقوى!
+                  color: isDark ? Colors.white : Colors.black,
+                  letterSpacing: 0.3,
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSaveButton(bool isDark, Color liquidBg, Color textColor) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
-      child: Column(
-        children: [
-          // Icon above button - standalone
-          Icon(
-            Icons.check_circle_rounded,
-            size: 48,
-            color: LuxuryTheme.kLightBlueAccent.withOpacity(0.8),
-          ),
-          const SizedBox(height: 16),
-          // Save button
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _updateAddress,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: LuxuryTheme.kLightBlueAccent.withOpacity(0.9),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 54),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  shadowColor: LuxuryTheme.kLightBlueAccent.withOpacity(0.4),
-                  elevation: 8,
-                  disabledBackgroundColor: LuxuryTheme.kLightBlueAccent.withOpacity(0.5),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : Text(
-                        "Save Address",
-                        style: TextStyle(
-                          fontFamily: 'TenorSans',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

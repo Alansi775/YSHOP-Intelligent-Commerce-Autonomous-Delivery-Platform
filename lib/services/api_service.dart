@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, File;
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
@@ -940,6 +941,80 @@ class ApiService {
     return response as Map<String, dynamic>;
   }
 
+  static Future<Map<String, dynamic>> submitReturnRequest({
+    required int orderId,
+    required String reason,
+    required Map<String, XFile?> photos,
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/returns/submit');
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add auth header
+      final token = _cachedToken;
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      // Add fields
+      request.fields['order_id'] = orderId.toString();
+      request.fields['reason'] = reason;
+
+      // Add photo files - compatible with web and mobile
+      final photoMap = {
+        'top': photos['top'],
+        'bottom': photos['bottom'],
+        'left': photos['left'],
+        'right': photos['right'],
+        'front': photos['front'],
+        'back': photos['back'],
+      };
+
+      for (final entry in photoMap.entries) {
+        if (entry.value != null) {
+          final bytes = await entry.value!.readAsBytes();
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'photos',
+              bytes,
+              filename: '${entry.key}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+              contentType: http.MediaType('image', 'jpeg'),
+            ),
+          );
+        }
+      }
+
+      request.fields['photo_types'] = photoMap.keys.join(',');
+
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        return {
+          'success': false,
+          'message': 'Error submitting return request',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: $e',
+      };
+    }
+  }
+
+  static Future<List<dynamic>> getReturnedProducts() async {
+    final response = await _request(
+      'GET',
+      '/returns/list',
+      requiresAuth: true,
+    );
+    return List<dynamic>.from(response['data'] ?? []);
+  }
+
   static Future<List<dynamic>> getStoreOrders({
     required String storeId,
     int page = 1,
@@ -1840,6 +1915,33 @@ class ApiService {
     } catch (e) {
       debugPrint('❌ Error fetching category products: $e');
       return [];
+    }
+  }
+
+  /// Reorder categories
+  static Future<bool> reorderCategories(
+    int storeId,
+    List<Map<String, dynamic>> categories,
+  ) async {
+    try {
+      await _request(
+        'PUT',
+        '/stores/$storeId/categories/reorder',
+        body: {
+          'categories': categories
+              .map((cat) => {
+                    'id': cat['id'],
+                    'display_order': cat['display_order'],
+                  })
+              .toList(),
+        },
+        requiresAuth: true,
+      );
+      
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error reordering categories: $e');
+      return false;
     }
   }
 }

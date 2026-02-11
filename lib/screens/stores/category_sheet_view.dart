@@ -1,4 +1,5 @@
-// lib/screens/category_sheet_view.dart
+// lib/screens/stores/category_sheet_view.dart - DJI STYLE
+// Minimal, clean, elegant bottom sheet
 
 import 'package:flutter/material.dart';
 import '../../models/category.dart';
@@ -69,13 +70,32 @@ class _CategorySheetViewState extends State<CategorySheetView> {
             .toList();
 
     return Container(
-      color: const Color(0xFF0F0F0F),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Top Handle
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
           // Header
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -83,121 +103,189 @@ class _CategorySheetViewState extends State<CategorySheetView> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Create New Category',
+                      'Add Category',
                       style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                        fontFamily: 'TenorSans',
+                        fontSize: 24,
+                        fontWeight: FontWeight.w400,
                         color: Colors.white,
+                        letterSpacing: -0.3,
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          color: Colors.white.withOpacity(0.7),
+                          size: 18,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // Search field
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.1),
-                    ),
+                
+                const SizedBox(height: 20),
+                
+                // Search Field
+                TextField(
+                  onChanged: _filterCategories,
+                  style: const TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: 14,
+                    color: Colors.white,
                   ),
-                  child: TextField(
-                    onChanged: _filterCategories,
-                    decoration: InputDecoration(
-                      hintText: 'Search categories...',
-                      hintStyle: TextStyle(
-                        color: Colors.grey[500],
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: Colors.grey[400],
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 8,
+                  decoration: InputDecoration(
+                    hintText: 'Search categories...',
+                    hintStyle: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.3),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      color: Colors.white.withOpacity(0.4),
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.03),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.08),
+                        width: 1,
                       ),
                     ),
-                    style: const TextStyle(color: Colors.white),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.08),
+                        width: 1,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          // Categories list
-          Expanded(
+          
+          const SizedBox(height: 24),
+          
+          // Categories List
+          Flexible(
             child: filtered.isEmpty
-                ? Center(
-                    child: Text(
-                      _searchQuery.isEmpty
-                          ? 'No categories available'
-                          : 'No categories found',
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 16,
+                ? Padding(
+                    padding: const EdgeInsets.all(60),
+                    child: Center(
+                      child: Text(
+                        _searchQuery.isEmpty
+                            ? 'No categories available'
+                            : 'No results',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 15,
+                          color: Colors.white.withOpacity(0.25),
+                        ),
                       ),
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    shrinkWrap: true,
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final category = filtered[index];
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E1E1E),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.1),
-                            ),
-                          ),
-                          child: ListTile(
-                            title: Text(
-                              category['displayName']!,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            subtitle: Text(
-                              category['name']!,
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 12,
-                              ),
-                            ),
-                            trailing: _isLoading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Icon(
-                                    Icons.add_circle_outline,
-                                    color: Colors.blue[400],
-                                  ),
-                            onTap: _isLoading
-                                ? null
-                                : () => _createCategory(category),
-                            hoverColor:
-                                Colors.white.withOpacity(0.05),
-                          ),
-                        ),
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildCategoryItem(category),
                       );
                     },
                   ),
           ),
-          const SizedBox(height: 16),
+          
+          const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryItem(Map<String, String> category) {
+    return GestureDetector(
+      onTap: _isLoading ? null : () => _createCategory(category),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.06),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    category['displayName']!,
+                    style: const TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (category['name'] != category['displayName']) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      category['name']!,
+                      style: TextStyle(
+                        fontFamily: 'TenorSans',
+                        fontSize: 12,
+                        color: Colors.white.withOpacity(0.35),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            if (_isLoading)
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              )
+            else
+              Icon(
+                Icons.add_circle_outline,
+                color: Colors.white.withOpacity(0.6),
+                size: 22,
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -18,6 +18,7 @@ import 'drivers_view.dart';
 import 'orders_view.dart';
 import 'admins_view.dart';
 import 'users_view.dart';
+import 'returns_view.dart';
 import '../customers/settings_view.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -261,6 +262,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       case 4: title = 'Admins Management'; break;
       case 5: title = 'Users Management'; break;
       case 6: title = 'Orders & Revenue'; break;
+      case 8: title = 'Returns Management'; break;
     }
     
     return AppBar(
@@ -370,6 +372,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                   children: [
                     _buildDrawerItem(0, Icons.dashboard_rounded, 'Dashboard'),
                     _buildDrawerItem(6, Icons.receipt_long_rounded, 'Orders'),
+                    _buildDrawerItem(8, Icons.assignment_return_rounded, 'Returns'),
                     const SizedBox(height: 8),
                     _buildDrawerItem(2, Icons.storefront_rounded, 'Stores'),
                     _buildDrawerItem(3, Icons.inventory_2_rounded, 'Products'),
@@ -464,10 +467,12 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         return const AdminsManagementView();
       case 5:
         return const UsersManagementView();
-      case 7:
-        return const SettingsView();
       case 6:
         return OrdersManagementView();
+      case 7:
+        return const SettingsView();
+      case 8:
+        return const ReturnsManagementView();
       default:
         return _buildDashboard();
     }
@@ -726,6 +731,12 @@ class _AdminHomeViewState extends State<AdminHomeView> {
           label: 'View Orders',
           gradient: AppGradients.purple,
           onTap: () => _onSelectMenu(6),
+        ),
+        _QuickActionCard(
+          icon: Icons.assignment_return_rounded,
+          label: 'View Returns',
+          gradient: AppGradients.danger,
+          onTap: () => _onSelectMenu(8),
         ),
         Builder(builder: (_) {
           final role = ApiService.cachedAdminRole?.toLowerCase() ?? 'admin';

@@ -1,3 +1,6 @@
+// lib/screens/stores/store_settings_view.dart - DJI STYLE
+// Clean, minimal, elegant settings page
+
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
@@ -20,22 +23,15 @@ class StoreSettingsView extends StatefulWidget {
 }
 
 class _StoreSettingsViewState extends State<StoreSettingsView> {
-  //  Base URL موحد - نفس اللي في ApiService
   static const String _baseUrl = 'http://localhost:3000/api/v1';
 
-  // حالات الأيقونة
   String? _storeIconUrl;
   File? _pickedImage;
   XFile? _pickedXFile;
-
   double _latitude = 0.0;
   double _longitude = 0.0;
-
-  // حالات التحميل
   bool _isLoading = false;
   bool _isFetching = true;
-  
-  // Store ID
   String? _storeId;
 
   @override
@@ -68,25 +64,36 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
           _longitude = lng;
         });
         await ApiService.updateStoreLocation(_storeId!, latitude: lat, longitude: lng);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Store location saved successfully')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location saved'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save location: $e')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
 
-  // MARK: - 1. Fetch Store Data
   Future<void> _fetchStoreData() async {
     setState(() => _isFetching = true);
     try {
-      // ستحقق من المستخدم عبر ApiService - لا توجد حاجة لـ Firebase
       final storeData = await ApiService.getUserStore();
       if (storeData != null) {
         final store = Store.fromJson(storeData);
         setState(() {
           _storeId = store.id;
           _storeIconUrl = store.storeIconUrl.isNotEmpty ? store.storeIconUrl : null;
-          // read latitude/longitude if provided by API
           try {
             final lat = storeData['latitude'];
             final lng = storeData['longitude'];
@@ -94,19 +101,14 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
             if (lng != null) _longitude = lng is num ? lng.toDouble() : double.tryParse(lng.toString()) ?? 0.0;
           } catch (_) {}
         });
-        debugPrint(' Store loaded: id=${store.id}, icon=${store.storeIconUrl}');
       }
     } catch (e) {
-      debugPrint('❌ Error fetching store: $e');
-      setState(() {
-        _storeIconUrl = null;
-      });
+      debugPrint('Error: $e');
     } finally {
       setState(() => _isFetching = false);
     }
   }
 
-  // MARK: - 2. Image Picker
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
@@ -126,15 +128,8 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
     }
   }
 
-  // MARK: - 3. Upload Image to Backend
   Future<String?> _uploadImageToBackend() async {
-    if (_storeId == null) {
-      debugPrint('❌ Store ID is null');
-      return null;
-    }
-
-    if (_pickedImage == null && _pickedXFile == null) {
-      debugPrint('❌ No image selected');
+    if (_storeId == null || (_pickedImage == null && _pickedXFile == null)) {
       return null;
     }
 
@@ -145,15 +140,11 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
 
       final fileName = 'store_icon_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      debugPrint(' Uploading icon to: $_baseUrl/stores/$_storeId');
-
-      //  استخدم الـ Base URL الموحد
       var request = http.MultipartRequest(
         'PUT',
         Uri.parse('$_baseUrl/stores/$_storeId'),
       );
 
-      //  أضف JWT Token للـ Authentication من AuthManager
       final authManager = Provider.of<AuthManager>(context, listen: false);
       final token = authManager.token;
       if (token != null) {
@@ -173,37 +164,29 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
       );
       var response = await http.Response.fromStream(streamedResponse);
 
-      debugPrint('📥 Response status: ${response.statusCode}');
-      debugPrint('📥 Response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final iconUrl = data['data']?['icon_url'] as String?;
         
         if (iconUrl != null && iconUrl.isNotEmpty) {
-          //  تحويل المسار النسبي إلى URL كامل
           final fullUrl = iconUrl.startsWith('http') 
               ? iconUrl 
               : 'http://localhost:3000$iconUrl';
-          debugPrint(' Icon uploaded: $fullUrl');
           return fullUrl;
         }
-      } else {
-        debugPrint('❌ Upload failed: ${response.statusCode} - ${response.body}');
       }
       return null;
     } catch (e) {
-      debugPrint('❌ Upload exception: $e');
+      debugPrint('Error: $e');
       return null;
     }
   }
 
-  // MARK: - 4. Save Store Icon
   Future<void> _saveStoreIcon() async {
     final isNewImageSelected = _pickedImage != null || _pickedXFile != null;
     if (!isNewImageSelected) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a new icon to save.")),
+        const SnackBar(content: Text("Select an icon first")),
       );
       return;
     }
@@ -214,7 +197,7 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
       final newIconUrl = await _uploadImageToBackend();
 
       if (newIconUrl == null) {
-        throw Exception("Failed to upload image to backend.");
+        throw Exception("Upload failed");
       }
 
       setState(() {
@@ -223,16 +206,19 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
         _pickedXFile = null;
       });
 
-      // Success!
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Store icon saved successfully')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Icon saved'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
-      debugPrint('❌ Error saving store icon: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to save icon: ${e.toString()}"),
+            content: Text("Failed: $e"),
             backgroundColor: Colors.red,
           ),
         );
@@ -244,108 +230,75 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
     }
   }
 
-  // MARK: - Build Widget
   @override
   Widget build(BuildContext context) {
-    const double maxWidth = 400.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth > 900;
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        title: const Text("Store Settings"),
+        backgroundColor: const Color(0xFF0A0A0A),
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: Icon(
+            Icons.arrow_back,
+            color: Colors.white.withOpacity(0.7),
+          ),
+        ),
+        title: const Text(
+          'Settings',
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 18,
+            fontWeight: FontWeight.w400,
+            color: Colors.white,
+            letterSpacing: -0.2,
+          ),
+        ),
         centerTitle: true,
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: maxWidth),
+          constraints: const BoxConstraints(maxWidth: 600),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 80 : 32,
+              vertical: 48,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Icon Display
+                // Store Icon
                 _buildStoreIconDisplay(),
-                const SizedBox(height: 32),
-
-                // 2. Upload Button
-                ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _pickImage,
-                  icon: const Icon(Icons.photo_camera, size: 20),
-                  label: const Text("Upload Store Icon"),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(12),
-                    backgroundColor: Colors.grey.shade100,
-                    foregroundColor: Colors.blue.shade700,
-                  ),
+                
+                const SizedBox(height: 48),
+                
+                // Upload Button
+                _buildActionButton(
+                  label: 'Choose Icon',
+                  icon: Icons.photo_camera_outlined,
+                  onTap: _isLoading ? null : _pickImage,
+                  isSecondary: true,
                 ),
+                
                 const SizedBox(height: 16),
-
-                // 3. Save Button
-                ElevatedButton.icon(
-                  onPressed: (_pickedImage == null && _pickedXFile == null) || _isLoading
+                
+                // Save Button
+                _buildActionButton(
+                  label: _isLoading ? 'Saving...' : 'Save Icon',
+                  icon: _isLoading ? null : Icons.check,
+                  onTap: (_pickedImage == null && _pickedXFile == null) || _isLoading
                       ? null
-                        : _saveStoreIcon,
-                    icon: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.save),
-                    label: Text(_isLoading ? "Saving..." : "Save Store Icon"),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                const SizedBox(height: 24),
-
-                // 4. Optional: Store Location Section
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Store Location',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _latitude == 0.0 && _longitude == 0.0
-                            ? 'No location set yet'
-                            : 'Latitude: $_latitude, Longitude: $_longitude',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _showMapPicker,
-                        icon: const Icon(Icons.map_rounded, size: 18),
-                        label: const Text('Set Store Location'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 40),
-                        ),
-                      ),
-                    ],
-                  ),
+                      : _saveStoreIcon,
+                  isLoading: _isLoading,
                 ),
+                
+                const SizedBox(height: 64),
+                
+                // Location Section
+                _buildLocationSection(),
               ],
             ),
           ),
@@ -355,13 +308,26 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
   }
 
   Widget _buildStoreIconDisplay() {
-    final Widget imageWidget;
-    const double size = 120;
+    const double size = 140;
+
+    Widget imageWidget;
 
     if (_isFetching) {
-      imageWidget = const ProgressView(size: size);
+      imageWidget = SizedBox(
+        width: size,
+        height: size,
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white.withOpacity(0.3),
+            ),
+          ),
+        ),
+      );
     } else if (_pickedImage != null || _pickedXFile != null) {
-      // عرض الصورة المختارة
       imageWidget = kIsWeb
           ? Image.network(
               _pickedXFile!.path,
@@ -376,28 +342,36 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
               height: size,
             );
     } else if (_storeIconUrl != null && _storeIconUrl!.isNotEmpty) {
-      // عرض الصورة من الـ Backend
       imageWidget = CachedNetworkImage(
         imageUrl: _storeIconUrl!,
         fit: BoxFit.cover,
         width: size,
         height: size,
-        placeholder: (context, url) => const ProgressView(size: size),
-        errorWidget: (context, url, error) {
-          debugPrint('❌ Error loading icon: $error');
-          return Icon(
-            Icons.storefront,
-            size: size * 0.8,
-            color: Colors.grey.shade400,
-          );
-        },
+        placeholder: (context, url) => SizedBox(
+          width: size,
+          height: size,
+          child: Center(
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white.withOpacity(0.3),
+              ),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => Icon(
+          Icons.store,
+          size: size * 0.5,
+          color: Colors.white.withOpacity(0.15),
+        ),
       );
     } else {
-      // لا توجد صورة
       imageWidget = Icon(
-        Icons.storefront,
-        size: size * 0.8,
-        color: Colors.grey.shade400,
+        Icons.store,
+        size: size * 0.5,
+        color: Colors.white.withOpacity(0.15),
       );
     }
 
@@ -407,33 +381,149 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.blue.shade200, width: 3),
+          color: Colors.white.withOpacity(0.02),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.08),
+            width: 2,
+          ),
         ),
-        child: ClipOval(
-          child: imageWidget,
+        child: ClipOval(child: imageWidget),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required String label,
+    IconData? icon,
+    VoidCallback? onTap,
+    bool isSecondary = false,
+    bool isLoading = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: isSecondary
+              ? Colors.transparent
+              : Colors.white.withOpacity(onTap == null ? 0.03 : 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white.withOpacity(onTap == null ? 0.04 : 0.12),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isLoading)
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white.withOpacity(0.7),
+                ),
+              )
+            else if (icon != null)
+              Icon(
+                icon,
+                color: Colors.white.withOpacity(onTap == null ? 0.3 : 0.7),
+                size: 20,
+              ),
+            if (icon != null || isLoading) const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withOpacity(onTap == null ? 0.3 : 0.9),
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
-}
 
-// مساعد لـ ProgressView
-class ProgressView extends StatelessWidget {
-  final double size;
-  const ProgressView({super.key, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildLocationSection() {
     return Container(
-      width: size,
-      height: size,
-      color: Colors.grey.shade200,
-      child: const Center(
-        child: SizedBox(
-          width: 30,
-          height: 30,
-          child: CircularProgressIndicator(strokeWidth: 3),
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.06),
+          width: 1,
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Store Location',
+            style: TextStyle(
+              fontFamily: 'TenorSans',
+              fontSize: 18,
+              fontWeight: FontWeight.w400,
+              color: Colors.white,
+              letterSpacing: -0.3,
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          Text(
+            _latitude == 0.0 && _longitude == 0.0
+                ? 'No location set'
+                : 'Lat: ${_latitude.toStringAsFixed(4)}, Lng: ${_longitude.toStringAsFixed(4)}',
+            style: TextStyle(
+              fontFamily: 'TenorSans',
+              fontSize: 13,
+              color: Colors.white.withOpacity(0.45),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          GestureDetector(
+            onTap: _showMapPicker,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.10),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.location_on_outlined,
+                    color: Colors.white.withOpacity(0.7),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Set Location',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withOpacity(0.9),
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

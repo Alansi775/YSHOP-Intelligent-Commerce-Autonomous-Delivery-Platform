@@ -45,6 +45,7 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _pollingTimer = null;
     super.dispose();
   }
 
@@ -235,11 +236,19 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
   Widget build(BuildContext context) {
     final cartManager = Provider.of<CartManager>(context);
     final orderId = cartManager.lastOrderId;
+    final authManager = Provider.of<AuthManager>(context);
 
     return ValueListenableBuilder<String?>(
       valueListenable: ApiService.adminRoleNotifier,
       builder: (context, adminRole, child) {
+        // Hide order tracker for admins, delivery drivers, and any non-customer users
         if (adminRole != null) return const SizedBox.shrink();
+        
+        // Check if current user is a delivery driver or store owner
+        final userType = authManager.userProfile?['userType'] as String?;
+        if (userType == 'deliveryDriver' || userType == 'storeOwner') {
+          return const SizedBox.shrink();
+        }
 
         if (orderId == null && !_isCheckingLatestOrder && _currentOrderId == null) {
           Future.microtask(() {
@@ -532,6 +541,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
   @override
   void dispose() {
     _statusTimer?.cancel();
+    _statusTimer = null;
     super.dispose();
   }
 
@@ -728,6 +738,24 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
     final total = widget.toDouble(orderData['total_price'] ?? orderData['total']);
     final documentId = orderData['documentId']?.toString() ?? orderData['id']?.toString() ?? 'N/A';
     final items = (orderData['items'] as List<dynamic>?) ?? [];
+    final currency = orderData['currency']?.toString() ?? 'USD';
+    
+    // Get currency symbol
+    String getCurrencySymbol(String currencyCode) {
+      switch (currencyCode.toUpperCase()) {
+        case 'YER': return 'ر.ي';
+        case 'SAR': return 'ر.س';
+        case 'AED': return 'د.إ';
+        case 'USD': return '\$';
+        case 'EUR': return '€';
+        case 'TRY': return '₺';
+        case 'CNY': return '¥';
+        case 'KRW': return '₩';
+        default: return currencyCode;
+      }
+    }
+    
+    final currencySymbol = getCurrencySymbol(currency);
     
     final rawCreatedAt = orderData['createdAt'] ?? orderData['created_at'];
     final date = widget.parseDate(rawCreatedAt);
@@ -784,7 +812,10 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            _DeliveryMapWidget(orderData: orderData),
+            _DeliveryMapWidget(
+              key: ValueKey('map-${orderData['id'] ?? orderData['documentId']}'),
+              orderData: orderData,
+            ),
             const SizedBox(height: 32),
           ],
           
@@ -794,7 +825,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
             isDark,
             [
               _InfoRow('Time', formattedTime, Icons.access_time),
-              _InfoRow('Total', '\$${total.toStringAsFixed(2)}', Icons.payments_outlined),
+              _InfoRow('Total', '$currencySymbol${total.toStringAsFixed(2)}', Icons.payments_outlined),
               _InfoRow('Items', '${items.length} items', Icons.shopping_bag_outlined),
             ],
           ),
@@ -814,7 +845,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            ...items.map((item) => _buildItemCard(context, Map<String, dynamic>.from(item), isDark)).toList(),
+            ...items.map((item) => _buildItemCard(context, Map<String, dynamic>.from(item), isDark, currencySymbol)).toList(),
           ],
         ],
       ),
@@ -934,7 +965,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
     );
   }
 
-  Widget _buildItemCard(BuildContext context, Map<String, dynamic> item, bool isDark) {
+  Widget _buildItemCard(BuildContext context, Map<String, dynamic> item, bool isDark, String currencySymbol) {
     final price = widget.toDouble(item['price']);
     final quantity = item['quantity'] as int? ?? 1;
     final imageUrl = (item['imageUrl'] as String?) ?? '';
@@ -983,7 +1014,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$quantity × \$${price.toStringAsFixed(2)}',
+                  '$quantity × $currencySymbol${price.toStringAsFixed(2)}',
                   style: TextStyle(
                     fontFamily: 'TenorSans',
                     fontSize: 12,
@@ -994,7 +1025,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
             ),
           ),
           Text(
-            '\$${(price * quantity).toStringAsFixed(2)}',
+            '$currencySymbol${(price * quantity).toStringAsFixed(2)}',
             style: TextStyle(
               fontFamily: 'TenorSans',
               fontSize: 14,
@@ -1060,15 +1091,16 @@ class _InfoRow {
 class _DeliveryMapWidget extends StatefulWidget {
   final Map<String, dynamic> orderData;
 
-  const _DeliveryMapWidget({required this.orderData});
+  const _DeliveryMapWidget({
+    Key? key,
+    required this.orderData,
+  }) : super(key: key);
 
   @override
   State<_DeliveryMapWidget> createState() => _DeliveryMapWidgetState();
 }
 
 class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
-  static const String MAPBOX_TOKEN = 'pk.eyJ1IjoibW9oYW1tZWRhbGFuc2kiLCJhIjoiY21ncGF5OTI0MGU2azJpczloZjI0YXRtZCJ9.W9tMyxkXcai-sHajAwp8NQ';
-  
   List<LatLng> _routePoints = [];
   String _eta = 'Calculating...';
   Timer? _updateTimer;
@@ -1076,6 +1108,7 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
 
   late LatLng customerLocation;
   LatLng? driverLocation;
+  bool _hasValidLocations = false;
 
   @override
   void initState() {
@@ -1085,16 +1118,56 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
   }
 
   @override
+  @override
   void dispose() {
     _updateTimer?.cancel();
+    _updateTimer = null;
     super.dispose();
   }
 
   void _initializeLocations() {
-    final double customerLat = (widget.orderData['location_Latitude'] as num?)?.toDouble() ?? 0.0;
-    final double customerLon = (widget.orderData['location_Longitude'] as num?)?.toDouble() ?? 0.0;
-    customerLocation = LatLng(customerLat, customerLon);
-    driverLocation = _parseDriverLocation(widget.orderData['driverLocation']);
+    try {
+      // Helper function to safely parse latitude/longitude from any type
+      double? _parseCoordinate(dynamic value) {
+        if (value == null) return null;
+        if (value is num) return value.toDouble();
+        if (value is String) {
+          final parsed = double.tryParse(value);
+          return parsed;
+        }
+        return null;
+      }
+
+      // Try multiple field name variations for customer location
+      double? customerLat = _parseCoordinate(widget.orderData['location_Latitude']);
+      double? customerLon = _parseCoordinate(widget.orderData['location_Longitude']);
+      
+      // Fallback to alternative field names
+      customerLat ??= _parseCoordinate(widget.orderData['locationLatitude']);
+      customerLon ??= _parseCoordinate(widget.orderData['locationLongitude']);
+      customerLat ??= _parseCoordinate(widget.orderData['customer_latitude']);
+      customerLon ??= _parseCoordinate(widget.orderData['customer_longitude']);
+      customerLat ??= _parseCoordinate(widget.orderData['latitude']);
+      customerLon ??= _parseCoordinate(widget.orderData['longitude']);
+      
+      // Check if we have valid coordinates
+      if (customerLat != null && customerLon != null && customerLat != 0.0 && customerLon != 0.0) {
+        customerLocation = LatLng(customerLat, customerLon);
+        _hasValidLocations = true;
+      } else {
+        // Default fallback - should not be used with invalid coordinates
+        customerLocation = LatLng(24.7136, 46.6753); // Riyadh center as fallback
+        _hasValidLocations = false;
+      }
+      
+      // Try both driverLocation (camelCase) and driver_location (snake_case)
+      driverLocation = _parseDriverLocation(widget.orderData['driverLocation'] ?? widget.orderData['driver_location']);
+    } catch (e) {
+      debugPrint('Error initializing locations: $e');
+      customerLocation = LatLng(24.7136, 46.6753);
+      driverLocation = null;
+      _hasValidLocations = false;
+    }
   }
 
   void _startPeriodicUpdate() {
@@ -1105,7 +1178,9 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
         if (id == null) return;
         final latest = await ApiService.getOrderById(id);
         if (latest != null) {
-          final parsed = _parseDriverLocation(latest['driverLocation']);
+          // Try both driverLocation (camelCase) and driver_location (snake_case)
+          final driverLocRaw = latest['driverLocation'] ?? latest['driver_location'];
+          final parsed = _parseDriverLocation(driverLocRaw);
           if (parsed != null && mounted) {
             setState(() => driverLocation = parsed);
             _fetchRouteAndEta();
@@ -1117,16 +1192,57 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
 
   LatLng? _parseDriverLocation(dynamic raw) {
     if (raw == null) return null;
-    if (raw is Map) {
-      final lat = (raw['latitude'] ?? raw['lat']) as num?;
-      final lon = (raw['longitude'] ?? raw['lng'] ?? raw['lon']) as num?;
-      if (lat != null && lon != null) return LatLng(lat.toDouble(), lon.toDouble());
+    
+    try {
+      if (raw is Map) {
+        final latRaw = raw['latitude'] ?? raw['lat'];
+        final lonRaw = raw['longitude'] ?? raw['lng'] ?? raw['lon'];
+        
+        double? lat, lon;
+        
+        // Handle both num and String types
+        if (latRaw is num) {
+          lat = latRaw.toDouble();
+        } else if (latRaw is String) {
+          lat = double.tryParse(latRaw);
+        }
+        
+        if (lonRaw is num) {
+          lon = lonRaw.toDouble();
+        } else if (lonRaw is String) {
+          lon = double.tryParse(lonRaw);
+        }
+        
+        if (lat != null && lon != null && lat != 0.0 && lon != 0.0) {
+          return LatLng(lat, lon);
+        }
+      }
+      
+      if (raw is List && raw.length >= 2) {
+        final a = raw[0];
+        final b = raw[1];
+        
+        double? lat, lon;
+        if (a is num) {
+          lat = a.toDouble();
+        } else if (a is String) {
+          lat = double.tryParse(a);
+        }
+        
+        if (b is num) {
+          lon = b.toDouble();
+        } else if (b is String) {
+          lon = double.tryParse(b);
+        }
+        
+        if (lat != null && lon != null && lat != 0.0 && lon != 0.0) {
+          return LatLng(lat, lon);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error parsing driver location: $e');
     }
-    if (raw is List && raw.length >= 2) {
-      final a = raw[0];
-      final b = raw[1];
-      if (a is num && b is num) return LatLng(a.toDouble(), b.toDouble());
-    }
+    
     return null;
   }
 
@@ -1198,14 +1314,24 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
         Container(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.green.shade600.withOpacity(0.15),
+            color: driverLocation != null 
+                ? Colors.green.shade600.withOpacity(0.15)
+                : Colors.amber.shade600.withOpacity(0.15),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.green.shade600.withOpacity(0.3)),
+            border: Border.all(
+              color: driverLocation != null 
+                  ? Colors.green.shade600.withOpacity(0.3)
+                  : Colors.amber.shade600.withOpacity(0.3),
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.timer_outlined, color: Colors.green.shade600, size: 18),
+              Icon(
+                Icons.timer_outlined, 
+                color: driverLocation != null ? Colors.green.shade600 : Colors.amber.shade600, 
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 'ETA: $_eta',
@@ -1213,7 +1339,7 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
                   fontFamily: 'TenorSans',
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Colors.green.shade700,
+                  color: driverLocation != null ? Colors.green.shade700 : Colors.amber.shade700,
                 ),
               ),
             ],
@@ -1221,7 +1347,7 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
         ),
         const SizedBox(height: 12),
         
-        // Map
+        // Map Container
         Container(
           height: 280,
           decoration: BoxDecoration(
@@ -1229,77 +1355,100 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
             border: Border.all(
               color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
             ),
+            color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
           ),
           clipBehavior: Clip.antiAlias,
-          child: FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: mapCenter,
-              initialZoom: initialZoom,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom,
-              ),
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=$MAPBOX_TOKEN',
-                userAgentPackageName: 'com.yshop.customer.app',
-              ),
-              PolylineLayer(
-                polylines: [
-                  if (_routePoints.isNotEmpty)
-                    Polyline(
-                      points: _routePoints,
-                      color: Colors.blue.shade400,
-                      strokeWidth: 5.0,
-                    ),
-                ],
-              ),
-              MarkerLayer(
-                markers: [
-                  // Customer marker
-                  Marker(
-                    point: customerLocation,
-                    width: 45,
-                    height: 45,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.black, width: 2),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8),
-                        ],
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.person, color: Colors.black, size: 24),
-                      ),
+          child: _hasValidLocations
+              ? FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: mapCenter,
+                    initialZoom: initialZoom,
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom,
                     ),
                   ),
-                  // Driver marker
-                  if (driverLocation != null)
-                    Marker(
-                      point: driverLocation!,
-                      width: 45,
-                      height: 45,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade600,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 12, spreadRadius: 2),
-                          ],
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                      subdomains: const ['a', 'b', 'c', 'd'],
+                      userAgentPackageName: 'com.yshop.customer.app',
+                    ),
+                    PolylineLayer(
+                      polylines: [
+                        if (_routePoints.isNotEmpty)
+                          Polyline(
+                            points: _routePoints,
+                            color: Colors.blue.shade400,
+                            strokeWidth: 5.0,
+                          ),
+                      ],
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        // Customer marker
+                        Marker(
+                          point: customerLocation,
+                          width: 45,
+                          height: 45,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black, width: 2),
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.person, color: Colors.black, size: 24),
+                            ),
+                          ),
                         ),
-                        child: const Center(
-                          child: Icon(Icons.delivery_dining, color: Colors.white, size: 24),
+                        // Driver marker
+                        if (driverLocation != null)
+                          Marker(
+                            point: driverLocation!,
+                            width: 45,
+                            height: 45,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade600,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                                boxShadow: [
+                                  BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 12, spreadRadius: 2),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.delivery_dining, color: Colors.white, size: 24),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                )
+              : Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.location_off,
+                        size: 48,
+                        color: isDark ? Colors.white30 : Colors.black26,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Waiting for location...',
+                        style: TextStyle(
+                          color: isDark ? Colors.white60 : Colors.black54,
+                          fontSize: 14,
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+                    ],
+                  ),
+                ),
         ),
       ],
     );
