@@ -105,18 +105,10 @@ class _StoreProductsViewState extends State<StoreProductsView> {
     final storeId = widget.storeId;
     debugPrint(' StoreProductsView INIT: storeId=$storeId, embedInAdmin=${widget.embedInAdmin}');
     _fetchProducts();
-    //  Start polling every 1.5 seconds to check for product updates (faster response)
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
-      _pollingCount++;
-      debugPrint('🔁 POLLING #$_pollingCount at ${DateTime.now().toIso8601String()}');
-      _fetchProductsQuietly();
-    });
-    debugPrint(' Polling timer started for storeId=$storeId (every 1.5 seconds)');
   }
 
   @override
   void dispose() {
-    //  Clean up polling timer
     _pollingTimer?.cancel();
     debugPrint(' Polling timer STOPPED for storeId=${widget.storeId}');
     super.dispose();

@@ -76,7 +76,7 @@ router.get('/store/:storeId', ReturnController.getReturnsByStore);
 
 // Admin approve/reject returns (these routes take precedence)
 router.use(verifyAdminToken);
-router.put('/:returnId/approve', ReturnController.approveReturn);
-router.put('/:returnId/reject', ReturnController.rejectReturn);
+router.post('/:returnId/approve', ReturnController.approveReturn);
+router.post('/:returnId/reject', ReturnController.rejectReturn);
 
 export default router;

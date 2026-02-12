@@ -366,6 +366,17 @@ class OrderModel {
       orderItems = (m['items'] as List).map((item) => OrderItem.fromMap(item)).toList();
     }
     
+    // Handle driverLocation - can be String or Map
+    String? driverLocationStr;
+    if (m['driver_location'] != null) {
+      if (m['driver_location'] is String) {
+        driverLocationStr = m['driver_location'] as String;
+      } else if (m['driver_location'] is Map) {
+        // Convert Map to JSON string
+        driverLocationStr = m['driver_location'].toString();
+      }
+    }
+    
     return OrderModel(
       id: (m['id'] ?? '').toString(),
       oderId: (m['user_id'] ?? '').toString(),
@@ -373,11 +384,11 @@ class OrderModel {
       storeName: m['store_name'] as String? ?? '',
       totalPrice: double.tryParse((m['total_price'] ?? '0').toString()) ?? 0.0,
       currency: (m['currency'] as String? ?? 'USD').toUpperCase(),
-      status: m['status'] as String? ?? 'pending',
+      status: (m['status'] as String? ?? 'pending').toLowerCase(),
       shippingAddress: m['shipping_address'] as String? ?? '',
       paymentMethod: m['payment_method'] as String? ?? '',
       deliveryOption: m['delivery_option'] as String? ?? 'Standard',
-      driverLocation: m['driver_location'] as String?,
+      driverLocation: driverLocationStr,
       driverName: m['driver_name'] as String?,
       driverPhone: m['driver_phone'] as String?,
       driverLatitude: m['driver_latitude'] != null ? double.tryParse(m['driver_latitude'].toString()) : null,

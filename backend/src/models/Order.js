@@ -114,25 +114,59 @@ export class Order {
     const l = Number.parseInt(limit, 10) || 50;
     const connection = await pool.getConnection();
     try {
+      // Simple SQL - use COLLATE to fix collation mismatch
       const sql = `
-        SELECT SQL_NO_CACHE o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status, o.shipping_address,
-          o.payment_method, o.delivery_option, o.driver_location, o.driver_id,
+        SELECT SQL_NO_CACHE 
+          o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status, 
+          o.shipping_address, o.payment_method, o.delivery_option, o.driver_location, o.driver_id,
           DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i:%s') as created_at,
-          s.name as store_name,
-          dr.name as driver_name,
-          dr.phone as driver_phone,
-          dr.latitude as driver_latitude,
-          dr.longitude as driver_longitude
+          DATE_FORMAT(o.updated_at, '%Y-%m-%d %H:%i:%s') as updated_at,
+          COALESCE(s.name, 'Unknown Store') as store_name,
+          COALESCE(dr.name, 'Unassigned') as driver_name,
+          COALESCE(dr.phone, '') as driver_phone,
+          COALESCE(dr.latitude, 0) as driver_latitude,
+          COALESCE(dr.longitude, 0) as driver_longitude
         FROM orders o
         LEFT JOIN stores s ON o.store_id = s.id
-        LEFT JOIN delivery_requests dr ON o.driver_id = CAST(dr.uid AS CHAR) COLLATE utf8mb4_unicode_ci
+        LEFT JOIN delivery_requests dr ON o.driver_id COLLATE utf8mb4_unicode_ci = dr.uid COLLATE utf8mb4_unicode_ci
         ORDER BY o.created_at DESC
         LIMIT ${l}`;
 
       const [rows] = await connection.execute(sql);
+      console.log(`[Order.findRecent] Fetched ${rows.length} orders`);
+      
+      // Get items for each order
+      if (rows.length > 0) {
+        const orderIds = rows.map(r => r.id);
+        const placeholders = orderIds.map(() => '?').join(',');
+        
+        const [items] = await connection.execute(
+          `SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, p.name, p.image_url
+           FROM order_items oi
+           LEFT JOIN products p ON oi.product_id = p.id
+           WHERE oi.order_id IN (${placeholders})`,
+          orderIds
+        );
+        
+        // Group items by order_id
+        const itemsByOrderId = {};
+        for (const item of items) {
+          if (!itemsByOrderId[item.order_id]) {
+            itemsByOrderId[item.order_id] = [];
+          }
+          itemsByOrderId[item.order_id].push(item);
+        }
+        
+        // Attach items to orders
+        for (const row of rows) {
+          row.items = itemsByOrderId[row.id] || [];
+        }
+      }
+
       connection.release();
       return rows;
     } catch (error) {
+      console.error('[Order.findRecent] Error:', error);
       connection.release();
       throw error;
     }
@@ -321,7 +355,7 @@ export class Order {
     try {
       const sql = `
         SELECT SQL_NO_CACHE
-          o.id, o.user_id, o.store_id, o.total_price, o.status, o.shipping_address,
+          o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status, o.shipping_address,
           o.payment_method, o.delivery_option, o.driver_id,
           DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i:%s') as created_at,
           o.driver_location,
@@ -331,7 +365,11 @@ export class Order {
           dr.name as driver_name,
           dr.phone as driver_phone,
           dr.latitude as driver_latitude,
-          dr.longitude as driver_longitude
+          dr.longitude as driver_longitude,
+          COALESCE(
+            (SELECT admin_accepted FROM returned_products WHERE order_id = o.id LIMIT 1),
+            FALSE
+          ) as admin_accepted
         FROM orders o
         LEFT JOIN users u ON o.user_id = u.uid COLLATE utf8mb4_unicode_ci
         LEFT JOIN delivery_requests dr ON o.driver_id = CAST(dr.uid AS CHAR) COLLATE utf8mb4_unicode_ci
@@ -345,11 +383,18 @@ export class Order {
         const orderIds = orders.map(o => o.id);
         const placeholders = orderIds.map(() => '?').join(',');
 
+        // Get regular order items
         const [allItems] = await connection.execute(
           `SELECT oi.*, p.name as product_name, p.image_url
            FROM order_items oi
            LEFT JOIN products p ON oi.product_id = p.id
            WHERE oi.order_id IN (${placeholders})`,
+          orderIds
+        );
+
+        // Get return items
+        const [returnItems] = await connection.execute(
+          `SELECT * FROM returned_products WHERE order_id IN (${placeholders})`,
           orderIds
         );
 
@@ -359,8 +404,21 @@ export class Order {
           itemsByOrder[item.order_id].push(item);
         }
 
+        const returnItemsByOrder = {};
+        for (const item of returnItems) {
+          if (!returnItemsByOrder[item.order_id]) {
+            returnItemsByOrder[item.order_id] = [];
+          }
+          returnItemsByOrder[item.order_id].push(item);
+        }
+
         for (const order of orders) {
-          order.items = itemsByOrder[order.id] || [];
+          // For return orders, use return items; otherwise use regular order items
+          if (order.status === 'return') {
+            order.items = returnItemsByOrder[order.id] || [];
+          } else {
+            order.items = itemsByOrder[order.id] || [];
+          }
         }
       }
 

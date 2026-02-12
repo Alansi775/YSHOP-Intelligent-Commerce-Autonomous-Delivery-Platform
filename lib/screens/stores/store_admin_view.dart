@@ -42,7 +42,6 @@ class _StoreAdminViewState extends State<StoreAdminView> {
   int _totalProductsCount = 0;
   bool _isLoading = false;
   String _searchQuery = "";
-  Timer? _pollingTimer;
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -50,22 +49,12 @@ class _StoreAdminViewState extends State<StoreAdminView> {
     super.initState();
     ApiService.clearCache();
     _fetchStoreNameAndProducts();
-    _startPolling();
   }
   
   @override
   void dispose() {
-    _pollingTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
-  }
-  
-  void _startPolling() {
-    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && _storeOwnerUid.isNotEmpty) {
-        _fetchProductsQuietly();
-      }
-    });
   }
   
   void _filterProducts(String query) {

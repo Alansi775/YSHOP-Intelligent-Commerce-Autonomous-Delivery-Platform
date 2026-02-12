@@ -458,8 +458,8 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> {
 
   Future<void> _approveReturn(Map<String, dynamic> returnData) async {
     try {
-      // final returnId = returnData['id'];
-      // await ApiService.approveReturn(returnId);
+      final returnId = returnData['id'];
+      await ApiService.approveReturn(returnId);
       _loadReturnedProducts();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

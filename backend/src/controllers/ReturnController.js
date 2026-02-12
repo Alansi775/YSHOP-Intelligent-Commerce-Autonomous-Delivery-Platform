@@ -340,22 +340,19 @@ class ReturnController {
         });
       }
 
-      const returnData = returns[0];
-
-      // Delete from returned_products (request approved, processed)
+      // Update admin_accepted to TRUE
       await connection.execute(
-        `DELETE FROM returned_products WHERE id = ?`,
+        `UPDATE returned_products SET admin_accepted = TRUE WHERE id = ?`,
         [returnId]
       );
 
-      // Order status stays 'return' or can be updated by store
       connection.release();
 
-      logger.info(`✓ Return ${returnId} approved and closed`);
+      logger.info(`✓ Return ${returnId} approved by admin`);
 
       return res.status(200).json({
         success: true,
-        message: 'Return approved and processed',
+        message: 'Return approved - store owner will now see it',
       });
     } catch (error) {
       logger.error('❌ Error approving return:', error);

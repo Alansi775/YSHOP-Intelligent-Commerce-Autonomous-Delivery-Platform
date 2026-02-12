@@ -23,38 +23,34 @@ class CategorySelectorSheet extends StatefulWidget {
 class _CategorySelectorSheetState extends State<CategorySelectorSheet> {
   String _searchQuery = '';
   Map<int, String?> _lastProductImages = {};
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadLastProductImages();
+    // Don't load images on init - load them only when needed
   }
 
-  Future<void> _loadLastProductImages() async {
+  Future<String?> _getLastProductImage(int categoryId) async {
+    // Return cached image if available
+    if (_lastProductImages.containsKey(categoryId)) {
+      return _lastProductImages[categoryId];
+    }
+
     try {
-      for (final category in widget.categories) {
-        if (category.id != null) {
-          final products = await ApiService.getCategoryProducts(category.id!);
-          if (products.isNotEmpty) {
-            // Get last product image
-            final lastProduct = products.last;
-            final imageUrl = lastProduct['image_url'] as String? ?? '';
-            _lastProductImages[category.id!] = imageUrl.isNotEmpty 
-                ? Store.getFullImageUrl(imageUrl)
-                : null;
-          }
-        }
-      }
-      if (mounted) {
-        setState(() => _isLoading = false);
+      final products = await ApiService.getCategoryProducts(categoryId);
+      if (products.isNotEmpty) {
+        final lastProduct = products.last;
+        final imageUrl = lastProduct['image_url'] as String? ?? '';
+        final fullUrl = imageUrl.isNotEmpty 
+            ? Store.getFullImageUrl(imageUrl)
+            : null;
+        _lastProductImages[categoryId] = fullUrl;
+        return fullUrl;
       }
     } catch (e) {
-      debugPrint('Error loading product images: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      debugPrint('Error loading product image for category $categoryId: $e');
     }
+    return null;
   }
 
   @override
@@ -94,70 +90,66 @@ class _CategorySelectorSheetState extends State<CategorySelectorSheet> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          const SizedBox(width: 40), // Placeholder for spacing
-                          const Text(
-                            'Select Category',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const SizedBox(width: 40), // Placeholder for spacing
+                              const Text(
+                                'Select Category',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white),
+                                onPressed: () => Navigator.pop(context),
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white),
-                            onPressed: () => Navigator.pop(context),
+                          const SizedBox(height: 12),
+                          // Search field
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E1E1E),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.1),
+                              ),
+                            ),
+                            child: TextField(
+                              onChanged: (value) => setState(() => _searchQuery = value),
+                              decoration: InputDecoration(
+                                hintText: 'Search categories...',
+                                hintStyle: TextStyle(
+                                  color: Colors.grey[500],
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.search,
+                                  color: Colors.grey[400],
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 8,
+                                ),
+                              ),
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      // Search field
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1E1E),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
-                          ),
-                        ),
-                        child: TextField(
-                          onChanged: (value) => setState(() => _searchQuery = value),
-                          decoration: InputDecoration(
-                            hintText: 'Search categories...',
-                            hintStyle: TextStyle(
-                              color: Colors.grey[500],
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search,
-                              color: Colors.grey[400],
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 8,
-                            ),
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Categories grid
-                Expanded(
-                  child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(),
-                        )
-                      : filtered.isEmpty
+                    ),
+                    // Categories grid
+                    Expanded(
+                      child: filtered.isEmpty
                           ? Center(
                               child: Text(
                                 _searchQuery.isEmpty
@@ -183,9 +175,6 @@ class _CategorySelectorSheetState extends State<CategorySelectorSheet> {
                                 itemCount: filtered.length,
                                 itemBuilder: (context, index) {
                                   final category = filtered[index];
-                                  final imageUrl = category.id != null 
-                                      ? _lastProductImages[category.id!]
-                                      : null;
 
                                   return GestureDetector(
                                     onTap: () => widget.onCategorySelected(category),
@@ -199,19 +188,36 @@ class _CategorySelectorSheetState extends State<CategorySelectorSheet> {
                                       ),
                                       child: Column(
                                         children: [
-                                          // Image or Emoji
+                                          // Image or Emoji - Lazy loaded only when visible
                                           Expanded(
                                             child: ClipRRect(
                                               borderRadius: const BorderRadius.only(
                                                 topLeft: Radius.circular(16),
                                                 topRight: Radius.circular(16),
                                               ),
-                                              child: imageUrl != null && imageUrl.isNotEmpty
-                                                  ? Image.network(
-                                                      imageUrl,
-                                                      fit: BoxFit.cover,
-                                                      width: double.infinity,
-                                                      errorBuilder: (context, error, stackTrace) {
+                                              child: category.id != null
+                                                  ? FutureBuilder<String?>(
+                                                      future: _getLastProductImage(category.id!),
+                                                      builder: (context, snapshot) {
+                                                        final imageUrl = snapshot.data;
+                                                        if (imageUrl != null && imageUrl.isNotEmpty) {
+                                                          return Image.network(
+                                                            imageUrl,
+                                                            fit: BoxFit.cover,
+                                                            width: double.infinity,
+                                                            errorBuilder: (context, error, stackTrace) {
+                                                              return Container(
+                                                                color: Colors.grey[800],
+                                                                child: Center(
+                                                                  child: Text(
+                                                                    _extractEmoji(category.displayName),
+                                                                    style: const TextStyle(fontSize: 32),
+                                                                  ),
+                                                                ),
+                                                              );
+                                                            },
+                                                          );
+                                                        }
                                                         return Container(
                                                           color: Colors.grey[800],
                                                           child: Center(
@@ -260,12 +266,12 @@ class _CategorySelectorSheetState extends State<CategorySelectorSheet> {
                                 },
                               ),
                             ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
-            ),
-          ),
           ),
         ),
       ),

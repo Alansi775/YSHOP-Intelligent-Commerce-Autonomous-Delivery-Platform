@@ -181,6 +181,7 @@ async function initDatabase() {
         photo_front VARCHAR(255),
         photo_back VARCHAR(255),
         
+        admin_accepted BOOLEAN DEFAULT FALSE,
         delivered_at DATETIME,
         return_requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

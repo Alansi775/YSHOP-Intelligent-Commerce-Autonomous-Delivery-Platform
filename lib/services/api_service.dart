@@ -1015,6 +1015,14 @@ class ApiService {
     return List<dynamic>.from(response['data'] ?? []);
   }
 
+  static Future<void> approveReturn(int returnId) async {
+    await _request(
+      'POST',
+      '/returns/$returnId/approve',
+      requiresAuth: true,
+    );
+  }
+
   static Future<List<dynamic>> getStoreOrders({
     required String storeId,
     int page = 1,

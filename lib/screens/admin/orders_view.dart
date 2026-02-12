@@ -41,8 +41,13 @@ class _OrdersManagementViewState extends State<OrdersManagementView> {
     setState(() => _isLoading = true);
     try {
       final response = await ApiService.getAdminOrders();
+      debugPrint('🔍 Admin Orders Response: $response');
       if (mounted) {
-        final orders = (response as List?)?.map((o) => OrderModel.fromMap(o)).toList() ?? [];
+        final orders = (response as List?)?.map((o) {
+          debugPrint('📦 Processing order: $o');
+          return OrderModel.fromMap(o);
+        }).toList() ?? [];
+        debugPrint('✅ Loaded ${orders.length} orders');
         
         // Calculate revenue
         double total = 0.0;
@@ -73,7 +78,9 @@ class _OrdersManagementViewState extends State<OrdersManagementView> {
 
   List<OrderModel> get _filteredOrders {
     if (_filterStatus == 'all') return _orders;
-    return _orders.where((o) => o.status.toLowerCase() == _filterStatus).toList();
+    final filtered = _orders.where((o) => o.status.toLowerCase() == _filterStatus).toList();
+    debugPrint('🔍 Filtering by "$_filterStatus": ${_orders.length} total orders, ${filtered.length} matched');
+    return filtered;
   }
 
   void _showOrderDetails(OrderModel order) {
@@ -265,8 +272,10 @@ class _OrdersManagementViewState extends State<OrdersManagementView> {
       {'key': 'all', 'label': 'All', 'icon': Icons.list_rounded},
       {'key': 'pending', 'label': 'Pending', 'icon': Icons.pending_rounded},
       {'key': 'confirmed', 'label': 'Confirmed', 'icon': Icons.check_circle_outline_rounded},
-      {'key': 'delivered', 'label': 'Delivered', 'icon': Icons.local_shipping_rounded},
+      {'key': 'shipped', 'label': 'Shipped', 'icon': Icons.local_shipping_rounded},
+      {'key': 'delivered', 'label': 'Delivered', 'icon': Icons.check_circle_rounded},
       {'key': 'cancelled', 'label': 'Cancelled', 'icon': Icons.cancel_outlined},
+      {'key': 'return', 'label': 'Return', 'icon': Icons.assignment_return_rounded},
     ];
 
     return SingleChildScrollView(
