@@ -4,11 +4,14 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 import logger from './config/logger.js';
 import pool from './config/database.js';
 import startFirestoreSync from './utils/firestoreSync.js';
 import { getEmailService } from './utils/emailService.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import ReactiveSyncManager from './services/ReactiveSyncManager.js';
 
 // Routes
 import productRoutes from './routes/productRoutes.js';
@@ -142,8 +145,74 @@ app.use(notFound);
 // Error Handler
 app.use(errorHandler);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔥 SOCKET.IO SETUP FOR REACTIVE SYNC
+// ═══════════════════════════════════════════════════════════════════════════
+
+const httpServer = http.createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production' 
+      ? ['http://localhost:3000']
+      : ['http://localhost', 'http://localhost:3000', '*'],
+    credentials: true,
+  },
+  transports: ['websocket', 'polling'],
+  pingInterval: 25000,
+  pingTimeout: 60000,
+});
+
+// ✅ Socket.io Connection Handler
+io.on('connection', (socket) => {
+  logger.info(`🔗 NEW SOCKET CONNECTION`, { socketId: socket.id });
+
+  // 📡 Subscribe to data channel
+  socket.on('subscribe', (channel) => {
+    logger.info(`>>> SUBSCRIBE REQUEST`, { socketId: socket.id, channel });
+    socket.join(channel); // Join Socket.io room
+    ReactiveSyncManager.subscribe(channel, socket.id);
+  });
+
+  // ❌ Unsubscribe from channel
+  socket.on('unsubscribe', (channel) => {
+    logger.info(`>>> UNSUBSCRIBE REQUEST`, { socketId: socket.id, channel });
+    socket.leave(channel);
+    ReactiveSyncManager.unsubscribe(channel, socket.id);
+  });
+
+  // 💻 Get sync stats
+  socket.on('get-stats', () => {
+    socket.emit('stats', ReactiveSyncManager.getStats());
+  });
+
+  // ❌ Disconnect
+  socket.on('disconnect', () => {
+    logger.info(`🔌 SOCKET DISCONNECTED`, { socketId: socket.id });
+    // Clean up all subscriptions for this socket
+    for (const [channel, sockets] of ReactiveSyncManager.subscribers ?? new Map()) {
+      if (sockets && sockets.has(socket.id)) {
+        ReactiveSyncManager.unsubscribe(channel, socket.id);
+      }
+    }
+  });
+
+  socket.on('error', (error) => {
+    logger.error(`❌ SOCKET ERROR`, { socketId: socket.id, error });
+  });
+});
+
+// 📡 Connect ReactiveSyncManager broadcasts to Socket.io
+ReactiveSyncManager.on('broadcast', (msg) => {
+  const { channel, message } = msg;
+  io.to(channel).emit('data:delta', message);
+  logger.debug(`📡 BROADCASTED TO SOCKET.IO ROOM`, {
+    channel,
+    subscribers: msg.subscribers?.length,
+  });
+});
+
 // Start Server
-const server = app.listen(PORT, async () => {
+const server = httpServer.listen(PORT, async () => {
   try {
     // Test database connection
     const connection = await pool.getConnection();
@@ -201,6 +270,8 @@ const server = app.listen(PORT, async () => {
 // Graceful Shutdown
 process.on('SIGINT', async () => {
   logger.info('Shutting down gracefully...');
+  ReactiveSyncManager.cleanup();
+  io.close();
   server.close(async () => {
     await pool.end();
     logger.info('Server closed');

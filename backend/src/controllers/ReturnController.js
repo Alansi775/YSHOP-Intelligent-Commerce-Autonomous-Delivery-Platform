@@ -265,29 +265,87 @@ class ReturnController {
     let connection;
     try {
       const { storeId } = req.params;
-      const userId = req.user?.uid;
+      const userId = req.user?.id || req.user?.uid || req.user?.user_id;
 
-      connection = await pool.getConnection();
+      logger.info(`📥 getReturnsByStore - START`, {
+        storeId,
+        userId,
+        hasUser: !!userId,
+        reqUser: JSON.stringify(req.user),
+      });
 
-      // Verify store ownership
-      const [stores] = await connection.execute(
-        `SELECT * FROM stores WHERE id = ? AND owner_uid = ?`,
-        [storeId, userId]
-      );
-
-      if (!stores || stores.length === 0) {
-        connection.release();
-        return res.status(403).json({
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: 'Unauthorized: You do not own this store',
+          message: 'Unauthorized: User not authenticated',
         });
       }
 
-      // Get returns for this store
-      const [returns] = await connection.execute(
-        `SELECT * FROM returned_products WHERE store_id = ? ORDER BY return_requested_at DESC LIMIT 500`,
+      connection = await pool.getConnection();
+
+      // Verify store exists
+      const [stores] = await connection.execute(
+        `SELECT id, name FROM stores WHERE id = ?`,
         [storeId]
       );
+
+      logger.info(`🏪 Store verification`, {
+        storeId,
+        storesFound: stores?.length || 0,
+      });
+
+      if (!stores || stores.length === 0) {
+        connection.release();
+        return res.status(404).json({
+          success: false,
+          message: 'Store not found',
+        });
+      }
+
+      // Get ALL returns with detailed info
+      const [allReturns] = await connection.execute(
+        `SELECT id, store_id, admin_accepted, CAST(admin_accepted AS UNSIGNED) as admin_accepted_int FROM returned_products WHERE store_id = ? LIMIT 500`,
+        [storeId]
+      );
+
+      logger.info(`📦 DEBUG - ALL returns data:`, {
+        storeId,
+        totalReturns: allReturns?.length || 0,
+        allReturnsFull: allReturns?.map(r => ({
+          id: r.id,
+          store_id: r.store_id,
+          admin_accepted_raw: r.admin_accepted,
+          admin_accepted_int: r.admin_accepted_int,
+          type_of: typeof r.admin_accepted,
+          equals_1: r.admin_accepted === 1,
+          equals_true: r.admin_accepted === true,
+          equals_string_1: r.admin_accepted === '1',
+          is_truthy: !!r.admin_accepted,
+        })),
+      });
+
+      // Get returns for this store - ONLY admin_accepted = 1 (strict filter)
+      // Must be APPROVED by admin (admin_accepted = 1) ONLY
+      const [returns] = await connection.execute(
+        `SELECT * FROM returned_products WHERE store_id = ? AND admin_accepted = 1 ORDER BY return_requested_at DESC LIMIT 500`,
+        [storeId]
+      );
+
+      // Debug: Also query with admin_accepted = 0 to verify filter is working correctly
+      const [rejectedReturns] = await connection.execute(
+        `SELECT id, admin_accepted FROM returned_products WHERE store_id = ? AND admin_accepted = 0 LIMIT 500`,
+        [storeId]
+      );
+
+      logger.info(`✅ RETURNS FILTER VERIFICATION - APPROVED ONLY`, {
+        storeId,
+        acceptedCount: returns?.length || 0,
+        rejectedCount: rejectedReturns?.length || 0,
+        query: `WHERE store_id = ? AND admin_accepted = 1`,
+        acceptedIds: returns?.map(r => ({ id: r.id, admin_accepted: r.admin_accepted })),
+        rejectedIds: rejectedReturns?.map(r => ({ id: r.id, admin_accepted: r.admin_accepted })),
+        note: 'MUST show ONLY approved returns (admin_accepted = 1). Unapproved returns (admin_accepted = 0) excluded.',
+      });
 
       connection.release();
 
@@ -340,9 +398,9 @@ class ReturnController {
         });
       }
 
-      // Update admin_accepted to TRUE
+      // Update admin_accepted to 1 (approved)
       await connection.execute(
-        `UPDATE returned_products SET admin_accepted = TRUE WHERE id = ?`,
+        `UPDATE returned_products SET admin_accepted = 1 WHERE id = ?`,
         [returnId]
       );
 
@@ -427,6 +485,67 @@ class ReturnController {
       return res.status(500).json({
         success: false,
         message: 'Error rejecting return',
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Mark return as received by store owner
+   * PUT /returns/:returnId/store-received
+   */
+  static async receiveReturn(req, res) {
+    let connection;
+    try {
+      const { returnId } = req.params;
+      const userId = req.user?.id || req.user?.uid || req.user?.user_id;
+
+      logger.info(`📦 Store receiving return`, { returnId, userId });
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: User not authenticated',
+        });
+      }
+
+      connection = await pool.getConnection();
+
+      // Get return details
+      const [returns] = await connection.execute(
+        `SELECT * FROM returned_products WHERE id = ?`,
+        [returnId]
+      );
+
+      if (!returns || returns.length === 0) {
+        connection.release();
+        logger.warn(`❌ Return not found`, { returnId });
+        return res.status(404).json({
+          success: false,
+          message: 'Return request not found',
+        });
+      }
+
+      // Update store_received to 1
+      await connection.execute(
+        `UPDATE returned_products SET store_received = 1, updated_at = NOW() WHERE id = ?`,
+        [returnId]
+      );
+
+      connection.release();
+
+      logger.info(`✅ Return ${returnId} marked as received by store owner`);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Return order received successfully',
+      });
+    } catch (error) {
+      logger.error('❌ Error receiving return:', error);
+      if (connection) connection.release();
+      return res.status(500).json({
+        success: false,
+        message: 'Error receiving return',
         error: error.message,
       });
     }

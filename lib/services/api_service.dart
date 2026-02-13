@@ -1083,6 +1083,41 @@ class ApiService {
     return true;
   }
 
+  /// Mark a return order as received by store
+  static Future<bool> receiveReturnOrder(int returnId) async {
+    try {
+      await _request(
+        'PUT',
+        '/returns/$returnId/store-received',
+        body: {'store_received': 1},
+        requiresAuth: true,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Error receiving return order: $e');
+      return false;
+    }
+  }
+
+  /// Get returns for store (with correct IDs)
+  static Future<List<dynamic>> getStoreReturns({required String storeId}) async {
+    try {
+      debugPrint('🌐 API: getStoreReturns() - Fetching returns for store: $storeId');
+      final response = await _request(
+        'GET',
+        '/returns/store/$storeId',
+        requiresAuth: true,
+        useCache: false,
+        cacheTtl: 0,
+      );
+      debugPrint('✅ API: getStoreReturns() - Response: ${response['data']?.length ?? 0} returns');
+      return List<dynamic>.from(response['data'] ?? []);
+    } catch (e) {
+      debugPrint('❌ API: Error fetching store returns: $e');
+      return [];
+    }
+  }
+
   /// Get skipped orders that driver can reclaim
   static Future<List<Map<String, dynamic>>> getSkippedOrders({
     required double latitude,

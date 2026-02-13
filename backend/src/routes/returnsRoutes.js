@@ -63,6 +63,18 @@ router.get('/list', verifyAdminToken, ReturnController.getReturnedProducts);
 // All other return routes require firebase authentication
 router.use(verifyFirebaseToken);
 
+// Debug middleware for returns routes - log BEFORE auth check
+router.use((req, res, next) => {
+  console.log(`\n🔍 [RETURNS ROUTE] ${req.method} ${req.path}`, {
+    fullUrl: req.url,
+    storeId: req.params.storeId,
+    returnId: req.params.returnId,
+    hasUser: !!req.user,
+    userId: req.user?.id,
+  });
+  next();
+});
+
 // Customer submit return with photos
 router.post(
   '/submit',
@@ -73,6 +85,9 @@ router.post(
 
 // Get returns for specific store (store owner only)
 router.get('/store/:storeId', ReturnController.getReturnsByStore);
+
+// Store owner receive return (requires authentication)
+router.put('/:returnId/store-received', ReturnController.receiveReturn);
 
 // Admin approve/reject returns (these routes take precedence)
 router.use(verifyAdminToken);

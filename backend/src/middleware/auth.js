@@ -11,7 +11,7 @@ export const verifyJWTToken = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     if (!token) {
-      logger.warn('[verifyJWTToken] No token provided');
+      logger.warn('[verifyJWTToken] No token provided', { path: req.path });
       return res.status(401).json({ success: false, message: 'Unauthorized: No token provided' });
     }
 
@@ -21,7 +21,7 @@ export const verifyJWTToken = async (req, res, next) => {
       decoded = jwt.verify(token, JWT_SECRET);
       logger.info('[verifyJWTToken] Token verified successfully');
     } catch (err) {
-      logger.warn(`[verifyJWTToken] Token verification failed: ${err.message}`);
+      logger.warn(`[verifyJWTToken] Token verification failed: ${err.message}`, { path: req.path });
       return res.status(401).json({ success: false, message: 'Unauthorized: Invalid or expired token' });
     }
 
@@ -31,6 +31,13 @@ export const verifyJWTToken = async (req, res, next) => {
       email: decoded.email,
       role: decoded.role,
     };
+
+    logger.info('[verifyJWTToken] User attached to request', {
+      userId: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      path: req.path,
+    });
 
     next();
   } catch (error) {

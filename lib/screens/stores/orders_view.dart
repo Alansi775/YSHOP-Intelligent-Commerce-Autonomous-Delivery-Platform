@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
+import '../../services/reactive_sync_service.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/scheduler.dart';
@@ -27,10 +28,24 @@ class OrdersView extends StatefulWidget {
 class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  late Future<List<dynamic>> _ordersFuture;
   late Future<Map<String, List<dynamic>>> _allDataFuture;
   
   // Smart filter instead of tabs
   String _filterMode = 'all'; // 'all', 'orders', 'returns'
+  
+  // Track loading state for returns
+  Map<int, bool> _loadingReturns = {};
+  
+  // Force rebuild of FutureBuilder when data updates
+  int _dataRefreshCounter = 0;
+  
+  // Cache orders to avoid reloading during return refresh
+  List<dynamic> _cachedOrders = [];
+  
+  // 🔥 Reactive Sync subscription
+  late StreamSubscription<Map<String, dynamic>> _reactiveSyncSubscription;
+  String? _storeId;
   
   static const double kMaxWidth = 800.0;
 
@@ -43,21 +58,167 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       });
     });
     
-    // Load data ONCE on init
+    _ordersFuture = _loadOrders();
     _allDataFuture = _loadAllData();
+    
+    // 🔥 INITIALIZE REACTIVE SYNC
+    _initializeReactiveSync();
+  }
+
+  /// 🔥 Initialize reactive sync listener for Orders + Returns
+  Future<void> _initializeReactiveSync() async {
+    try {
+      // Get store ID first
+      final store = await ApiService.getUserStore();
+      _storeId = store?['id']?.toString();
+      
+      if (_storeId == null) return;
+
+      // Initialize Socket.io (first time only)
+      if (!reactiveSyncService.isConnected) {
+        reactiveSyncService.initialize(serverUrl: 'http://localhost:3000');
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // 🔥 Subscribe to BOTH orders and returns channels
+      reactiveSyncService.subscribe('orders:$_storeId');
+      reactiveSyncService.subscribe('returns:$_storeId');
+      debugPrint('🔥 REACTIVE SYNC: Subscribed to orders:$_storeId & returns:$_storeId');
+
+      // Listen to delta updates from BOTH channels
+      _reactiveSyncSubscription =
+          reactiveSyncService.dataStream.listen((update) {
+        final channel = update['channel'] as String?;
+        
+        if (channel == 'returns:$_storeId') {
+          // 📦 RETURNS UPDATE
+          debugPrint(
+              '✨ REACTIVE RETURNS UPDATE: ${update['count']} items');
+          
+          if (mounted) {
+            setState(() {
+              _dataRefreshCounter++;
+              final newReturns = (update['data'] as List?)
+                      ?.cast<Map<String, dynamic>>() ??
+                  [];
+              _allDataFuture = Future.value({
+                'orders': _cachedOrders,
+                'returns': newReturns,
+              });
+            });
+          }
+        }
+        
+        if (channel == 'orders:$_storeId') {
+          // 📦 ORDERS UPDATE
+          debugPrint(
+              '✨ REACTIVE ORDERS UPDATE: ${update['count']} items');
+          
+          if (mounted) {
+            setState(() {
+              _dataRefreshCounter++;
+              final newOrders = (update['data'] as List?)
+                      ?.cast<Map<String, dynamic>>() ??
+                  [];
+              // Cache new orders for next returns-only update
+              _cachedOrders = newOrders;
+              _allDataFuture = Future.value({
+                'orders': newOrders,
+                'returns': reactiveSyncService.getChannelData('returns:$_storeId')
+                    as List<dynamic>,
+              });
+            });
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('❌ Reactive sync init error: $e');
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _reactiveSyncSubscription.cancel();
+    if (_storeId != null) {
+      reactiveSyncService.unsubscribe('orders:$_storeId');
+      reactiveSyncService.unsubscribe('returns:$_storeId');
+    }
     super.dispose();
+  }
+
+  Future<List<dynamic>> _loadOrders() async {
+    final store = await ApiService.getUserStore();
+    final storeId = store?['id']?.toString();
+    if (storeId == null) return [];
+    final orders = await ApiService.getStoreOrders(storeId: storeId);
+    return orders;
+  }
+
+  Future<List<dynamic>> _loadReturns() async {
+    try {
+      final store = await ApiService.getUserStore();
+      final storeId = store?['id']?.toString();
+      if (storeId == null) return [];
+      
+      // Get all orders and filter for returns
+      final orders = await ApiService.getStoreOrders(storeId: storeId);
+      final returns = orders.where((order) {
+        final status = (order['status'] ?? '').toString().toLowerCase();
+        return status == 'return';
+      }).toList();
+      
+      return returns;
+    } catch (e) {
+      debugPrint('Error loading returns: $e');
+      return [];
+    }
+  }
+
+  Future<void> _receiveReturnOrder(int returnId, BuildContext context) async {
+    try {
+      HapticFeedback.mediumImpact();
+      
+      // Set loading state
+      if (mounted) {
+        setState(() {
+          _loadingReturns[returnId] = true;
+        });
+      }
+      
+      final success = await ApiService.receiveReturnOrder(returnId);
+      
+      if (success && mounted) {
+        // ⚡ OPTIMIZED: Only reload returns data (not orders) for instant update
+        setState(() {
+          _loadingReturns[returnId] = false;
+          _allDataFuture = _loadAllDataOptimized();  // Fast path: refresh returns only!
+          _dataRefreshCounter++;  // Force rebuild
+        });
+        debugPrint('✅ Return received - refreshing returns data only');
+        // ✅ No success message - button state change is the feedback
+      } else if (mounted) {
+        setState(() {
+          _loadingReturns[returnId] = false;
+        });
+        _showErrorSnackBar(context, 'Failed to receive return');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingReturns[returnId] = false;
+        });
+        _showErrorSnackBar(context, 'Error receiving return');
+      }
+      debugPrint('Error receiving return order: $e');
+    }
   }
 
   Future<void> _updateOrderStatus(String orderId, String newStatus, BuildContext context) async {
     try {
       HapticFeedback.mediumImpact();
       await ApiService.updateOrderStatus(orderId, newStatus);
-      setState(() => _allDataFuture = _loadAllData());
+      setState(() => _ordersFuture = _loadOrders());
 
       if (context.mounted) {
         _showSuccessSnackBar(context, 'Order #$orderId updated to ${newStatus.toUpperCase()}');
@@ -113,7 +274,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       case 'rejected':
       case 'cancelled': return Colors.red.shade600;
       case 'out for delivery':
-      case 'shipped': return Colors.cyan.shade600;
+      case 'shipped': return Colors.purple.shade600;
       case 'delivered': return Colors.green.shade600;
       default: return Colors.grey.shade600;
     }
@@ -216,7 +377,9 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
             ),
           ),
           onPressed: () => setState(() {
+            _ordersFuture = _loadOrders();
             _allDataFuture = _loadAllData();
+            _dataRefreshCounter++;  // Force rebuild
           }),
         ),
         IconButton(
@@ -395,8 +558,34 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
 
   Widget _buildSmartList(ThemeData theme, bool isDark) {
     return FutureBuilder<Map<String, List<dynamic>>>(
-      future: _allDataFuture,
+      key: ValueKey(_dataRefreshCounter),  // Force rebuild when counter changes
+      future: _allDataFuture,  // ✅ استخدم الـ variable الموجود (مرة واحدة فقط!)
       builder: (context, snapshot) {
+        // Show loading state IMMEDIATELY while fetching new data
+        if (snapshot.connectionState == ConnectionState.waiting && _dataRefreshCounter > 0) {
+          return SizedBox(
+            height: 400,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    color: isDark ? Colors.white : Colors.black,
+                    strokeWidth: 2,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Updating...',
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        
         if (snapshot.connectionState == ConnectionState.waiting) {
           return SizedBox(
             height: 400,
@@ -552,11 +741,16 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     try {
       final store = await ApiService.getUserStore();
       final storeId = store?['id']?.toString();
+      debugPrint('🔍 _loadAllData START - storeId: $storeId');
+      
       if (storeId == null) {
+        debugPrint('❌ storeId is null!');
         return {'orders': [], 'returns': []};
       }
       
+      debugPrint('📦 Fetching orders for store: $storeId');
       final allOrders = await ApiService.getStoreOrders(storeId: storeId);
+      debugPrint('✅ Got ${allOrders.length} orders');
       
       // Separate orders and returns
       final orders = allOrders.where((order) {
@@ -564,23 +758,52 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
         return status != 'return';
       }).toList();
       
-      final returns = allOrders.where((order) {
-        final status = (order['status'] ?? '').toString().toLowerCase();
-        // Handle both boolean true and numeric 1 (MySQL returns 1 for TRUE)
-        final adminAccepted = order['admin_accepted'] == true || 
-                              order['admin_accepted'] == 1 || 
-                              order['admin_accepted'] == 'true' || 
-                              order['admin_accepted'] == '1';
-        return status == 'return' && adminAccepted;
-      }).toList();
+      // 💾 Cache orders for fast return-only refresh
+      _cachedOrders = orders;
+
+      debugPrint('📦 Fetching RETURNS from API for store: $storeId');
+      // 🔥 CRITICAL FIX: Get returns from returned_products table (correct IDs!)
+      // This ensures returnData['id'] is from returned_products.id, not orders.id
+      final returns = await ApiService.getStoreReturns(storeId: storeId);
+      debugPrint('✅ Got ${returns.length} returns from API');
+      
+      debugPrint('📦 Loaded ${orders.length} orders, ${returns.length} returns');
       
       return {
         'orders': orders,
         'returns': returns,
       };
     } catch (e) {
-      debugPrint('Error loading all data: $e');
+      debugPrint('❌ Error loading all data: $e');
       return {'orders': [], 'returns': []};
+    }
+  }
+
+  /// ⚡ OPTIMIZED: Load returns ONLY (fast path for button refresh)
+  /// Uses cached orders + fresh returns for instant update
+  Future<Map<String, List<dynamic>>> _loadAllDataOptimized() async {
+    try {
+      final store = await ApiService.getUserStore();
+      final storeId = store?['id']?.toString();
+      debugPrint('⚡ _loadAllDataOptimized START (returns only) - storeId: $storeId');
+      
+      if (storeId == null) {
+        debugPrint('❌ storeId is null!');
+        return {'orders': _cachedOrders, 'returns': []};
+      }
+
+      // ⚡ SKIP orders - just load returns for instant update
+      debugPrint('📦 Fetching RETURNS ONLY for store: $storeId (⚡ fast path)');
+      final returns = await ApiService.getStoreReturns(storeId: storeId);
+      debugPrint('⚡ Got ${returns.length} returns (returns-only refresh = instant!)');
+      
+      return {
+        'orders': _cachedOrders,  // Use cached orders from previous load
+        'returns': returns,
+      };
+    } catch (e) {
+      debugPrint('❌ Error loading returns only: $e');
+      return {'orders': _cachedOrders, 'returns': []};
     }
   }
 
@@ -920,7 +1143,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _formatPrice(storeSubtotal, orderData['currency'] as String?),
+                                '\$${storeSubtotal.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -948,7 +1171,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _formatPrice(netStoreProfit, orderData['currency'] as String?),
+                                '\$${netStoreProfit.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -1018,15 +1241,13 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     bool isDark,
     int index,
   ) {
-    // For return orders, get product details from items[0] (returned_products)
-    final items = returnData['items'] as List? ?? [];
-    final returnItem = items.isNotEmpty ? items[0] as Map<String, dynamic> : {};
-    
-    final productName = returnItem['product_name'] ?? returnData['product_name'] ?? 'Unknown Product';
-    final reason = returnItem['return_reason'] ?? returnData['return_reason'] ?? 'No reason provided';
-    final requestedAt = returnItem['return_requested_at'] ?? returnData['return_requested_at'] ?? '';
-    final quantity = returnItem['quantity'] ?? returnData['quantity'] ?? 1;
-    final productImage = returnItem['product_image_url'] ?? returnData['product_image_url'];
+    final productName = returnData['product_name'] ?? 'Unknown Product';
+    final reason = returnData['return_reason'] ?? 'No reason provided';
+    final requestedAt = returnData['return_requested_at'] ?? '';
+    final quantity = returnData['quantity'] ?? 1;
+    final productImage = returnData['product_image_url'];
+    final returnId = returnData['id'] as int? ?? 0;
+    final isLoading = _loadingReturns[returnId] ?? false;
 
     return TweenAnimationBuilder<double>(
       duration: Duration(milliseconds: 300 + (index * 50)),
@@ -1227,6 +1448,26 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
+              
+              const SizedBox(height: 16),
+              
+              // 🔥 Receive Return Button (uses correct returned_products.id)
+              SizedBox(
+                width: double.infinity,
+                child: _buildReturnActionButton(
+                  'Receive Return',
+                  Icons.check_circle_outlined,
+                  Colors.green.shade600,
+                  isDark,
+                  isLoading: isLoading,
+                  onPressed: () {
+                    if (!isLoading) {
+                      debugPrint('🔥 Receiving return ID: $returnId (from returned_products table)');
+                      _receiveReturnOrder(returnId, context);
+                    }
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -1239,17 +1480,13 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     Map<String, dynamic> returnData,
     bool isDark,
   ) {
-    // Extract photos from the return item (items[0])
-    final items = returnData['items'] as List? ?? [];
-    final returnItem = items.isNotEmpty ? items[0] as Map<String, dynamic> : {};
-    
     final photos = {
-      'Top': returnItem['photo_top'] ?? returnData['photo_top'],
-      'Bottom': returnItem['photo_bottom'] ?? returnData['photo_bottom'],
-      'Left': returnItem['photo_left'] ?? returnData['photo_left'],
-      'Right': returnItem['photo_right'] ?? returnData['photo_right'],
-      'Front': returnItem['photo_front'] ?? returnData['photo_front'],
-      'Back': returnItem['photo_back'] ?? returnData['photo_back'],
+      'Top': returnData['photo_top'],
+      'Bottom': returnData['photo_bottom'],
+      'Left': returnData['photo_left'],
+      'Right': returnData['photo_right'],
+      'Front': returnData['photo_front'],
+      'Back': returnData['photo_back'],
     };
 
     final validPhotos = photos.entries
@@ -1399,6 +1636,70 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildReturnActionButton(
+    String label,
+    IconData icon,
+    Color color,
+    bool isDark, {
+    required bool isLoading,
+    required VoidCallback onPressed,
+  }) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      height: 48,
+      decoration: BoxDecoration(
+        color: isLoading 
+            ? (isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05))
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isLoading
+              ? Colors.grey.shade400
+              : color,
+          width: 2,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isLoading ? null : onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Center(
+            child: isLoading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.grey.shade400,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 18,
+                        color: color,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showModernQRModal(BuildContext context, String orderId, bool isDark) {
     showModalBottomSheet(
       context: context,
@@ -1526,94 +1827,83 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.9),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          int currentPage = initialIndex >= 0 ? initialIndex : 0;
-          pageController.addListener(() {
-            setState(() {
-              currentPage = pageController.page?.round() ?? 0;
-            });
-          });
-
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: EdgeInsets.zero,
-            child: Stack(
-              children: [
-                // Images
-                PageView.builder(
-                  controller: pageController,
-                  itemCount: photos.length,
-                  itemBuilder: (context, index) {
-                    final imageUrl = _buildImageUrl(photos[index].value);
-                    return InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 4.0,
-                      child: Center(
-                        child: Image.network(
-                          imageUrl,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.error_outline_rounded,
-                            color: Colors.white,
-                            size: 64,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                
-                // Close button
-                Positioned(
-                  top: 60,
-                  right: 24,
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                
-                // Photo indicator
-                Positioned(
-                  bottom: 40,
-                  left: 0,
-                  right: 0,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            // Images
+            PageView.builder(
+              controller: pageController,
+              itemCount: photos.length,
+              itemBuilder: (context, index) {
+                final imageUrl = _buildImageUrl(photos[index].value);
+                return InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
                   child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${photos[currentPage].key}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.error_outline_rounded,
+                        color: Colors.white,
+                        size: 64,
                       ),
                     ),
                   ),
-                ),
-              ],
+                );
+              },
             ),
-          );
-        },
+            
+            // Close button
+            Positioned(
+              top: 60,
+              right: 24,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            
+            // Photo indicator
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${photos[pageController.hasClients ? (pageController.page?.round() ?? 0) : 0].key}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1881,37 +2171,5 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     } catch (e) {
       return dateStr;
     }
-  }
-
-  /// Get currency symbol based on currency code
-  String _getCurrencySymbol(String? currencyCode) {
-    if (currencyCode == null) return '\$';
-    
-    switch (currencyCode.toUpperCase()) {
-      case 'USD':
-        return '\$';
-      case 'EUR':
-        return '€';
-      case 'TRY':
-        return '₺';
-      case 'SAR':
-        return 'ر.س';
-      case 'AED':
-        return 'د.إ';
-      case 'YER':
-        return 'ر.ي';
-      case 'CNY':
-        return '¥';
-      case 'KRW':
-        return '₩';
-      default:
-        return '\$';
-    }
-  }
-
-  /// Format price with correct currency symbol
-  String _formatPrice(double price, String? currencyCode) {
-    final symbol = _getCurrencySymbol(currencyCode);
-    return '$symbol${price.toStringAsFixed(2)}';
   }
 }
