@@ -2,7 +2,9 @@
 // Admin Returns Management - Clean, minimal, desktop-optimized
 
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../services/api_service.dart';
+import '../../services/reactive_sync_mixin.dart';
 
 class ReturnsManagementView extends StatefulWidget {
   const ReturnsManagementView({Key? key}) : super(key: key);
@@ -11,9 +13,22 @@ class ReturnsManagementView extends StatefulWidget {
   State<ReturnsManagementView> createState() => _ReturnsManagementViewState();
 }
 
-class _ReturnsManagementViewState extends State<ReturnsManagementView> {
+class _ReturnsManagementViewState extends State<ReturnsManagementView> with ReactiveSyncMixin {
   List<Map<String, dynamic>> _returnedProducts = [];
   bool _isLoading = true;
+
+  @override
+  String get reactiveChannel => 'admin:returns';
+
+  @override
+  void onReactiveUpdate(Map<String, dynamic> update) {
+    final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (mounted) {
+      setState(() {
+        _returnedProducts = newData;
+      });
+    }
+  }
 
   @override
   void initState() {

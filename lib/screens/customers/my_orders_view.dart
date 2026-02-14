@@ -3,12 +3,14 @@
 
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../state_management/auth_manager.dart';
 import '../../state_management/theme_manager.dart';
 import '../../services/api_service.dart';
+import '../../services/reactive_sync_mixin.dart';
 import 'return_request_dialog.dart';
 
 class MyOrdersView extends StatefulWidget {
@@ -18,14 +20,74 @@ class MyOrdersView extends StatefulWidget {
   State<MyOrdersView> createState() => _MyOrdersViewState();
 }
 
-class _MyOrdersViewState extends State<MyOrdersView> {
+class _MyOrdersViewState extends State<MyOrdersView> with ReactiveSyncMixin {
   late List<Order> orders = [];
   bool isLoading = true;
+  String? _customerId;
+
+  @override
+  String get reactiveChannel {
+    if (_customerId == null) return 'customer:orders:unknown';
+    return 'customer:orders:$_customerId';
+  }
+
+  @override
+  void onReactiveUpdate(Map<String, dynamic> update) {
+    final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final baseUrl = 'http://localhost:3000';
+
+    if (mounted) {
+      setState(() {
+        orders = newData.map((order) {
+          final items = (order['items'] as List?)?.map((item) {
+            String imageUrl = item['imageUrl'] ?? item['image_url'] ?? '';
+            if (imageUrl.isNotEmpty && imageUrl.startsWith('/')) {
+              imageUrl = '$baseUrl$imageUrl';
+            }
+            return OrderItem(
+              id: item['id'] ?? 0,
+              productId: item['product_id'] ?? 0,
+              name: item['name'] ?? 'Unknown Product',
+              imageUrl: imageUrl,
+              quantity: item['quantity'] ?? 1,
+              price: double.tryParse(item['price'].toString()) ?? 0.0,
+            );
+          }).toList() ?? [];
+          
+          return Order(
+            id: order['id'] ?? 0,
+            userId: order['user_id']?.toString() ?? '',
+            storeId: order['store_id']?.toString() ?? '',
+            storeName: order['store_name'] ?? 'Store',
+            totalPrice: double.tryParse(order['total_price'].toString()) ?? 0.0,
+            currency: order['currency'] ?? 'USD',
+            status: order['status'] ?? 'pending',
+            shippingAddress: order['shipping_address']?.toString() ?? 'N/A',
+            deliveredAt: DateTime.tryParse(order['delivered_at']?.toString() ?? '') ?? DateTime.now(),
+            items: items,
+          );
+        }).toList();
+        isLoading = false;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    // Get customer ID and initialize reactive sync
+    _initializeCustomerSync();
     _loadOrders();
+  }
+
+  Future<void> _initializeCustomerSync() async {
+    try {
+      final authManager = Provider.of<AuthManager>(context, listen: false);
+      _customerId = authManager.userProfile?['id']?.toString();
+      debugPrint('🔥 Customer Sync: customerId = $_customerId');
+    } catch (e) {
+      debugPrint('❌ Error getting customer ID: $e');
+    }
   }
 
   void _loadOrders() async {
@@ -69,6 +131,33 @@ class _MyOrdersViewState extends State<MyOrdersView> {
       });
     } catch (e) {
       setState(() => isLoading = false);
+    }
+  }
+
+  /// Get currency symbol based on currency code
+  String _getCurrencySymbol(String? currencyCode) {
+    if (currencyCode == null || currencyCode.isEmpty) return '\$'; // Default to USD
+    final code = currencyCode.toUpperCase();
+    switch (code) {
+      case 'USD': return '\$';
+      case 'EUR': return '€';
+      case 'GBP': return '£';
+      case 'JPY': return '¥';
+      case 'INR': return '₹';
+      case 'TRY': return '₺';
+      case 'AED': return 'د.إ';
+      case 'SAR': return 'ر.س';
+      case 'EGP': return '£';
+      case 'YER': return '﷼'; // Yemeni Rial
+      case 'OMR': return 'ر.ع.';
+      case 'QAR': return 'ر.ق';
+      case 'KWD': return 'د.ك';
+      case 'BHD': return 'د.ب';
+      case 'JOD': return 'د.ا';
+      case 'LBP': return '£';
+      case 'SYP': return '£';
+      case 'IQD': return 'ع.د';
+      default: return code; // Fallback: show currency code
     }
   }
 
@@ -306,7 +395,7 @@ class _MyOrdersViewState extends State<MyOrdersView> {
           Padding(
             padding: const EdgeInsets.all(28),
             child: order.items.isNotEmpty
-              ? _buildItemsHorizontalList(order.items, isDark)
+              ? _buildItemsHorizontalList(order.items, order.currency, isDark)
               : Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 32),
@@ -346,7 +435,7 @@ class _MyOrdersViewState extends State<MyOrdersView> {
             padding: const EdgeInsets.all(28),
             child: Column(
               children: [
-                _buildDetailRow('Total', '${order.currency} ${order.totalPrice.toStringAsFixed(2)}', isDark),
+                _buildDetailRow('Total', '${_getCurrencySymbol(order.currency)}${order.totalPrice.toStringAsFixed(2)}', isDark),
                 const SizedBox(height: 16),
                 _buildDetailRow('Delivered', DateFormat('MMM dd, yyyy').format(order.deliveredAt), isDark),
                 const SizedBox(height: 16),
@@ -365,7 +454,7 @@ class _MyOrdersViewState extends State<MyOrdersView> {
     );
   }
 
-  Widget _buildItemsHorizontalList(List<OrderItem> items, bool isDark) {
+  Widget _buildItemsHorizontalList(List<OrderItem> items, String currency, bool isDark) {
     return SizedBox(
       height: 200,
       child: ListView.builder(
@@ -374,13 +463,13 @@ class _MyOrdersViewState extends State<MyOrdersView> {
         itemCount: items.length,
         itemBuilder: (context, index) => Padding(
           padding: EdgeInsets.only(right: index < items.length - 1 ? 16 : 0),
-          child: _buildItemCard(items[index], isDark),
+          child: _buildItemCard(items[index], currency, isDark),
         ),
       ),
     );
   }
 
-  Widget _buildItemCard(OrderItem item, bool isDark) {
+  Widget _buildItemCard(OrderItem item, String currency, bool isDark) {
     return Container(
       width: 160,
       decoration: BoxDecoration(
@@ -487,7 +576,7 @@ class _MyOrdersViewState extends State<MyOrdersView> {
                       ),
                     ),
                     Text(
-                      '\$${item.price.toStringAsFixed(0)}',
+                      '${_getCurrencySymbol(currency)}${item.price.toStringAsFixed(0)}',
                       style: TextStyle(
                         fontFamily: 'TenorSans',
                         fontSize: 13,

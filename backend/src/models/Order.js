@@ -35,29 +35,28 @@ export class Order {
     try {
       const {
         userId, storeId, totalPrice, status, shippingAddress,
-        paymentMethod, deliveryOption, currency, items,
+        paymentMethod, deliveryOption, items,
       } = orderData;
 
       await connection.beginTransaction();
 
-      // Get currency from products if not provided, default to USD
-      let finalCurrency = currency || 'USD';
-      if (!currency) {
-        try {
-          const [currencyRows] = await connection.execute(
-            `SELECT COALESCE(p.currency, 'USD') as currency
-             FROM products p
-             WHERE p.store_id = ?
-             LIMIT 1`,
-            [storeId]
-          );
-          if (currencyRows.length > 0) {
-            finalCurrency = currencyRows[0].currency || 'USD';
-          }
-        } catch (e) {
-          logger.warn('Could not fetch currency from products, using USD');
-          finalCurrency = 'USD';
+      // 🔥 ALWAYS get currency from products, NOT from request body
+      // All products in same store have same currency
+      let finalCurrency = 'USD';
+      try {
+        const [currencyRows] = await connection.execute(
+          `SELECT COALESCE(p.currency, 'USD') as currency
+           FROM products p
+           WHERE p.store_id = ?
+           LIMIT 1`,
+          [storeId]
+        );
+        if (currencyRows.length > 0) {
+          finalCurrency = currencyRows[0].currency || 'USD';
         }
+      } catch (e) {
+        logger.warn('Could not fetch currency from products, using USD');
+        finalCurrency = 'USD';
       }
 
       const [result] = await connection.execute(
@@ -299,7 +298,9 @@ export class Order {
       // First get the orders for pagination with all necessary fields
       const sql = `
         SELECT SQL_NO_CACHE 
-          o.*, 
+          o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status, o.shipping_address,
+          o.payment_method, o.delivery_option, o.driver_id, o.created_at, o.updated_at,
+          o.driver_location, o.picked_up_at, o.delivered_at,
           s.name as store_name,
           s.latitude as store_latitude,
           s.longitude as store_longitude,

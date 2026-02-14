@@ -143,13 +143,47 @@ class ReactiveSyncManager extends EventEmitter {
 
       if (type === 'orders') {
         const [orders] = await connection.execute(
-          `SELECT id, store_id, status, total_amount, customer_name, userName, created_at, updated_at 
-           FROM orders 
-           WHERE store_id = ? AND status != 'return'
-           ORDER BY updated_at DESC 
+          `SELECT o.id, o.store_id, o.status, o.total_price, o.user_id,
+           u.display_name as customerName, u.phone as customerPhone,
+           o.created_at, o.updated_at 
+           FROM orders o
+           LEFT JOIN users u ON o.user_id = u.uid
+           WHERE o.store_id = ? AND o.status != 'return'
+           ORDER BY o.updated_at DESC 
            LIMIT 500`,
           [storeId]
         );
+
+        // 🔥 GET ITEMS FOR EACH ORDER (with product images!)
+        if (orders.length > 0) {
+          const orderIds = orders.map(o => o.id);
+          const placeholders = orderIds.map(() => '?').join(',');
+          
+          const [items] = await connection.execute(
+            `SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, 
+                    p.name as product_name, p.image_url
+             FROM order_items oi
+             LEFT JOIN products p ON oi.product_id = p.id
+             WHERE oi.order_id IN (${placeholders})`,
+            orderIds
+          );
+          
+          // Group items by order_id
+          const itemsByOrderId = {};
+          for (const item of items) {
+            if (!itemsByOrderId[item.order_id]) {
+              itemsByOrderId[item.order_id] = [];
+            }
+            itemsByOrderId[item.order_id].push(item);
+          }
+          
+          // Attach items to each order
+          for (const order of orders) {
+            order.items = itemsByOrderId[order.id] || [];
+          }
+        } else {
+          orders.forEach(o => o.items = []);
+        }
 
         // Compute hash for backpressure
         const hash = JSON.stringify(orders);
@@ -175,6 +209,224 @@ class ReactiveSyncManager extends EventEmitter {
               channel,
               subscribers: this.subscribers.get(channel)?.size || 0,
               dataRows: orders.length,
+            });
+          }
+        }
+      }
+
+      if (type === 'admin:returns') {
+        // ALL approved returns (for admin panel)
+        const [returns] = await connection.execute(
+          `SELECT id, store_id, admin_accepted, store_received, product_name, 
+           return_reason, updated_at, created_at 
+           FROM returned_products 
+           ORDER BY updated_at DESC 
+           LIMIT 1000`
+        );
+
+        const hash = JSON.stringify(returns);
+        const lastHash = this.lastHashes.get(channel);
+
+        if (hash !== lastHash) {
+          const lastTime = this.lastSync.get(channel) || 0;
+          const now = Date.now();
+
+          if (now - lastTime >= this.BACKPRESSURE_MIN) {
+            this._broadcastToChannel(channel, {
+              type: 'admin:returns:delta',
+              channel,
+              data: returns,
+              timestamp: now,
+              count: returns.length,
+            });
+
+            this.lastHashes.set(channel, hash);
+            this.lastSync.set(channel, now);
+
+            logger.debug(`✨ ADMIN RETURNS DELTA EMITTED`, {
+              channel,
+              dataRows: returns.length,
+            });
+          }
+        }
+      }
+
+      if (type === 'admin:orders') {
+        // ALL orders (for admin panel)
+        const [orders] = await connection.execute(
+          `SELECT o.id, o.store_id, o.status, o.total_price, o.user_id,
+           u.display_name as customerName, u.phone as customerPhone,
+           o.created_at, o.updated_at 
+           FROM orders o
+           LEFT JOIN users u ON o.user_id = u.uid
+           ORDER BY o.updated_at DESC 
+           LIMIT 1000`
+        );
+
+        // 🔥 GET ITEMS FOR EACH ORDER (with product images!)
+        if (orders.length > 0) {
+          const orderIds = orders.map(o => o.id);
+          const placeholders = orderIds.map(() => '?').join(',');
+          
+          const [items] = await connection.execute(
+            `SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, 
+                    p.name as product_name, p.image_url
+             FROM order_items oi
+             LEFT JOIN products p ON oi.product_id = p.id
+             WHERE oi.order_id IN (${placeholders})`,
+            orderIds
+          );
+          
+          // Group items by order_id
+          const itemsByOrderId = {};
+          for (const item of items) {
+            if (!itemsByOrderId[item.order_id]) {
+              itemsByOrderId[item.order_id] = [];
+            }
+            itemsByOrderId[item.order_id].push(item);
+          }
+          
+          // Attach items to each order
+          for (const order of orders) {
+            order.items = itemsByOrderId[order.id] || [];
+          }
+        } else {
+          orders.forEach(o => o.items = []);
+        }
+
+        const hash = JSON.stringify(orders);
+        const lastHash = this.lastHashes.get(channel);
+
+        if (hash !== lastHash) {
+          const lastTime = this.lastSync.get(channel) || 0;
+          const now = Date.now();
+
+          if (now - lastTime >= this.BACKPRESSURE_MIN) {
+            this._broadcastToChannel(channel, {
+              type: 'admin:orders:delta',
+              channel,
+              data: orders,
+              timestamp: now,
+              count: orders.length,
+            });
+
+            this.lastHashes.set(channel, hash);
+            this.lastSync.set(channel, now);
+
+            logger.debug(`✨ ADMIN ORDERS DELTA EMITTED`, {
+              channel,
+              dataRows: orders.length,
+            });
+          }
+        }
+      }
+
+      if (type === 'customer' && id) {
+        // Customer orders (customer:orders:123)
+        const [orders] = await connection.execute(
+          `SELECT o.id, o.store_id, o.status, o.total_price, o.user_id,
+           o.currency, o.created_at, o.updated_at 
+           FROM orders o
+           WHERE o.user_id = ?
+           ORDER BY o.updated_at DESC 
+           LIMIT 500`,
+          [id]
+        );
+
+        // 🔥 GET ITEMS FOR EACH ORDER (with product images!)
+        if (orders.length > 0) {
+          const orderIds = orders.map(o => o.id);
+          const placeholders = orderIds.map(() => '?').join(',');
+          
+          const [items] = await connection.execute(
+            `SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, 
+                    p.name as product_name, p.image_url
+             FROM order_items oi
+             LEFT JOIN products p ON oi.product_id = p.id
+             WHERE oi.order_id IN (${placeholders})`,
+            orderIds
+          );
+          
+          // Group items by order_id
+          const itemsByOrderId = {};
+          for (const item of items) {
+            if (!itemsByOrderId[item.order_id]) {
+              itemsByOrderId[item.order_id] = [];
+            }
+            itemsByOrderId[item.order_id].push(item);
+          }
+          
+          // Attach items to each order
+          for (const order of orders) {
+            order.items = itemsByOrderId[order.id] || [];
+          }
+        } else {
+          orders.forEach(o => o.items = []);
+        }
+
+        const hash = JSON.stringify(orders);
+        const lastHash = this.lastHashes.get(channel);
+
+        if (hash !== lastHash) {
+          const lastTime = this.lastSync.get(channel) || 0;
+          const now = Date.now();
+
+          if (now - lastTime >= this.BACKPRESSURE_MIN) {
+            this._broadcastToChannel(channel, {
+              type: 'customer:orders:delta',
+              channel,
+              data: orders,
+              timestamp: now,
+              count: orders.length,
+            });
+
+            this.lastHashes.set(channel, hash);
+            this.lastSync.set(channel, now);
+
+            logger.debug(`✨ CUSTOMER ORDERS DELTA EMITTED`, {
+              channel,
+              customerId: id,
+              dataRows: orders.length,
+            });
+          }
+        }
+      }
+
+      if (type === 'delivery' && id) {
+        // Delivery requests (delivery:requests:driverId)
+        const [requests] = await connection.execute(
+          `SELECT id, driver_id, status, from_location, to_location, 
+           order_id, created_at, updated_at 
+           FROM delivery_requests 
+           WHERE driver_id = ?
+           ORDER BY updated_at DESC 
+           LIMIT 500`,
+          [id]
+        );
+
+        const hash = JSON.stringify(requests);
+        const lastHash = this.lastHashes.get(channel);
+
+        if (hash !== lastHash) {
+          const lastTime = this.lastSync.get(channel) || 0;
+          const now = Date.now();
+
+          if (now - lastTime >= this.BACKPRESSURE_MIN) {
+            this._broadcastToChannel(channel, {
+              type: 'delivery:requests:delta',
+              channel,
+              data: requests,
+              timestamp: now,
+              count: requests.length,
+            });
+
+            this.lastHashes.set(channel, hash);
+            this.lastSync.set(channel, now);
+
+            logger.debug(`✨ DELIVERY REQUESTS DELTA EMITTED`, {
+              channel,
+              driverId: id,
+              dataRows: requests.length,
             });
           }
         }

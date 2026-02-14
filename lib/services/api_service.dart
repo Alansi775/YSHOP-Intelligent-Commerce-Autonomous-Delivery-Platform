@@ -895,7 +895,6 @@ class ApiService {
     required List<Map<String, dynamic>> items,
     String? paymentMethod,
     String? deliveryOption,
-    String? currency,
   }) async {
     final response = await _request('POST', '/orders', body: {
       'storeId': storeId,
@@ -904,7 +903,7 @@ class ApiService {
       'items': items,
       if (paymentMethod != null) 'paymentMethod': paymentMethod,
       if (deliveryOption != null) 'deliveryOption': deliveryOption,
-      if (currency != null) 'currency': currency,
+      // 🔥 Currency comes from products table in backend, never from frontend
     });
     return response['data'];
   }

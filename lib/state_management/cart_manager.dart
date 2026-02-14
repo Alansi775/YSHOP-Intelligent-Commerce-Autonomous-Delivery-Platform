@@ -111,6 +111,7 @@ class CartManager with ChangeNotifier {
       final productImage = product is Map ? product['image_url'] : product?.imageUrl ?? '';
       final productStoreId = product is Map ? product['store_id'] : product?.storeId ?? '';
       final productStock = product is Map ? product['stock'] : product?.stock ?? 999999;
+      final productCurrency = product is Map ? product['currency'] : product?.currency ?? 'USD';
 
       final newItem = {
         'id': null, // Will be set by backend
@@ -121,6 +122,7 @@ class CartManager with ChangeNotifier {
         'image_url': productImage,
         'store_id': productStoreId,
         'stock': productStock,
+        'currency': productCurrency,
       };
 
       print('🛒 CartManager.addToCart - OPTIMISTIC: adding to local cart');

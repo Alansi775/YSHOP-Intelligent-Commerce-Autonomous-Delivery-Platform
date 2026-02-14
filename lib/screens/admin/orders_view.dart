@@ -1,8 +1,10 @@
 // lib/screens/admin/orders_view.dart
 
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
+import '../../services/reactive_sync_mixin.dart';
 import 'common.dart';
 import 'admin_order_map_view.dart';
 import 'widgets.dart' as w;
@@ -20,7 +22,7 @@ class OrdersManagementView extends StatefulWidget {
   State<OrdersManagementView> createState() => _OrdersManagementViewState();
 }
 
-class _OrdersManagementViewState extends State<OrdersManagementView> {
+class _OrdersManagementViewState extends State<OrdersManagementView> with ReactiveSyncMixin {
   List<OrderModel> _orders = [];
   bool _isLoading = true;
   String _filterStatus = 'all';
@@ -30,6 +32,34 @@ class _OrdersManagementViewState extends State<OrdersManagementView> {
   double _appRevenue = 0.0;
   double _storeRevenue = 0.0;
   double _driverRevenue = 0.0;
+
+  @override
+  String get reactiveChannel => 'admin:orders';
+
+  @override
+  void onReactiveUpdate(Map<String, dynamic> update) {
+    final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    
+    if (mounted) {
+      setState(() {
+        _orders = newData.map((o) => OrderModel.fromMap(o)).toList();
+        
+        // Recalculate revenue
+        double total = 0.0, app = 0.0, driver = 0.0, store = 0.0;
+        for (final order in _orders) {
+          total += order.totalPrice;
+          app += RevenueCalculator.calculateAppRevenue(order.totalPrice);
+          driver += RevenueCalculator.calculateDriverRevenue(order.totalPrice);
+          store += RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice);
+        }
+        
+        _totalRevenue = total;
+        _appRevenue = app;
+        _driverRevenue = driver;
+        _storeRevenue = store;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -88,6 +118,33 @@ class _OrdersManagementViewState extends State<OrdersManagementView> {
       context: context,
       builder: (_) => _OrderDetailsDialog(order: order),
     );
+  }
+
+  /// Get currency symbol based on currency code
+  String getCurrencySymbol(String? currencyCode) {
+    if (currencyCode == null || currencyCode.isEmpty) return '\$'; // Default to USD
+    final code = currencyCode.toUpperCase();
+    switch (code) {
+      case 'USD': return '\$';
+      case 'EUR': return '€';
+      case 'GBP': return '£';
+      case 'JPY': return '¥';
+      case 'INR': return '₹';
+      case 'TRY': return '₺';
+      case 'AED': return 'د.إ';
+      case 'SAR': return 'ر.س';
+      case 'EGP': return '£';
+      case 'YER': return '﷼'; // Yemeni Rial
+      case 'OMR': return 'ر.ع.';
+      case 'QAR': return 'ر.ق';
+      case 'KWD': return 'د.ك';
+      case 'BHD': return 'د.ب';
+      case 'JOD': return 'د.ا';
+      case 'LBP': return '£';
+      case 'SYP': return '£';
+      case 'IQD': return 'ع.د';
+      default: return code; // Fallback: show currency code
+    }
   }
 
   @override

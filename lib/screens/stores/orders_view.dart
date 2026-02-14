@@ -43,6 +43,10 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
   // Cache orders to avoid reloading during return refresh
   List<dynamic> _cachedOrders = [];
   
+  // 🔥 STORE CURRENT DATA (avoid FutureBuilder flickering!)
+  Map<String, List<dynamic>> _currentData = {'orders': [], 'returns': []};
+  bool _isLoadingInitial = true;
+  
   // 🔥 Reactive Sync subscription
   late StreamSubscription<Map<String, dynamic>> _reactiveSyncSubscription;
   String? _storeId;
@@ -74,6 +78,15 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       
       if (_storeId == null) return;
 
+      // Load initial data ONCE
+      final initialData = await _loadAllData();
+      if (mounted) {
+        setState(() {
+          _currentData = initialData;
+          _isLoadingInitial = false;
+        });
+      }
+
       // Initialize Socket.io (first time only)
       if (!reactiveSyncService.isConnected) {
         reactiveSyncService.initialize(serverUrl: 'http://localhost:3000');
@@ -97,14 +110,13 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
           
           if (mounted) {
             setState(() {
-              _dataRefreshCounter++;
               final newReturns = (update['data'] as List?)
                       ?.cast<Map<String, dynamic>>() ??
                   [];
-              _allDataFuture = Future.value({
-                'orders': _cachedOrders,
+              _currentData = {
+                'orders': _currentData['orders'] ?? [],
                 'returns': newReturns,
-              });
+              };
             });
           }
         }
@@ -116,17 +128,15 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
           
           if (mounted) {
             setState(() {
-              _dataRefreshCounter++;
               final newOrders = (update['data'] as List?)
                       ?.cast<Map<String, dynamic>>() ??
                   [];
-              // Cache new orders for next returns-only update
+              // Cache new orders for returns-only updates
               _cachedOrders = newOrders;
-              _allDataFuture = Future.value({
+              _currentData = {
                 'orders': newOrders,
-                'returns': reactiveSyncService.getChannelData('returns:$_storeId')
-                    as List<dynamic>,
-              });
+                'returns': _currentData['returns'] ?? [],
+              };
             });
           }
         }
@@ -217,15 +227,36 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
   Future<void> _updateOrderStatus(String orderId, String newStatus, BuildContext context) async {
     try {
       HapticFeedback.mediumImpact();
+      
+      // Update the order in the data immediately (optimistic update)
+      if (mounted) {
+        setState(() {
+          // Update orders list with new status
+          for (var i = 0; i < _currentData['orders']!.length; i++) {
+            if (_currentData['orders']![i]['id'].toString() == orderId) {
+              _currentData['orders']![i]['status'] = newStatus;
+              break;
+            }
+          }
+        });
+      }
+      
+      // Then sync with backend
       await ApiService.updateOrderStatus(orderId, newStatus);
-      setState(() => _ordersFuture = _loadOrders());
 
       if (context.mounted) {
         _showSuccessSnackBar(context, 'Order #$orderId updated to ${newStatus.toUpperCase()}');
       }
     } catch (e) {
+      debugPrint('Error updating order: $e');
       if (context.mounted) {
-        _showErrorSnackBar(context, 'Failed to update order');
+        _showErrorSnackBar(context, 'Failed to update order: $e');
+        // Reload to revert optimistic update
+        if (mounted) {
+          setState(() {
+            _allDataFuture = _loadAllData();
+          });
+        }
       }
     }
   }
@@ -298,6 +329,93 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     return DateTime.now();
   }
 
+  /// Get currency symbol based on currency code
+  String _getCurrencySymbol(String? currencyCode) {
+    if (currencyCode == null || currencyCode.isEmpty) return '₺'; // Default to TRY
+    final code = currencyCode.toUpperCase();
+    switch (code) {
+      case 'USD': return '\$';
+      case 'EUR': return '€';
+      case 'GBP': return '£';
+      case 'JPY': return '¥';
+      case 'INR': return '₹';
+      case 'TRY': return '₺';
+      case 'AED': return 'د.إ';
+      case 'SAR': return 'ر.س';
+      case 'EGP': return '£';
+      case 'YER': return '﷼'; // Yemeni Rial
+      case 'OMR': return 'ر.ع.';
+      case 'QAR': return 'ر.ق';
+      case 'KWD': return 'د.ك';
+      case 'BHD': return 'د.ب';
+      case 'JOD': return 'د.ا';
+      case 'LBP': return '£';
+      case 'SYP': return '£';
+      case 'IQD': return 'ع.د';
+      default: return code; // Fallback: show currency code
+    }
+  }
+
+  /// 💰 Calculate profit from orders and returns
+  Map<String, dynamic> _calculateProfit() {
+    final orders = _currentData['orders'] ?? [];
+    final returns = _currentData['returns'] ?? [];
+    
+    // Get the first order's currency (all orders should use same currency per store)
+    String storeCurrency = 'USD';
+    for (var order in orders) {
+      final status = (order['status'] ?? '').toString().toLowerCase();
+      if (status != 'return') {
+        final currency = (order['currency'] ?? '').toString().trim();
+        if (currency.isNotEmpty) {
+          storeCurrency = currency;
+          break;
+        }
+      }
+    }
+    
+    debugPrint('💰 CALCULATING PROFIT: ${orders.length} orders, store currency=$storeCurrency');
+    
+    double totalRevenue = 0;
+    
+    // Calculate revenue from ALL orders (except 'return' status)
+    for (var order in orders) {
+      final status = (order['status'] ?? '').toString().toLowerCase();
+      // Try both 'total_price' (from backend) and 'total' (legacy)
+      final total = double.tryParse(order['total_price']?.toString() ?? order['total']?.toString() ?? '0') ?? 0;
+      
+      // Count all orders (they all have real payment)
+      if (status != 'return' && total > 0) {
+        totalRevenue += total;
+        debugPrint('  ✅ Order total: $total');
+      }
+    }
+    
+    debugPrint('💵 Total revenue: $totalRevenue $storeCurrency');
+    
+    // Calculate profit at 75%
+    double totalProfit = totalRevenue * 0.75;
+    
+    // Deduct returns
+    double returnsDeduction = 0;
+    for (var returnItem in returns) {
+      final returnTotal = double.tryParse(returnItem['refund_amount'].toString()) ?? 0;
+      returnsDeduction += returnTotal;
+    }
+    
+    final finalProfit = totalProfit - returnsDeduction;
+    
+    debugPrint('💰 Final profit: $finalProfit (profit=$totalProfit, returns_deduction=$returnsDeduction)');
+    
+    return {
+      'storeCurrency': storeCurrency,
+      'totalRevenue': totalRevenue,
+      'totalProfit': totalProfit,
+      'returnsDeduction': returnsDeduction,
+      'finalProfit': finalProfit,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -318,6 +436,11 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
           // Search Bar
           SliverToBoxAdapter(
             child: _buildSearchBar(theme, isDark),
+          ),
+          
+          // 💰 Profit Tracker
+          SliverToBoxAdapter(
+            child: _buildProfitTracker(theme, isDark),
           ),
           
           // Smart Combined List
@@ -556,132 +679,316 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSmartList(ThemeData theme, bool isDark) {
-    return FutureBuilder<Map<String, List<dynamic>>>(
-      key: ValueKey(_dataRefreshCounter),  // Force rebuild when counter changes
-      future: _allDataFuture,  // ✅ استخدم الـ variable الموجود (مرة واحدة فقط!)
-      builder: (context, snapshot) {
-        // Show loading state IMMEDIATELY while fetching new data
-        if (snapshot.connectionState == ConnectionState.waiting && _dataRefreshCounter > 0) {
-          return SizedBox(
-            height: 400,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(
+  /// 💰 Build profit tracker widget
+  Widget _buildProfitTracker(ThemeData theme, bool isDark) {
+    final profitData = _calculateProfit();
+    final storeCurrency = profitData['storeCurrency'] as String;
+    final totalRevenue = profitData['totalRevenue'] as double;
+    final totalProfit = profitData['totalProfit'] as double;
+    final returnsDeduction = profitData['returnsDeduction'] as double;
+    final finalProfit = profitData['finalProfit'] as double;
+    
+    final currencySymbol = _getCurrencySymbol(storeCurrency);
+    
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: kMaxWidth),
+        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.08),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(
+                  Icons.trending_up_rounded,
+                  size: 22,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Earnings Overview',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : Colors.black,
-                    strokeWidth: 2,
+                    letterSpacing: -0.3,
                   ),
-                  const SizedBox(height: 16),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            // Revenue section
+            if (totalRevenue > 0)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'Updating...',
+                    'Total Revenue',
                     style: TextStyle(
-                      color: isDark ? Colors.white70 : Colors.black87,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white60 : Colors.black.withOpacity(0.6),
+                      letterSpacing: 0.3,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.12)
+                          : Colors.black.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$currencySymbol${totalRevenue.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                 ],
               ),
+            
+            // Separator
+            Divider(
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.08),
+              height: 1,
             ),
-          );
-        }
-        
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return SizedBox(
-            height: 400,
-            child: Center(
-              child: CircularProgressIndicator(
+            const SizedBox(height: 16),
+            
+            // Profit Details
+            Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Your Profit (75%)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                      ),
+                    ),
+                    Text(
+                      '$currencySymbol${totalProfit.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                if (returnsDeduction > 0) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Minus Returns',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.white60 : Colors.black.withOpacity(0.6),
+                        ),
+                      ),
+                      Text(
+                        '−$currencySymbol${returnsDeduction.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                
+                const SizedBox(height: 16),
+                Divider(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.black.withOpacity(0.08),
+                  height: 1,
+                ),
+                const SizedBox(height: 16),
+                
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Final Amount',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    Text(
+                      '$currencySymbol${finalProfit.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSmartList(ThemeData theme, bool isDark) {
+    // 🔥 NO FutureBuilder - use stored data to avoid flickering!
+    if (_isLoadingInitial) {
+      return SizedBox(
+        height: 400,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
                 color: isDark ? Colors.white : Colors.black,
                 strokeWidth: 2,
               ),
-            ),
-          );
-        }
-        
-        if (snapshot.hasError) {
-          return _buildErrorState('Error loading data', isDark);
-        }
-        
-        final allOrders = snapshot.data?['orders'] ?? [];
-        final allReturns = snapshot.data?['returns'] ?? [];
-        
-        // Apply search filter
-        final filteredOrders = allOrders.where((order) {
-          final orderId = (order['id'] ?? '').toString().toLowerCase();
-          final name = (order['customerName'] ?? order['userName'] ?? '').toString().toLowerCase();
-          final status = (order['status'] ?? '').toString().toLowerCase();
-          
-          if (status == 'return') return false;
-          if (_searchQuery.isEmpty) return true;
-          return orderId.contains(_searchQuery) || name.contains(_searchQuery);
-        }).toList();
-
-        final filteredReturns = allReturns.where((returnItem) {
-          if (_searchQuery.isEmpty) return true;
-          final productName = (returnItem['product_name'] ?? '').toString().toLowerCase();
-          return productName.contains(_searchQuery);
-        }).toList();
-
-        // Apply filter mode
-        List<Widget> items = [];
-        
-        if (_filterMode == 'all' || _filterMode == 'orders') {
-          if (filteredOrders.isNotEmpty) {
-            // Orders Section
-            if (_filterMode == 'all' && filteredReturns.isNotEmpty) {
-              items.add(_buildSectionHeader('Orders', filteredOrders.length, Icons.shopping_bag_outlined, isDark));
-            }
-            
-            for (int i = 0; i < filteredOrders.length; i++) {
-              final order = filteredOrders[i] as Map<String, dynamic>;
-              final orderId = (order['id'] ?? '').toString();
-              items.add(_buildModernOrderCard(context, orderId, order, theme, isDark, i));
-            }
-          }
-        }
-        
-        if (_filterMode == 'all' || _filterMode == 'returns') {
-          if (filteredReturns.isNotEmpty) {
-            // Returns Section
-            if (_filterMode == 'all' && filteredOrders.isNotEmpty) {
-              items.add(_buildSectionHeader('Returns', filteredReturns.length, Icons.assignment_return_rounded, isDark));
-            }
-            
-            for (int i = 0; i < filteredReturns.length; i++) {
-              final returnData = filteredReturns[i] as Map<String, dynamic>;
-              items.add(_buildModernReturnCard(context, returnData, theme, isDark, i));
-            }
-          }
-        }
-
-        if (items.isEmpty) {
-          String emptyTitle = 'No items found';
-          String emptySubtitle = 'Try adjusting your filters';
-          IconData emptyIcon = Icons.inbox_rounded;
-          
-          if (_filterMode == 'orders') {
-            emptyTitle = 'No orders found';
-            emptySubtitle = 'Your orders will appear here';
-            emptyIcon = Icons.receipt_long_rounded;
-          } else if (_filterMode == 'returns') {
-            emptyTitle = 'No return requests';
-            emptySubtitle = 'All return requests have been processed';
-            emptyIcon = Icons.assignment_return_rounded;
-          }
-          
-          return _buildEmptyState(emptyTitle, emptySubtitle, emptyIcon, isDark);
-        }
-
-        return Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: kMaxWidth),
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: items,
-            ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading orders...',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      );
+    }
+
+    final allOrders = _currentData['orders'] ?? [];
+    final allReturns = _currentData['returns'] ?? [];
+    
+    // Apply search filter
+    final filteredOrders = allOrders.where((order) {
+      final orderId = (order['id'] ?? '').toString().toLowerCase();
+      final name = (order['customerName'] ?? order['userName'] ?? '').toString().toLowerCase();
+      final status = (order['status'] ?? '').toString().toLowerCase();
+      
+      if (status == 'return') return false;
+      if (_searchQuery.isEmpty) return true;
+      return orderId.contains(_searchQuery) || name.contains(_searchQuery);
+    }).toList();
+
+    final filteredReturns = allReturns.where((returnItem) {
+      if (_searchQuery.isEmpty) return true;
+      final productName = (returnItem['product_name'] ?? '').toString().toLowerCase();
+      return productName.contains(_searchQuery);
+    }).toList();
+
+    // Apply filter mode
+    List<Widget> items = [];
+    
+    if (_filterMode == 'all' || _filterMode == 'orders') {
+      if (filteredOrders.isNotEmpty) {
+        // Orders Section
+        if (_filterMode == 'all' && filteredReturns.isNotEmpty) {
+          items.add(_buildSectionHeader('Orders', filteredOrders.length, Icons.shopping_bag_outlined, isDark));
+        }
+        
+        for (int i = 0; i < filteredOrders.length; i++) {
+          final order = filteredOrders[i] as Map<String, dynamic>;
+          final orderId = (order['id'] ?? '').toString();
+          items.add(_buildModernOrderCard(context, orderId, order, theme, isDark, i));
+        }
+      }
+    }
+    
+    if (_filterMode == 'all' || _filterMode == 'returns') {
+      if (filteredReturns.isNotEmpty) {
+        // Returns Section
+        if (_filterMode == 'all' && filteredOrders.isNotEmpty) {
+          items.add(_buildSectionHeader('Returns', filteredReturns.length, Icons.assignment_return_rounded, isDark));
+        }
+        
+        for (int i = 0; i < filteredReturns.length; i++) {
+          final returnData = filteredReturns[i] as Map<String, dynamic>;
+          
+          // Add currency from the parent order
+          if (returnData['order_id'] != null) {
+            final orderId = returnData['order_id'].toString();
+            final parentOrder = allOrders.firstWhere(
+              (o) => o['id'].toString() == orderId,
+              orElse: () => null,
+            );
+            if (parentOrder != null) {
+              returnData['product_currency'] = parentOrder['currency'] ?? 'USD';
+            }
+          }
+          
+          items.add(_buildModernReturnCard(context, returnData, theme, isDark, i));
+        }
+      }
+    }
+
+    if (items.isEmpty) {
+      String emptyTitle = 'No items found';
+      String emptySubtitle = 'Try adjusting your filters';
+      IconData emptyIcon = Icons.inbox_rounded;
+      
+      if (_filterMode == 'orders') {
+        emptyTitle = 'No orders found';
+        emptySubtitle = 'Your orders will appear here';
+        emptyIcon = Icons.receipt_long_rounded;
+      } else if (_filterMode == 'returns') {
+        emptyTitle = 'No return requests';
+        emptySubtitle = 'All return requests have been processed';
+        emptyIcon = Icons.assignment_return_rounded;
+      }
+      
+      return _buildEmptyState(emptyTitle, emptySubtitle, emptyIcon, isDark);
+    }
+
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: kMaxWidth),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: items,
+        ),
+      ),
     );
   }
 
@@ -911,12 +1218,20 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     final netStoreProfit = storeSubtotal - commission;
     final statusColor = _getStatusColor(status);
 
-    final firstItemImage = items.isNotEmpty 
-        ? (items.first['imageUrl'] ?? items.first['image_url'] ?? items.first['image'] ?? items.first['photo']) as String? 
-        : null;
-    final String? resolvedFirstImage = firstItemImage != null && firstItemImage.isNotEmpty 
-        ? _resolveImageUrl(firstItemImage) 
-        : null;
+    // 🔥 Get images for MULTIPLE items (first 2-3) for preview grid
+    final List<String> itemImages = [];
+    for (var item in items.take(3)) {
+      final img = (item['imageUrl'] ?? item['image_url'] ?? item['image'] ?? item['photo']) as String?;
+      if (img != null && img.isNotEmpty) {
+        final resolved = _resolveImageUrl(img);
+        if (resolved.isNotEmpty) {
+          itemImages.add(resolved);
+        }
+      }
+    }
+    
+    // Fallback: single image for backward compatibility
+    final String? resolvedFirstImage = itemImages.isNotEmpty ? itemImages.first : null;
 
     // Driver info
     final Map<String, dynamic>? driverMap = orderData['driver'] is Map<String, dynamic> 
@@ -991,44 +1306,82 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                     // Header
                     Row(
                       children: [
-                        if (resolvedFirstImage != null && resolvedFirstImage.isNotEmpty)
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              color: isDark 
-                                  ? Colors.white.withOpacity(0.05)
-                                  : Colors.black.withOpacity(0.03),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: CachedNetworkImage(
-                                imageUrl: resolvedFirstImage,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: isDark ? Colors.white24 : Colors.black12,
+                        // 🔥 Horizontal Image List (compact for many items)
+                        if (itemImages.isNotEmpty)
+                          SizedBox(
+                            height: 48,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              shrinkWrap: true,
+                              itemCount: itemImages.length,
+                              separatorBuilder: (_, __) => const SizedBox(width: 6),
+                              itemBuilder: (context, index) {
+                                // Show individual images or count if more
+                                if (index < 3) {
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: CachedNetworkImage(
+                                      imageUrl: itemImages[index],
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => Container(
+                                        color: isDark 
+                                            ? Colors.white.withOpacity(0.05)
+                                            : Colors.black.withOpacity(0.03),
+                                        child: Center(
+                                          child: SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 1,
+                                              color: isDark ? Colors.white24 : Colors.black12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) => Container(
+                                        color: isDark 
+                                            ? Colors.white.withOpacity(0.05)
+                                            : Colors.black.withOpacity(0.03),
+                                        child: Icon(
+                                          Icons.shopping_bag_outlined,
+                                          size: 16,
+                                          color: isDark ? Colors.white24 : Colors.black26,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                errorWidget: (context, url, error) => Icon(
-                                  Icons.shopping_bag_outlined,
-                                  color: isDark ? Colors.white24 : Colors.black26,
-                                ),
-                              ),
+                                  );
+                                } else if (index == 3 && itemImages.length > 3) {
+                                  // "+N" badge for remaining items
+                                  return Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade400,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '+${itemImages.length - 3}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
                             ),
                           )
                         else
                           Container(
-                            width: 56,
-                            height: 56,
+                            height: 48,
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(8),
                               color: isDark 
                                   ? Colors.white.withOpacity(0.05)
                                   : Colors.black.withOpacity(0.03),
@@ -1036,6 +1389,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                             child: Icon(
                               Icons.shopping_bag_outlined,
                               color: isDark ? Colors.white24 : Colors.black26,
+                              size: 20,
                             ),
                           ),
                         const SizedBox(width: 16),
@@ -1143,7 +1497,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '\$${storeSubtotal.toStringAsFixed(2)}',
+                                '${_getCurrencySymbol(orderData['currency'])}${storeSubtotal.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -1171,7 +1525,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '\$${netStoreProfit.toStringAsFixed(2)}',
+                                '${_getCurrencySymbol(orderData['currency'])}${netStoreProfit.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -1242,6 +1596,8 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     int index,
   ) {
     final productName = returnData['product_name'] ?? 'Unknown Product';
+    final productPrice = double.tryParse(returnData['product_price']?.toString() ?? '0') ?? 0.0;
+    final productCurrency = returnData['product_currency'] ?? 'USD';
     final reason = returnData['return_reason'] ?? 'No reason provided';
     final requestedAt = returnData['return_requested_at'] ?? '';
     final quantity = returnData['quantity'] ?? 1;
@@ -1338,6 +1694,34 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_getCurrencySymbol(productCurrency)}${productPrice.toStringAsFixed(2)} × $quantity = ${_getCurrencySymbol(productCurrency)}${(productPrice * quantity).toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.white70 : Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.green.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Text(
+                            'Refund: ${_getCurrencySymbol(productCurrency)}${(productPrice * quantity * 0.75).toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade600,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Container(
@@ -1604,6 +1988,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: outlined ? Colors.transparent : color,
             borderRadius: BorderRadius.circular(12),
@@ -1612,24 +1997,31 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
               width: 1.5,
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: outlined ? color : Colors.white,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: outlined ? color : Colors.white,
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: outlined 
+                    ? color 
+                    : (color.computeLuminance() > 0.5 ? Colors.black : Colors.white),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: outlined 
+                      ? color 
+                      : (color.computeLuminance() > 0.5 ? Colors.black : Colors.white),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1823,6 +2215,16 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     final PageController pageController = PageController(
       initialPage: initialIndex >= 0 ? initialIndex : 0,
     );
+    final ValueNotifier<int> currentIndexNotifier = ValueNotifier<int>(
+      initialIndex >= 0 ? initialIndex : 0,
+    );
+
+    // Listen to page changes
+    pageController.addListener(() {
+      if (pageController.hasClients) {
+        currentIndexNotifier.value = pageController.page?.round() ?? 0;
+      }
+    });
 
     showDialog(
       context: context,
@@ -1876,29 +2278,34 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
               ),
             ),
             
-            // Photo indicator
+            // Photo indicator with correct label
             Positioned(
               bottom: 40,
               left: 0,
               right: 0,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${photos[pageController.hasClients ? (pageController.page?.round() ?? 0) : 0].key}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                child: ValueListenableBuilder<int>(
+                  valueListenable: currentIndexNotifier,
+                  builder: (context, currentIndex, child) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        photos[currentIndex].key,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1965,56 +2372,231 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                 
                 const SizedBox(height: 24),
                 
-                // Store info
-                if (imageUrl != null && imageUrl.isNotEmpty)
-                  Row(
+                // 🔥 ORDER ITEMS LIST (ALL PRODUCTS)
+                Text(
+                  'Items',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // Items List
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark 
+                        ? Colors.white.withOpacity(0.03)
+                        : Colors.black.withOpacity(0.02),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        ...(orderData['items'] as List<dynamic>? ?? []).map((item) {
+                          final itemName = item['name'] ?? item['product_name'] ?? 'Unknown Product';
+                          final quantity = item['quantity'] ?? 1;
+                          final price = double.tryParse(item['price']?.toString() ?? '0') ?? 0.0;
+                          final itemTotal = price * quantity;
+                          final imageUrl = item['imageUrl'] ?? item['image_url'] ?? '';
+                          
+                          return Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    // Item Image
+                                    if (imageUrl.isNotEmpty)
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(
+                                          _resolveImageUrl(imageUrl),
+                                          width: 64,
+                                          height: 64,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (c, e, st) => Container(
+                                            width: 64,
+                                            height: 64,
+                                            decoration: BoxDecoration(
+                                              color: isDark 
+                                                  ? Colors.white.withOpacity(0.05)
+                                                  : Colors.black.withOpacity(0.03),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Icon(
+                                              Icons.image_not_supported,
+                                              color: isDark ? Colors.white24 : Colors.black26,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      Container(
+                                        width: 64,
+                                        height: 64,
+                                        decoration: BoxDecoration(
+                                          color: isDark 
+                                              ? Colors.white.withOpacity(0.05)
+                                              : Colors.black.withOpacity(0.03),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          Icons.shopping_bag,
+                                          color: isDark ? Colors.white24 : Colors.black26,
+                                        ),
+                                      ),
+                                    
+                                    const SizedBox(width: 12),
+                                    
+                                    // Item Info
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            itemName,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark ? Colors.white : Colors.black,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Qty: $quantity × ${_getCurrencySymbol(orderData['currency'])}${price.toStringAsFixed(2)} = ${_getCurrencySymbol(orderData['currency'])}${itemTotal.toStringAsFixed(2)}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark ? Colors.white54 : Colors.black54,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    
+                                    // Price
+                                    Text(
+                                      '${_getCurrencySymbol(orderData['currency'])}${itemTotal.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.green.shade400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if ((orderData['items'] as List).indexOf(item) < (orderData['items'] as List).length - 1)
+                                Divider(
+                                  height: 1,
+                                  indent: 12,
+                                  endIndent: 12,
+                                  color: isDark 
+                                      ? Colors.white.withOpacity(0.05)
+                                      : Colors.black.withOpacity(0.05),
+                                ),
+                            ],
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Order Total Summary
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark 
+                        ? Colors.white.withOpacity(0.03)
+                        : Colors.black.withOpacity(0.02),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          imageUrl,
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            width: 80,
-                            height: 80,
-                            color: isDark 
-                                ? Colors.white.withOpacity(0.05)
-                                : Colors.black.withOpacity(0.03),
-                            child: const Icon(Icons.store),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Subtotal:',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.white54 : Colors.black54,
+                            ),
+                          ),
+                          Text(
+                            '${_getCurrencySymbol(orderData['currency'])}${(orderData['total_price'] ?? 0).toString()}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Your Profit (75%):',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          Text(
+                            '${_getCurrencySymbol(orderData['currency'])}${((double.tryParse(orderData['total_price']?.toString() ?? '0') ?? 0) * 0.75).toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.green.shade400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Shipping Info
+                if (orderData['shipping_address'] != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Shipping Address',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark 
+                              ? Colors.white.withOpacity(0.03)
+                              : Colors.black.withOpacity(0.02),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          orderData['shipping_address'].toString(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.white70 : Colors.black87,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              orderData['storeName'] ?? 
-                                  orderData['store_name'] ?? 
-                                  'Store',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : Colors.black,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              orderData['address'] ?? 
-                                  orderData['addressFull'] ?? 
-                                  orderData['address_full'] ?? 
-                                  '',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.white38 : Colors.black38,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 

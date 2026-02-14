@@ -18,6 +18,34 @@ import 'package:latlong2/latlong.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+/// Get currency symbol based on currency code
+String _getCurrencySymbol(String? currencyCode) {
+  if (currencyCode == null || currencyCode.isEmpty) return '\$'; // Default to USD
+  switch (currencyCode.toUpperCase()) {
+    case 'YER': return 'ر.ي';
+    case 'SAR': return 'ر.س';
+    case 'AED': return 'د.إ';
+    case 'USD': return '\$';
+    case 'EUR': return '€';
+    case 'TRY': return '₺';
+    case 'CNY': return '¥';
+    case 'KRW': return '₩';
+    case 'GBP': return '£';
+    case 'JPY': return '¥';
+    case 'INR': return '₹';
+    case 'EGP': return '£';
+    case 'OMR': return 'ر.ع.';
+    case 'QAR': return 'ر.ق';
+    case 'KWD': return 'د.ك';
+    case 'BHD': return 'د.ب';
+    case 'JOD': return 'د.ا';
+    case 'LBP': return '£';
+    case 'SYP': return '£';
+    case 'IQD': return 'ع.د';
+    default: return currencyCode;
+  }
+}
+
 /// Order Tracker - DJI Style
 class OrderTrackerWidget extends StatefulWidget {
   const OrderTrackerWidget({Key? key}) : super(key: key);
@@ -739,23 +767,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
     final documentId = orderData['documentId']?.toString() ?? orderData['id']?.toString() ?? 'N/A';
     final items = (orderData['items'] as List<dynamic>?) ?? [];
     final currency = orderData['currency']?.toString() ?? 'USD';
-    
-    // Get currency symbol
-    String getCurrencySymbol(String currencyCode) {
-      switch (currencyCode.toUpperCase()) {
-        case 'YER': return 'ر.ي';
-        case 'SAR': return 'ر.س';
-        case 'AED': return 'د.إ';
-        case 'USD': return '\$';
-        case 'EUR': return '€';
-        case 'TRY': return '₺';
-        case 'CNY': return '¥';
-        case 'KRW': return '₩';
-        default: return currencyCode;
-      }
-    }
-    
-    final currencySymbol = getCurrencySymbol(currency);
+    final currencySymbol = _getCurrencySymbol(currency);
     
     final rawCreatedAt = orderData['createdAt'] ?? orderData['created_at'];
     final date = widget.parseDate(rawCreatedAt);

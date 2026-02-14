@@ -132,11 +132,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         final double totalPrice =
             itemsForStore.fold(0.0, (sum, it) => sum + (it.product.price * it.quantity));
 
-        // Get currency from the first product (all products from same store should have same currency)
-        String? currency;
-        if (itemsForStore.isNotEmpty && itemsForStore[0].product.currency != null) {
-          currency = itemsForStore[0].product.currency;
-        }
 
         final apiItems = itemsForStore
             .map((it) => {
@@ -153,7 +148,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           items: apiItems,
           paymentMethod: _selectedPaymentMethod,
           deliveryOption: _deliveryOption,
-          currency: currency,
+          // 🔥 NO CURRENCY - Backend gets it from products table
         );
 
         final createdId = response != null && response['id'] != null ? response['id'].toString() : null;
@@ -302,7 +297,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 'name': map['name'] ?? map['product_name'] ?? 'Item',
                 'description': map['description'] ?? '',
                 'price': map['price'] ?? 0,
-                'currency': map['currency'] ?? 'TRY',
+                'currency': map['currency']?.toString() ?? 'USD',
                 'store_id': map['store_id']?.toString() ?? map['storeId']?.toString() ?? '',
                 'stock': map['stock'] ?? 0,
                 'image_url': map['image_url'] ?? map['imageUrl'] ?? '',

@@ -1,9 +1,10 @@
 // lib/screens/delivery_requests_view.dart
 
 import 'package:flutter/material.dart';
-import 'admin/common.dart'; // لاستيراد الألوان والنماذج (DeliveryRequest)
+import 'admin/common.dart';
 import 'admin/widgets.dart' as admin_widgets;
 import '../../services/api_service.dart';
+import '../../services/reactive_sync_mixin.dart';
 import 'dart:async';
 
 // --------------------------------------------------
@@ -17,12 +18,26 @@ class DeliveryRequestsView extends StatefulWidget {
   State<DeliveryRequestsView> createState() => _DeliveryRequestsViewState();
 }
 
-class _DeliveryRequestsViewState extends State<DeliveryRequestsView> {
+class _DeliveryRequestsViewState extends State<DeliveryRequestsView> with ReactiveSyncMixin {
   // مفتاح لتحديث محتوى StreamBuilder
   Key _deliveryRequestKey = UniqueKey();
   bool _loading = true;
   List<DeliveryRequest> _requests = [];
   Timer? _pollTimer;
+
+  @override
+  String get reactiveChannel => 'admin:delivery:requests';
+
+  @override
+  void onReactiveUpdate(Map<String, dynamic> update) {
+    final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    
+    if (mounted) {
+      setState(() {
+        _requests = newData.map<DeliveryRequest>((d) => DeliveryRequest.fromMap(d)).toList();
+      });
+    }
+  }
 
   void _refreshData() {
     _loadRequests();
@@ -71,13 +86,12 @@ class _DeliveryRequestsViewState extends State<DeliveryRequestsView> {
   void initState() {
     super.initState();
     _loadRequests();
-    // poll every 10s when this view is open for near-realtime
-    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadRequests());
+    // 🔥 Reactive Sync via Mixin - no polling needed!
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    // Polling timer cancelled by Mixin
     super.dispose();
   }
 
