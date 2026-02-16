@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../services/reactive_sync_mixin.dart';
+import '../../services/reactive_sync_service.dart';
 import 'common.dart';
 import 'admin_order_map_view.dart';
 import 'widgets.dart' as w;
@@ -24,8 +25,10 @@ class OrdersManagementView extends StatefulWidget {
 
 class _OrdersManagementViewState extends State<OrdersManagementView> with ReactiveSyncMixin {
   List<OrderModel> _orders = [];
+  List<Map<String, dynamic>> _returns = [];
   bool _isLoading = true;
   String _filterStatus = 'all';
+  String _currency = 'USD';
   
   // Revenue data
   double _totalRevenue = 0.0;
@@ -38,33 +41,77 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
 
   @override
   void onReactiveUpdate(Map<String, dynamic> update) {
-    final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final channel = update['channel'] ?? '';
     
-    if (mounted) {
-      setState(() {
-        _orders = newData.map((o) => OrderModel.fromMap(o)).toList();
-        
-        // Recalculate revenue
-        double total = 0.0, app = 0.0, driver = 0.0, store = 0.0;
-        for (final order in _orders) {
-          total += order.totalPrice;
-          app += RevenueCalculator.calculateAppRevenue(order.totalPrice);
-          driver += RevenueCalculator.calculateDriverRevenue(order.totalPrice);
-          store += RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice);
-        }
-        
-        _totalRevenue = total;
-        _appRevenue = app;
-        _driverRevenue = driver;
-        _storeRevenue = store;
-      });
+    if (channel == 'admin:orders') {
+      final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (mounted) {
+        setState(() {
+          _orders = newData.map((o) => OrderModel.fromMap(o)).toList();
+          _recalculateRevenue();
+        });
+      }
+    } else if (channel == 'admin:returns') {
+      final returnData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (mounted) {
+        setState(() {
+          _returns = returnData;
+          _recalculateRevenue();
+        });
+      }
     }
+  }
+  
+  void _recalculateRevenue() {
+    double total = 0.0, app = 0.0, driver = 0.0, store = 0.0;
+    
+    // Start with all orders
+    for (final order in _orders) {
+      total += order.totalPrice;
+      app += RevenueCalculator.calculateAppRevenue(order.totalPrice);
+      driver += RevenueCalculator.calculateDriverRevenue(order.totalPrice);
+      store += RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice);
+    }
+    
+    // Deduct returns (app and store only, NOT driver)
+    for (final ret in _returns) {
+      final orderPrice = double.tryParse(ret['order_total_price']?.toString() ?? '0') ?? 0.0;
+      if (orderPrice > 0) {
+        // App loses its 25% commission
+        app -= RevenueCalculator.calculateAppRevenue(orderPrice);
+        // Store loses its 65% share
+        store -= RevenueCalculator.calculateStoreOwnerRevenue(orderPrice);
+        // Driver KEEPS their 10% (no deduction)
+      }
+    }
+    
+    _totalRevenue = total - (_returns.fold(0.0, (sum, r) => sum + (double.tryParse(r['order_total_price']?.toString() ?? '0') ?? 0.0)));
+    _appRevenue = app;
+    _driverRevenue = driver;
+    _storeRevenue = store;
   }
 
   @override
   void initState() {
     super.initState();
     _loadOrders();
+    _loadReturns();
+  }
+  
+  Future<void> _loadReturns() async {
+    try {
+      final returns = await ApiService.getReturnedProducts();
+      if (mounted) {
+        setState(() {
+          _returns = List<Map<String, dynamic>>.from(
+            returns.map((item) => item is Map<String, dynamic> ? item : {}),
+          );
+          _recalculateRevenue();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading returns: $e');
+    }
   }
 
   Future<void> _loadOrders() async {
@@ -79,24 +126,14 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
         }).toList() ?? [];
         debugPrint('✅ Loaded ${orders.length} orders');
         
-        // Calculate revenue
-        double total = 0.0;
-        double app = 0.0;
-        double driver = 0.0;
-        double store = 0.0;
-        for (final order in orders) {
-          total += order.totalPrice;
-          app += RevenueCalculator.calculateAppRevenue(order.totalPrice);
-          driver += RevenueCalculator.calculateDriverRevenue(order.totalPrice);
-          store += RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice);
+        // Get currency from first order
+        if (orders.isNotEmpty) {
+          _currency = orders.first.currency ?? 'USD';
         }
         
         setState(() {
           _orders = orders;
-          _totalRevenue = total;
-          _appRevenue = app;
-          _driverRevenue = driver;
-          _storeRevenue = store;
+          _recalculateRevenue();
           _isLoading = false;
         });
       }
@@ -244,33 +281,34 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 600;
               
+              final currencySymbol = getCurrencySymbol(_currency);
               if (isWide) {
                 return Row(
                   children: [
                     Expanded(child: _RevenueStatCard(
                       title: 'Total Revenue',
-                      value: '\$${_totalRevenue.toStringAsFixed(2)}',
+                      value: '$currencySymbol${_totalRevenue.toStringAsFixed(2)}',
                       icon: Icons.account_balance_wallet_rounded,
                       gradient: AppGradients.primary,
                     )),
                     const SizedBox(width: 16),
                     Expanded(child: _RevenueStatCard(
                       title: 'Your Earnings (25%)',
-                      value: '\$${_appRevenue.toStringAsFixed(2)}',
+                      value: '$currencySymbol${_appRevenue.toStringAsFixed(2)}',
                       icon: Icons.trending_up_rounded,
                       gradient: AppGradients.success,
                     )),
                     const SizedBox(width: 16),
                     Expanded(child: _RevenueStatCard(
                       title: 'Store Earnings (65%)',
-                      value: '\$${_storeRevenue.toStringAsFixed(2)}',
+                      value: '$currencySymbol${_storeRevenue.toStringAsFixed(2)}',
                       icon: Icons.storefront_rounded,
                       gradient: AppGradients.purple,
                     )),
                     const SizedBox(width: 16),
                     Expanded(child: _RevenueStatCard(
                       title: 'Driver Earnings (10%)',
-                      value: '\$${_driverRevenue.toStringAsFixed(2)}',
+                      value: '$currencySymbol${_driverRevenue.toStringAsFixed(2)}',
                       icon: Icons.delivery_dining_rounded,
                       gradient: AppGradients.warning,
                     )),
@@ -284,14 +322,14 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
                     children: [
                       Expanded(child: _RevenueStatCard(
                         title: 'Total Revenue',
-                        value: '\$${_totalRevenue.toStringAsFixed(2)}',
+                        value: '$currencySymbol${_totalRevenue.toStringAsFixed(2)}',
                         icon: Icons.account_balance_wallet_rounded,
                         gradient: AppGradients.primary,
                       )),
                       const SizedBox(width: 12),
                       Expanded(child: _RevenueStatCard(
                         title: 'Your Earnings',
-                        value: '\$${_appRevenue.toStringAsFixed(2)}',
+                        value: '$currencySymbol${_appRevenue.toStringAsFixed(2)}',
                         icon: Icons.trending_up_rounded,
                         gradient: AppGradients.success,
                       )),
@@ -302,14 +340,14 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
                     children: [
                       Expanded(child: _RevenueStatCard(
                         title: 'Store Earnings',
-                        value: '\$${_storeRevenue.toStringAsFixed(2)}',
+                        value: '$currencySymbol${_storeRevenue.toStringAsFixed(2)}',
                         icon: Icons.storefront_rounded,
                         gradient: AppGradients.purple,
                       )),
                       const SizedBox(width: 12),
                       Expanded(child: _RevenueStatCard(
                         title: 'Driver Earnings',
-                        value: '\$${_driverRevenue.toStringAsFixed(2)}',
+                        value: '$currencySymbol${_driverRevenue.toStringAsFixed(2)}',
                         icon: Icons.delivery_dining_rounded,
                         gradient: AppGradients.warning,
                       )),

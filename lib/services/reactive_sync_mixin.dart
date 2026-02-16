@@ -84,8 +84,14 @@ mixin ReactiveSyncMixin<T extends StatefulWidget> on State<T> {
 
   @override
   void dispose() {
+    // ⚠️ IMPORTANT: DO NOT unsubscribe here!
+    // The subscription should persist across widget rebuilds and navigation
+    // Only close the stream listener, not the server subscription
     _reactiveSubscription.cancel();
-    reactiveSyncService.unsubscribe(reactiveChannel);
+    
+    // Keep the server subscription active - it will be cleaned up when app closes
+    // This allows smooth navigation without re-subscribing delays
+    
     super.dispose();
   }
 }

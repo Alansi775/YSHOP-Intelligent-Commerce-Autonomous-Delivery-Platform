@@ -110,13 +110,30 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
           
           if (mounted) {
             setState(() {
-              final newReturns = (update['data'] as List?)
-                      ?.cast<Map<String, dynamic>>() ??
-                  [];
+              // 🔥 SAFE: Get data and convert to List
+              final rawData = update['data'] as List? ?? [];
+              
+              // 🔥 Convert each item to Map<String, dynamic>
+              final List<Map<String, dynamic>> allReturns = [];
+              for (var item in rawData) {
+                if (item is Map) {
+                  allReturns.add(Map<String, dynamic>.from(item as Map));
+                }
+              }
+              
+              debugPrint('📊 Converted ${allReturns.length} returns to Map<String, dynamic>');
+              
+              // 🔥 FILTER: Store owner only sees returns where admin_accepted=1
+              final newReturns = allReturns.where((ret) {
+                final adminAccepted = (ret['admin_accepted'] ?? 0) == 1;
+                return adminAccepted;
+              }).toList();
+              
               _currentData = {
                 'orders': _currentData['orders'] ?? [],
                 'returns': newReturns,
               };
+              debugPrint('🔥 Store returns filtered to ${newReturns.length} items (admin_accepted=1)');
             });
           }
         }
@@ -393,8 +410,8 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     
     debugPrint('💵 Total revenue: $totalRevenue $storeCurrency');
     
-    // Calculate profit at 75%
-    double totalProfit = totalRevenue * 0.75;
+    // Calculate profit at 65% (Store owner share)
+    double totalProfit = totalRevenue * 0.65;
     
     // Deduct returns
     double returnsDeduction = 0;
@@ -791,7 +808,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Your Profit (75%)',
+                      'Your Profit (65%)',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -1071,10 +1088,26 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       debugPrint('📦 Fetching RETURNS from API for store: $storeId');
       // 🔥 CRITICAL FIX: Get returns from returned_products table (correct IDs!)
       // This ensures returnData['id'] is from returned_products.id, not orders.id
-      final returns = await ApiService.getStoreReturns(storeId: storeId);
-      debugPrint('✅ Got ${returns.length} returns from API');
+      final apiReturns = await ApiService.getStoreReturns(storeId: storeId);
+      debugPrint('✅ Got ${apiReturns.length} returns from API');
       
-      debugPrint('📦 Loaded ${orders.length} orders, ${returns.length} returns');
+      // 🔥 SAFE CAST: Convert API response to List<Map<String, dynamic>>
+      final List<Map<String, dynamic>> allReturns = [];
+      for (var item in apiReturns) {
+        if (item is Map) {
+          allReturns.add(Map<String, dynamic>.from(item as Map));
+        }
+      }
+      
+      debugPrint('📊 Casted ${allReturns.length} returns to Map<String, dynamic>');
+      
+      // 🔥 FILTER: Store owner only sees returns where admin_accepted=1
+      final returns = allReturns.where((ret) {
+        final adminAccepted = (ret['admin_accepted'] ?? 0) == 1;
+        return adminAccepted;
+      }).toList();
+      
+      debugPrint('📦 Loaded ${orders.length} orders, ${returns.length} returns (filtered to admin_accepted=1)');
       
       return {
         'orders': orders,
@@ -1101,8 +1134,25 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
 
       // ⚡ SKIP orders - just load returns for instant update
       debugPrint('📦 Fetching RETURNS ONLY for store: $storeId (⚡ fast path)');
-      final returns = await ApiService.getStoreReturns(storeId: storeId);
-      debugPrint('⚡ Got ${returns.length} returns (returns-only refresh = instant!)');
+      final apiReturns = await ApiService.getStoreReturns(storeId: storeId);
+      
+      // 🔥 SAFE CAST: Convert API response to List<Map<String, dynamic>>
+      final List<Map<String, dynamic>> allReturns = [];
+      for (var item in apiReturns) {
+        if (item is Map) {
+          allReturns.add(Map<String, dynamic>.from(item as Map));
+        }
+      }
+      
+      debugPrint('📊 Casted ${allReturns.length} returns to Map<String, dynamic>');
+      
+      // 🔥 FILTER: Store owner only sees returns where admin_accepted=1
+      final returns = allReturns.where((ret) {
+        final adminAccepted = (ret['admin_accepted'] ?? 0) == 1;
+        return adminAccepted;
+      }).toList();
+      
+      debugPrint('⚡ Got ${returns.length} returns (returns-only refresh = instant, filtered to admin_accepted=1)');
       
       return {
         'orders': _cachedOrders,  // Use cached orders from previous load
@@ -1214,8 +1264,8 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       storeSubtotal += price * qty;
     }
 
-    final commission = storeSubtotal * OrdersView.APP_COMMISSION_RATE;
-    final netStoreProfit = storeSubtotal - commission;
+    // Store owner gets 65% of total
+    final netStoreProfit = storeSubtotal * 0.65;
     final statusColor = _getStatusColor(status);
 
     // 🔥 Get images for MULTIPLE items (first 2-3) for preview grid
@@ -1715,7 +1765,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                             ),
                           ),
                           child: Text(
-                            'Refund: ${_getCurrencySymbol(productCurrency)}${(productPrice * quantity * 0.75).toStringAsFixed(2)}',
+                            'Refund: ${_getCurrencySymbol(productCurrency)}${(productPrice * quantity * 0.65).toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -2543,7 +2593,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Your Profit (75%):',
+                            'Your Profit (65%):',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -2551,7 +2601,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                             ),
                           ),
                           Text(
-                            '${_getCurrencySymbol(orderData['currency'])}${((double.tryParse(orderData['total_price']?.toString() ?? '0') ?? 0) * 0.75).toStringAsFixed(2)}',
+                            '${_getCurrencySymbol(orderData['currency'])}${((double.tryParse(orderData['total_price']?.toString() ?? '0') ?? 0) * 0.65).toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,

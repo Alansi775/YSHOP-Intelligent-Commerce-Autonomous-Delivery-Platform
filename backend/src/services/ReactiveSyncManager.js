@@ -60,7 +60,10 @@ class ReactiveSyncManager extends EventEmitter {
    * 🔍 Start watching a channel for changes
    */
   _startWatcher(channel) {
-    if (this.watchers.has(channel)) return;
+    if (this.watchers.has(channel)) {
+      logger.info(`⚠️ WATCHER ALREADY STARTED`, { channel });
+      return;
+    }
 
     // Parse channel: 'returns:502' → { type: 'returns', id: '502' }
     const [type, id] = channel.split(':');
@@ -69,15 +72,15 @@ class ReactiveSyncManager extends EventEmitter {
 
     const checkInterval = setInterval(async () => {
       try {
-        if (this.subscribers.has(channel) && this.subscribers.get(channel).size > 0) {
-          await this._checkAndEmitChanges(channel, type, id);
-        }
+        // 🔥 Check for changes without logging
+        await this._checkAndEmitChanges(channel, type, id);
       } catch (error) {
         logger.error(`❌ Watcher error for ${channel}`, { error: error.message });
       }
     }, this.SYNC_INTERVAL);
 
     this.watchers.set(channel, checkInterval);
+    logger.info(`✅ WATCHER STARTED - will check every ${this.SYNC_INTERVAL}ms`, { channel });
   }
 
   /**
@@ -100,27 +103,34 @@ class ReactiveSyncManager extends EventEmitter {
       connection = await pool.getConnection();
 
       if (type === 'returns') {
+        // 🔥 Store owner returns - ONLY admin_accepted=1, with order details
+        // 📝 IMPORTANT: Filter in backend so frontend receives clean data
         const [returns] = await connection.execute(
-          `SELECT id, store_id, admin_accepted, store_received, product_name, product_image_url, 
-           return_reason, updated_at, created_at 
-           FROM returned_products 
-           WHERE store_id = ? AND admin_accepted = 1 
-           ORDER BY updated_at DESC 
+          `SELECT 
+             rp.*,
+             o.total_price as order_total_price,
+             o.currency as order_currency
+           FROM returned_products rp
+           LEFT JOIN orders o ON rp.order_id = o.id
+           WHERE rp.store_id = ? AND rp.admin_accepted = 1
+           ORDER BY rp.return_requested_at DESC 
            LIMIT 500`,
           [storeId]
         );
 
-        // Compute hash for backpressure
         const hash = JSON.stringify(returns);
         const lastHash = this.lastHashes.get(channel);
+        const hashChanged = hash !== lastHash;
 
-        if (hash !== lastHash) {
-          // Check backpressure timing
+        if (hashChanged) {
           const lastTime = this.lastSync.get(channel) || 0;
           const now = Date.now();
+          const timeSinceLastSync = now - lastTime;
 
-          if (now - lastTime >= this.BACKPRESSURE_MIN) {
+          if (timeSinceLastSync >= this.BACKPRESSURE_MIN) {
             // ✅ Emit delta update to subscribers
+            const subCount = this.subscribers.get(channel)?.size || 0;
+            
             this._broadcastToChannel(channel, {
               type: 'returns:delta',
               channel,
@@ -132,14 +142,16 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.debug(`✨ DELTA EMITTED`, {
+            logger.info(`✨ DELTA EMITTED`, {
               channel,
-              subscribers: this.subscribers.get(channel)?.size || 0,
+              subscribers: subCount,
               dataRows: returns.length,
+              timestamp: now,
             });
           }
         }
       }
+      
 
       if (type === 'orders') {
         const [orders] = await connection.execute(
@@ -205,7 +217,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.debug(`✨ ORDERS DELTA EMITTED`, {
+            logger.info(`✨ ORDERS DELTA EMITTED`, {
               channel,
               subscribers: this.subscribers.get(channel)?.size || 0,
               dataRows: orders.length,
@@ -215,23 +227,34 @@ class ReactiveSyncManager extends EventEmitter {
       }
 
       if (type === 'admin:returns') {
-        // ALL approved returns (for admin panel)
+        // 🔥 ALL returns (for admin panel) - with complete data
         const [returns] = await connection.execute(
-          `SELECT id, store_id, admin_accepted, store_received, product_name, 
-           return_reason, updated_at, created_at 
-           FROM returned_products 
-           ORDER BY updated_at DESC 
+          `SELECT 
+             rp.*,
+             o.total_price as order_total_price,
+             o.currency as order_currency,
+             s.name as store_name,
+             d.display_name as driver_name
+           FROM returned_products rp
+           LEFT JOIN orders o ON rp.order_id = o.id
+           LEFT JOIN stores s ON rp.store_id = s.id
+           LEFT JOIN drivers d ON rp.driver_id = d.id
+           ORDER BY rp.return_requested_at DESC 
            LIMIT 1000`
         );
 
         const hash = JSON.stringify(returns);
         const lastHash = this.lastHashes.get(channel);
+        const hashChanged = hash !== lastHash;
 
-        if (hash !== lastHash) {
+        if (hashChanged) {
           const lastTime = this.lastSync.get(channel) || 0;
           const now = Date.now();
+          const timeSinceLastSync = now - lastTime;
 
-          if (now - lastTime >= this.BACKPRESSURE_MIN) {
+          if (timeSinceLastSync >= this.BACKPRESSURE_MIN) {
+            const subCount = this.subscribers.get(channel)?.size || 0;
+
             this._broadcastToChannel(channel, {
               type: 'admin:returns:delta',
               channel,
@@ -243,10 +266,13 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.debug(`✨ ADMIN RETURNS DELTA EMITTED`, {
+            logger.info(`✨ ADMIN RETURNS DELTA EMITTED`, {
               channel,
+              subscribers: subCount,
               dataRows: returns.length,
             });
+          } else {
+            // Backpressure - skip this update
           }
         }
       }
@@ -313,7 +339,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.debug(`✨ ADMIN ORDERS DELTA EMITTED`, {
+            logger.info(`✨ ADMIN ORDERS DELTA EMITTED`, {
               channel,
               dataRows: orders.length,
             });
@@ -452,8 +478,6 @@ class ReactiveSyncManager extends EventEmitter {
       subscribers: Array.from(subscribers),
       message,
     });
-
-    logger.debug(`📡 BROADCAST TO ${subscribers.size} SUBSCRIBERS`, { channel });
   }
 
   /**

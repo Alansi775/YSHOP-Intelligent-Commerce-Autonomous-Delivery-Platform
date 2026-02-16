@@ -23,6 +23,7 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
   @override
   void onReactiveUpdate(Map<String, dynamic> update) {
     final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    debugPrint('🔥 REACTIVE SYNC: Returns data updated - ${newData.length} returns');
     if (mounted) {
       setState(() {
         _returnedProducts = newData;
@@ -46,6 +47,7 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
         );
         _isLoading = false;
       });
+      debugPrint('✅ Loaded ${_returnedProducts.length} returned products');
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -178,6 +180,25 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
     final reason = returnData['return_reason'] ?? 'No reason provided';
     final driverName = returnData['driver_name'] ?? 'Not assigned';
     final returnRequestedAt = returnData['return_requested_at'] ?? '';
+    
+    // Get status based on flags
+    final statusInfo = _getReturnStatus(returnData);
+    final status = statusInfo['status'] as String;
+    final statusColor = statusInfo['color'] as Color;
+    final statusBgColor = statusInfo['bgColor'] as Color;
+    
+    // Get price information
+    final orderTotalPrice = double.tryParse(returnData['order_total_price']?.toString() ?? '0') ?? 0.0;
+    final orderCurrency = (returnData['order_currency'] ?? 'USD').toString().toUpperCase();
+    final currencySymbol = _getCurrencySymbol(orderCurrency);
+    
+    // Profit breakdown on successful sale
+    final storeShare = orderTotalPrice * 0.65;     // Store owner: 65%
+    final appShare = orderTotalPrice * 0.25;       // App: 25%
+    final deliveryShare = orderTotalPrice * 0.10;  // Delivery: 10%
+    
+    // On return: Store refunds their share (65%)
+    final refundAmount = storeShare;
 
     return Container(
       padding: EdgeInsets.all(isDesktop ? 32 : 24),
@@ -227,20 +248,20 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.1),
+                  color: statusBgColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: Colors.amber.withOpacity(0.3),
+                    color: statusBgColor.withOpacity(0.3),
                     width: 1,
                   ),
                 ),
                 child: Text(
-                  'PENDING',
+                  status,
                   style: TextStyle(
                     fontFamily: 'TenorSans',
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.amber.shade300,
+                    color: statusColor,
                     letterSpacing: 1,
                   ),
                 ),
@@ -249,6 +270,225 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
           ),
 
           const SizedBox(height: 32),
+
+          // Price & Refund Section
+          if (orderTotalPrice > 0)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: Column(
+                children: [
+                  // Order Total Price
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Order Total Price',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                      ),
+                      Text(
+                        '$currencySymbol${orderTotalPrice.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Divider(color: Colors.white.withOpacity(0.1), height: 1),
+                  const SizedBox(height: 12),
+                  
+                  // Profit Breakdown for Admin
+                  Text(
+                    'Profit Breakdown',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Store Owner 65%
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Store Owner (65%)',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          color: Colors.blue.shade300,
+                        ),
+                      ),
+                      Text(
+                        '$currencySymbol${storeShare.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // App 25%
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Platform (25%)',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          color: Colors.blue.shade300,
+                        ),
+                      ),
+                      Text(
+                        '$currencySymbol${appShare.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Delivery 10%
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Delivery Driver (10%)',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          color: Colors.blue.shade300,
+                        ),
+                      ),
+                      Text(
+                        '$currencySymbol${deliveryShare.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  Divider(color: Colors.white.withOpacity(0.1), height: 1),
+                  const SizedBox(height: 12),
+                  
+                  // RETURN INFORMATION
+                  Text(
+                    'Return Status',
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Store refunds their share
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Store Refunds (65%)',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red.shade300,
+                        ),
+                      ),
+                      Text(
+                        '$currencySymbol${refundAmount.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.red.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // App keeps their share
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Platform Refunds (25%)',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          color: Colors.red.shade300,
+                        ),
+                      ),
+                      Text(
+                        '$currencySymbol${appShare.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Driver keeps their share
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Driver Keeps (10%)',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.5),
+                        ),
+                      ),
+                      Text(
+                        '$currencySymbol${deliveryShare.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          if (orderTotalPrice > 0) const SizedBox(height: 32),
 
           // Details Grid
           if (isDesktop)
@@ -345,6 +585,40 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
         ),
       ],
     );
+  }
+
+  /// Get currency symbol based on currency code
+  String _getCurrencySymbol(String? currencyCode) {
+    if (currencyCode == null || currencyCode.isEmpty) return '₺';
+    final code = currencyCode.toUpperCase();
+    switch (code) {
+      case 'USD': return '\$';
+      case 'EUR': return '€';
+      case 'TRY': return '₺';
+      case 'AED': return 'د.إ';
+      case 'SAR': return 'ر.س';
+      case 'YER': return '﷼';
+      default: return code;
+    }
+  }
+
+  /// Get return status based on store_received and admin_accepted flags
+  Map<String, dynamic> _getReturnStatus(Map<String, dynamic> returnData) {
+    final storeReceived = (returnData['store_received'] ?? 0) == 1;
+    final adminAccepted = (returnData['admin_accepted'] ?? 0) == 1;
+    
+    // admin_accepted=1 & store_received=0 → ACCEPTED
+    if (adminAccepted && !storeReceived) {
+      return {'status': 'ACCEPTED', 'color': Colors.green.shade300, 'bgColor': Colors.green};
+    }
+    // admin_accepted=1 & store_received=1 → RECEIVED
+    else if (adminAccepted && storeReceived) {
+      return {'status': 'RECEIVED', 'color': Colors.blue.shade300, 'bgColor': Colors.blue};
+    }
+    // Default PENDING
+    else {
+      return {'status': 'PENDING', 'color': Colors.amber.shade300, 'bgColor': Colors.amber};
+    }
   }
 
   bool _hasPhotos(Map<String, dynamic> returnData) {
