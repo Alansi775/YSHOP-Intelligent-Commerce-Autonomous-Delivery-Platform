@@ -693,15 +693,24 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           decoration: BoxDecoration(
-            color: isDark 
+            color: isDark
               ? Colors.white.withOpacity(0.05)
-              : Colors.white.withOpacity(0.08),
+              : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark
                 ? Colors.white.withOpacity(0.1)
-                : Colors.white.withOpacity(0.15),
+                : Colors.grey.shade300,
             ),
+            boxShadow: isDark
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  )
+                ],
           ),
           child: Padding(
             padding: const EdgeInsets.all(30),

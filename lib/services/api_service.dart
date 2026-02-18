@@ -1605,9 +1605,9 @@ class ApiService {
   }
 
   static Future<bool> rejectStore(String storeId) async {
-    debugPrint('🔴 [rejectStore] Sending rejection request for store: $storeId');
+    debugPrint(' [rejectStore] Sending rejection request for store: $storeId');
     final response = await _request('POST', '/admins/stores/$storeId/reject', requiresAuth: true);
-    debugPrint('🔴 [rejectStore] Response: $response');
+    debugPrint(' [rejectStore] Response: $response');
     return true;
   }
 

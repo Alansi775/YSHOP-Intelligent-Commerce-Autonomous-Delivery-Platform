@@ -46,3 +46,8 @@ Generated.xcconfig
 app.*.symbols
 app.*.map.json
 
+# Environment files (do not commit secrets)
+.env
+backend/.env
+assets/.env
+

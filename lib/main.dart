@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'screens/auth/sign_in_view.dart';
@@ -12,7 +13,8 @@ import 'services/navigation_service.dart';
 
 import 'state_management/cart_manager.dart';
 import 'state_management/auth_manager.dart';
-import 'state_management/theme_manager.dart'; 
+import 'state_management/theme_manager.dart';
+import 'providers/ai_chat_provider.dart'; // 🤖 YSHOP AI Chat 
 
 // Global ValueNotifier for tracking hero section scroll position
 final isAboveHeroNotifier = ValueNotifier<bool>(true); 
@@ -82,7 +84,12 @@ final _darkThemeData = ThemeData(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Load environment variables from .env (do NOT commit secrets)
+  // For Flutter Web the env file must be included as an asset — we bundle it as assets/.env
+  // For native builds, either fileName '.env' or 'assets/.env' works; prefer assets for consistency.
+  await dotenv.load(fileName: 'assets/.env');
+
   //  CRITICAL: Initialize SharedPreferences before anything else
   await SharedPreferences.getInstance();
 
@@ -96,6 +103,7 @@ void main() async {
         ChangeNotifierProvider.value(value: authManager),
         ChangeNotifierProvider(create: (_) => CartManager()),
         ChangeNotifierProvider(create: (_) => ThemeManager()),
+        ChangeNotifierProvider(create: (_) => AIChatProvider()), // 🤖 YSHOP AI Chat
       ],
       child: const MyApp(),
     ),

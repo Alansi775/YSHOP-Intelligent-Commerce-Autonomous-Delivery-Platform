@@ -180,7 +180,7 @@ export async function rejectStore(req, res, next) {
   try {
     const { storeId } = req.params;
     const { reason } = req.body || {};
-    console.log(`🔴 [rejectStore] Admin is rejecting store ID: ${storeId}, reason: ${reason || 'Not specified'}`);
+    console.log(` [rejectStore] Admin is rejecting store ID: ${storeId}, reason: ${reason || 'Not specified'}`);
 
     // Verify admin authorization
     if (!req.admin || req.admin.role !== 'superadmin') {
