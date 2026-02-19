@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎨 YSHOP BRAND DESIGN SYSTEM - Matching Current App Style
+//  YSHOP BRAND DESIGN SYSTEM - Matching Current App Style
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Primary Background Colors - Matching your app

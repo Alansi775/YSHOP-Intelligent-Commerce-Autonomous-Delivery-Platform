@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui'; // For blur effects
 
-// 🎨 COLOR PALETTE (Blue, Black, White)
+//  COLOR PALETTE (Blue, Black, White)
 class LuxuryTheme {
   // Dark Mode
   static const Color kDarkBackground = Color(0xFF0A0A0A); 

@@ -1,6 +1,6 @@
 // lib/widgets/ai_voice_call_overlay.dart
 //
-// 📞 AI VOICE CALL V2 — Consistent with app design
+//  AI VOICE CALL V2 — Consistent with app design
 //
 // Features:
 //   - Ferrofluid orb (black/white) as centerpiece
@@ -82,7 +82,7 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
   }
 
   // ═══════════════════════════════════════════
-  // 🔄 CALL LOOP
+  //  CALL LOOP
   // ═══════════════════════════════════════════
   void _startCall() { _isActive = true; _listen(); }
 
@@ -220,7 +220,7 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
   }
 
   // ═══════════════════════════════════════════
-  // 🎨 BUILD
+  //  BUILD
   // ═══════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
@@ -455,7 +455,7 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
   Widget _ph() => Icon(Icons.shopping_bag_outlined, color: Colors.white.withOpacity(0.15), size: 18);
 
   // ═══════════════════════════════════════════
-  // 🎮 CONTROL BUTTONS
+  //  CONTROL BUTTONS
   // ═══════════════════════════════════════════
   Widget _controlButtons() {
     return Row(

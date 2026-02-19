@@ -12,7 +12,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🎨 MODERN ORDERS VIEW - DJI-Inspired Design
+//  MODERN ORDERS VIEW - DJI-Inspired Design
 // ═══════════════════════════════════════════════════════════════════════════
 
 class OrdersView extends StatefulWidget {

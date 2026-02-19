@@ -126,7 +126,7 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        // 🎨 Glass effect background
+        //  Glass effect background
         color: dark 
             ? Colors.white.withOpacity(0.05) 
             : Colors.black.withOpacity(0.03),
@@ -246,7 +246,7 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 🎨 Dynamic blur background
+        //  Dynamic blur background
         ImageFiltered(
           imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
           child: CachedNetworkImage(
@@ -358,7 +358,7 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
               }),
             ),
             const SizedBox(height: 8),
-            // 🎨 Apple-style Glass Stock Badge
+            //  Apple-style Glass Stock Badge
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: BackdropFilter(

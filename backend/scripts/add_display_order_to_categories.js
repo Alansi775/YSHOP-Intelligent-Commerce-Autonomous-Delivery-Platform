@@ -11,7 +11,7 @@ async function addDisplayOrderColumn() {
   const connection = await pool.getConnection();
   
   try {
-    console.log('🔄 جاري إضافة حقل display_order إلى جدول categories...');
+    console.log(' جاري إضافة حقل display_order إلى جدول categories...');
     
     // تحقق من وجود الحقل
     const [columns] = await connection.query(`

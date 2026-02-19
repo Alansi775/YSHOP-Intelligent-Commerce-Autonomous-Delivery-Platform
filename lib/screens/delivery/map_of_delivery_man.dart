@@ -12,6 +12,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../../services/api_service.dart';
@@ -19,10 +20,10 @@ import 'delivery_shared.dart' as ds;
 import 'delivery_qr_scanner_view.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🎨 CONSTANTS
+//  CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const String MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoibW9oYW1tZWRhbGFuc2kiLCJhIjoiY21ncGF5OTI0MGU2azJpczloZjI0YXRtZCJ9.W9tMyxkXcai-sHajAwp8NQ';
+final String MAPBOX_ACCESS_TOKEN = dotenv.env['MAPBOX_ACCESS_TOKEN'] ?? 'MAPBOX_TOKEN_PLACEHOLDER';
 const double ARRIVAL_THRESHOLD_METERS = 100.0;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -715,7 +716,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 🎨 BUILD UI
+  //  BUILD UI
   // ─────────────────────────────────────────────────────────────────────────
 
   @override

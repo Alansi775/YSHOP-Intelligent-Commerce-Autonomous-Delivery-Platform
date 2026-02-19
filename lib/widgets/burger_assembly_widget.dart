@@ -46,7 +46,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   final List<ScrollRange> _scrollRanges = [];
   final double _totalScrollRange = 1080.0;  // 6 طبقات × 180px
 
-  // 🎨 EXPLODED VIEW LAYERS
+  //  EXPLODED VIEW LAYERS
   final List<BurgerLayer> _layers = [
     // 1️⃣ Bottom Bun - ينفجر من الأسفل
     BurgerLayer(
@@ -574,7 +574,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   }
 }
 
-// 🎨 PAINTERS
+//  PAINTERS
 class BackgroundPainter extends CustomPainter {
   final double progress, intensity;
   BackgroundPainter({required this.progress, required this.intensity});

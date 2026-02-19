@@ -13,6 +13,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../../services/api_service.dart';
 import '../../state_management/auth_manager.dart';
@@ -22,7 +23,7 @@ import 'delivery_qr_scanner_view.dart';
 import 'map_of_delivery_man.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🎨 DESIGN CONSTANTS
+//  DESIGN CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const Color kDarkBackground = Color(0xFF121212);
@@ -36,7 +37,7 @@ const Color kAccentRed = Color(0xFFFF5252);
 const Color kAccentOrange = Color(0xFFFF9800);
 const Color kSeparatorColor = Color(0xFF333333);
 
-const String MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoibW9oYW1tZWRhbGFuc2kiLCJhIjoiY21ncGF5OTI0MGU2azJpczloZjI0YXRtZCJ9.W9tMyxkXcai-sHajAwp8NQ';
+final String MAPBOX_ACCESS_TOKEN = dotenv.env['MAPBOX_ACCESS_TOKEN'] ?? 'MAPBOX_TOKEN_PLACEHOLDER';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🏠 DELIVERY HOME VIEW

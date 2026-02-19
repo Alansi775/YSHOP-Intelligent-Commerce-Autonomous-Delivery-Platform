@@ -123,7 +123,7 @@ class MyApp extends StatelessWidget {
     //  استخدام Consumer للاستماع للتغييرات تلقائياً فقط للـ themeMode
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
-        debugPrint('🎨 Theme updated: ${themeManager.themeMode}');
+        debugPrint(' Theme updated: ${themeManager.themeMode}');
         
         // Build MaterialApp without listening to theme changes in home
         return MaterialApp(

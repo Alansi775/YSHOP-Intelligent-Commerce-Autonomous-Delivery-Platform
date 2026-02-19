@@ -128,7 +128,7 @@ class ReturnController {
             orderId: order_id,
           });
 
-          logger.info(`🔄 Inserting return product ${i + 1}/${orderItems.length}`, {
+          logger.info(` Inserting return product ${i + 1}/${orderItems.length}`, {
             product_id: product?.id,
             orderItem_id: orderItem.id,
           });
