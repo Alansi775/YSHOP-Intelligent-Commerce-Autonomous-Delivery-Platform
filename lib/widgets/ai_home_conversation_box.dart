@@ -36,7 +36,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
-import '../widgets/liquid_ai_icon.dart';
+import '../widgets/liquid_orb_visualizer.dart';
 import '../models/product.dart';
 import '../screens/customers/product_detail_view.dart';
 import '../services/tts_service.dart';
@@ -173,6 +173,12 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
     }
   }
 
+  VoicePhase _orbPhase() {
+    if (_isSpeaking) return VoicePhase.speaking;
+    if (_isListening) return VoicePhase.listening;
+    return VoicePhase.idle;
+  }
+
   // ── Voice TTS ──
   Future<void> _speakText(String text) async {
     if (_isSpeaking) {
@@ -294,7 +300,7 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(
           children: [
-            const LiquidAIIcon(size: 26),
+            LiquidOrbVisualizer(size: 26, phase: _orbPhase(), audioLevel: 0.0, colorful: false),
             const SizedBox(width: 12),
             Text('What would you like today?',
                 style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14)),
@@ -333,7 +339,7 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
       child: Row(
         children: [
-          const LiquidAIIcon(size: 24),
+          LiquidOrbVisualizer(size: 24, phase: _orbPhase(), audioLevel: 0.0, colorful: false),
           const SizedBox(width: 10),
           Text('YSHOP AI', style: TextStyle(
             fontFamily: 'CinzelDecorative', color: Colors.white.withOpacity(0.9),
@@ -369,7 +375,7 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const LiquidAIIcon(size: 44),
+          LiquidOrbVisualizer(size: 44, phase: _orbPhase(), audioLevel: 0.0, colorful: false),
           const SizedBox(height: 14),
           Text('How can I help?', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14)),
           const SizedBox(height: 6),
@@ -428,9 +434,9 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 3, right: 8),
-          child: LiquidAIIcon(size: 18),
+        Padding(
+          padding: const EdgeInsets.only(top: 3, right: 8),
+          child: LiquidOrbVisualizer(size: 18, phase: _orbPhase(), audioLevel: 0.0, colorful: false),
         ),
         Flexible(
           child: Column(
@@ -485,7 +491,7 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(padding: EdgeInsets.only(top: 3, right: 8), child: LiquidAIIcon(size: 18, isThinking: true)),
+          Padding(padding: const EdgeInsets.only(top: 3, right: 8), child: LiquidOrbVisualizer(size: 18, phase: VoicePhase.thinking, audioLevel: 0.0, colorful: false)),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -519,7 +525,7 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
       child: Row(
         children: [
           // Animated AI orb while listening
-          const LiquidAIIcon(size: 32, isThinking: true),
+          LiquidOrbVisualizer(size: 32, phase: _isListening ? VoicePhase.listening : VoicePhase.thinking, audioLevel: 0.0, colorful: false),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

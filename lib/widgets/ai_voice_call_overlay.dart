@@ -1,14 +1,6 @@
 // lib/widgets/ai_voice_call_overlay.dart
 //
-//  AI VOICE CALL V2 — Consistent with app design
-//
-// Features:
-//   - Ferrofluid orb (black/white) as centerpiece
-//   - Mute button (pause listening, stay in call)
-//   - Replay button (repeat last AI response from cache)
-//   - End button (DJI style)
-//   - Dark gradient background matching conversation box
-//   - Auto loop: listen → think → speak → listen
+//  AI VOICE CALL V2 — Smoke Orb Edition
 //
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -55,11 +47,13 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
 
   _Phase _phase = _Phase.idle;
   String _transcript = '';
-  String _lastAiResponse = ''; // for replay
+  String _lastAiResponse = '';      // raw → TTS engine
+  String _lastAiDisplayText = '';   // clean → screen
   double _audioLevel = 0.0;
   List<Map<String, dynamic>>? _products;
   bool _isActive = false;
   bool _isMuted = false;
+  bool _isProcessing = false;       // prevents double-send from STT
 
   @override
   void initState() {
@@ -95,14 +89,11 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     });
   }
 
-  // ── Mute toggle ──
   void _toggleMute() {
     if (_isMuted) {
-      // Unmute — resume listening
       setState(() { _isMuted = false; _phase = _Phase.idle; });
       _listen();
     } else {
-      // Mute — stop everything but stay in call
       _tts.stop();
       _stt.stopListening();
       setState(() {
@@ -113,7 +104,6 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     }
   }
 
-  // ── Replay last response (from TTS cache) ──
   void _replayLast() {
     if (_lastAiResponse.isEmpty) return;
     _tts.stop();
@@ -128,6 +118,10 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
   // ── LISTEN ──
   Future<void> _listen() async {
     if (!_isActive || !mounted || _isMuted) return;
+
+    // Reset processing flag — we're ready for new input
+    _isProcessing = false;
+
     setState(() {
       _phase = _Phase.listening;
       _transcript = '';
@@ -137,15 +131,19 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     final ok = await _stt.initialize();
     if (!ok || !_isActive) return;
 
-    bool sent = false;
     await _stt.startListening(onResult: (text, isFinal) {
       if (!mounted || !_isActive || _isMuted) return;
+
+      // Ignore STT results if we're already processing
+      if (_isProcessing) return;
+
       setState(() {
         _transcript = text;
         _audioLevel = text.isNotEmpty ? (text.length % 7) / 7.0 * 0.6 + 0.3 : 0.1;
       });
-      if (isFinal && text.trim().isNotEmpty && !sent) {
-        sent = true;
+
+      if (isFinal && text.trim().isNotEmpty) {
+        _isProcessing = true; // Lock — no more STT results accepted
         _process(text.trim());
       }
     });
@@ -169,36 +167,77 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
         final data = resp['data'];
         final msg = data['message'] as String? ?? '';
         final prods = data['products'] as List?;
+
+        // Only update products when AI sends new ones
         if (prods != null && prods.isNotEmpty) {
           setState(() => _products = prods.cast<Map<String, dynamic>>());
         }
+
         _lastAiResponse = msg;
-        _speak(msg);
+        _lastAiDisplayText = TTSService.cleanForDisplay(msg);
+
+        if (msg.isNotEmpty) {
+          await _speak(msg);
+        } else {
+          _transitionToListening();
+        }
       } else {
-        _speak("Sorry, please try again.");
+        _setResponse("Sorry, please try again.");
+        await _speak(_lastAiResponse);
       }
     } catch (_) {
-      if (mounted && _isActive) _speak("Connection error.");
+      if (mounted && _isActive) {
+        _setResponse("Connection error.");
+        await _speak(_lastAiResponse);
+      }
     }
+  }
+
+  void _setResponse(String text) {
+    _lastAiResponse = text;
+    _lastAiDisplayText = TTSService.cleanForDisplay(text);
   }
 
   // ── SPEAK ──
   Future<void> _speak(String text) async {
     if (!_isActive || !mounted) return;
-    setState(() { _phase = _Phase.speaking; _audioLevel = 0.4; });
+
+    // Show the AI response text immediately
+    setState(() {
+      _phase = _Phase.speaking;
+      _audioLevel = 0.4;
+    });
 
     final ok = await _tts.speak(text);
+
     if (ok) {
       _animateSpeech();
-      while (_tts.isPlaying && _isActive && mounted && !_isMuted) {
-        await Future.delayed(const Duration(milliseconds: 150));
-      }
+      // Wait for audio to finish playing
+      await _tts.waitForCompletion();
+      debugPrint('[Overlay] TTS playback done');
+    } else {
+      debugPrint('[Overlay] TTS failed — keeping text visible');
+      // ── TTS failed: estimate reading time based on text length ──
+      // Average reading speed ~200 words/min = ~3 chars per 100ms
+      final readTime = (_lastAiDisplayText.length / 3 * 100)
+          .clamp(2000, 6000)
+          .toInt();
+      await Future.delayed(Duration(milliseconds: readTime));
     }
 
+    _transitionToListening();
+  }
+
+  /// Smooth transition from speaking → listening with a natural pause
+  void _transitionToListening() async {
+    if (!_isActive || !mounted || _isMuted) return;
+
+    // Brief pause — text stays visible during this
+    // Phase stays as speaking so text remains on screen
+    await Future.delayed(const Duration(milliseconds: 800));
+
     if (_isActive && mounted && !_isMuted) {
-      setState(() => _audioLevel = 0.0);
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (_isActive && mounted && !_isMuted) _listen();
+      _listen();
     }
   }
 
@@ -234,30 +273,17 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // ── Background (matches conversation box dark theme) ──
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF0A0F1E),
-                      Color(0xFF0E1525),
-                      Color(0xFF080D18),
-                    ],
-                  ),
-                ),
-              ),
+              Container(color: const Color(0xFF0A0A0A)),
               SafeArea(
                 child: Column(
                   children: [
                     _topBar(),
                     const Spacer(flex: 3),
-                    // ── THE ORB ──
                     LiquidOrbVisualizer(
                       size: 220,
                       phase: _mapPhase(),
                       audioLevel: _audioLevel,
+                      colorful: false,
                     ),
                     const SizedBox(height: 28),
                     _statusText(),
@@ -288,7 +314,6 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     }
   }
 
-  // ── Top bar ──
   Widget _topBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
@@ -296,7 +321,7 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
         children: [
           Text('YSHOP AI', style: TextStyle(
             fontFamily: 'CinzelDecorative', fontSize: 13, fontWeight: FontWeight.w600,
-            letterSpacing: 2, color: Colors.white.withOpacity(0.5),
+            letterSpacing: 2, color: Colors.white.withOpacity(0.35),
           )),
           const Spacer(),
           _pillBadge(),
@@ -312,16 +337,16 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withOpacity(0.10),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withOpacity(0.20)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 6, height: 6, decoration: BoxDecoration(
+        Container(width: 5, height: 5, decoration: BoxDecoration(
           shape: BoxShape.circle, color: color)),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-          letterSpacing: 1, color: color)),
+        Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+          letterSpacing: 1.2, color: color)),
       ]),
     );
   }
@@ -331,11 +356,10 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
       case _Phase.listening: return const Color(0xFF2563EB);
       case _Phase.thinking: return const Color(0xFF8B5CF6);
       case _Phase.speaking: return const Color(0xFF10B981);
-      default: return Colors.white.withOpacity(0.4);
+      default: return Colors.white.withOpacity(0.3);
     }
   }
 
-  // ── Status ──
   Widget _statusText() {
     String s;
     switch (_phase) {
@@ -349,28 +373,58 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
       duration: const Duration(milliseconds: 300),
       child: Text(s, key: ValueKey(s), style: TextStyle(
         fontFamily: 'TenorSans', fontSize: 15,
-        color: Colors.white.withOpacity(0.5), letterSpacing: 0.5)),
+        color: Colors.white.withOpacity(0.4), letterSpacing: 0.5)),
     );
   }
 
+  /// ── Show text to user ──
+  /// - Listening phase: show what user is saying (transcript)
+  /// - Speaking/thinking: show AI response (clean, no TTS tags)
+  /// - Text stays visible until user starts talking again
   Widget _liveText() {
-    final t = _phase == _Phase.listening ? _transcript :
-              _phase == _Phase.speaking ? _lastAiResponse : '';
+    String t;
+    if (_phase == _Phase.listening && _transcript.isNotEmpty) {
+      // User is talking — show their words
+      t = _transcript;
+    } else if (_lastAiDisplayText.isNotEmpty &&
+        (_phase == _Phase.speaking || _phase == _Phase.thinking ||
+         (_phase == _Phase.listening && _transcript.isEmpty))) {
+      // AI response visible:
+      //   - While speaking (obvious)
+      //   - While thinking (shows last response as context)
+      //   - While listening but user hasn't said anything yet (text lingers)
+      t = _lastAiDisplayText;
+    } else {
+      t = '';
+    }
+
     if (t.isEmpty) return const SizedBox(height: 20);
+
+    final isUserTalking = _phase == _Phase.listening && _transcript.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
-      child: Text(t, textAlign: TextAlign.center, maxLines: 3,
-        overflow: TextOverflow.ellipsis, style: TextStyle(
-          fontSize: 13, height: 1.5,
-          color: _phase == _Phase.listening
-              ? Colors.white.withOpacity(0.85)
-              : Colors.white.withOpacity(0.4),
-          fontStyle: _phase == _Phase.speaking ? FontStyle.italic : FontStyle.normal,
-        )),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: Text(
+          t,
+          key: ValueKey(t.hashCode),
+          textAlign: TextAlign.center,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.5,
+            color: isUserTalking
+                ? Colors.white.withOpacity(0.85)
+                : Colors.white.withOpacity(0.45),
+            fontStyle: isUserTalking ? FontStyle.normal : FontStyle.italic,
+          ),
+        ),
+      ),
     );
   }
 
-  // ── Products ──
   Widget _productStrip() {
     return SizedBox(
       height: 86,
@@ -410,15 +464,15 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
       child: Container(
         width: 185, margin: const EdgeInsets.only(right: 12), padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: Colors.white.withOpacity(0.04),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(color: Colors.white.withOpacity(0.06)),
         ),
         child: Row(children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: Container(
-              width: 50, height: 50, color: Colors.white.withOpacity(0.04),
+              width: 50, height: 50, color: Colors.white.withOpacity(0.03),
               child: img != null ? Image.network(img, fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => _ph()) : _ph(),
             ),
@@ -441,10 +495,10 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
               child: Container(
                 width: 26, height: 26,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08), shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withOpacity(0.15)),
+                  color: Colors.white.withOpacity(0.06), shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withOpacity(0.10)),
                 ),
-                child: Icon(Icons.add_rounded, color: Colors.white.withOpacity(0.6), size: 14),
+                child: Icon(Icons.add_rounded, color: Colors.white.withOpacity(0.5), size: 14),
               ),
             ),
         ]),
@@ -452,16 +506,12 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     );
   }
 
-  Widget _ph() => Icon(Icons.shopping_bag_outlined, color: Colors.white.withOpacity(0.15), size: 18);
+  Widget _ph() => Icon(Icons.shopping_bag_outlined, color: Colors.white.withOpacity(0.12), size: 18);
 
-  // ═══════════════════════════════════════════
-  //  CONTROL BUTTONS
-  // ═══════════════════════════════════════════
   Widget _controlButtons() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Replay button
         _glassButton(
           icon: Icons.replay_rounded,
           label: 'Replay',
@@ -469,10 +519,8 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
           enabled: _lastAiResponse.isNotEmpty,
         ),
         const SizedBox(width: 20),
-        // End button (center, bigger)
         _endButton(),
         const SizedBox(width: 20),
-        // Mute button
         _glassButton(
           icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
           label: _isMuted ? 'Unmute' : 'Mute',
@@ -506,25 +554,25 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
                   width: 52, height: 52,
                   decoration: BoxDecoration(
                     color: isActive
-                        ? Colors.orange.withOpacity(0.15)
-                        : Colors.white.withOpacity(0.06),
+                        ? Colors.orange.withOpacity(0.12)
+                        : Colors.white.withOpacity(0.04),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: isActive
-                          ? Colors.orange.withOpacity(0.3)
-                          : Colors.white.withOpacity(0.1)),
+                          ? Colors.orange.withOpacity(0.25)
+                          : Colors.white.withOpacity(0.08)),
                   ),
                   child: Icon(icon,
                     color: isActive
-                        ? Colors.orange.withOpacity(0.9)
-                        : Colors.white.withOpacity(0.6),
+                        ? Colors.orange.withOpacity(0.85)
+                        : Colors.white.withOpacity(0.5),
                     size: 22),
                 ),
               ),
             ),
             const SizedBox(height: 6),
             Text(label, style: TextStyle(
-              fontSize: 10, color: Colors.white.withOpacity(0.4),
+              fontSize: 10, color: Colors.white.withOpacity(0.3),
               letterSpacing: 0.3,
             )),
           ],
@@ -546,9 +594,9 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
               child: Container(
                 width: 60, height: 60,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFDC2626).withOpacity(0.2),
+                  color: const Color(0xFFDC2626).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.35)),
+                  border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.25)),
                 ),
                 child: const Icon(Icons.call_end_rounded,
                     color: Color(0xFFFCA5A5), size: 24),
@@ -557,7 +605,7 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
           ),
           const SizedBox(height: 6),
           Text('End', style: TextStyle(
-            fontSize: 10, color: Colors.white.withOpacity(0.4),
+            fontSize: 10, color: Colors.white.withOpacity(0.3),
             letterSpacing: 0.3)),
         ],
       ),

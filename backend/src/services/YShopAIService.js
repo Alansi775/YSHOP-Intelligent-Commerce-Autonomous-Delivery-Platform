@@ -3,13 +3,14 @@ import logger from '../config/logger.js';
 import pool from '../config/database.js';
 
 /**
- * YSHOP AI Service - v4
- * Fixed: Proper response extraction + safety filter handling
+ * YSHOP AI Service - v6
+ * Conversation flow: AI talks first, products come only when ready
  */
 export class YShopAIService {
   static client = null;
   static model = null;
   static conversationMemory = new Map();
+  static shownProducts = new Map();
 
   // ─────────────────────────────────────────────
   // INIT
@@ -27,40 +28,43 @@ export class YShopAIService {
   }
 
   // ─────────────────────────────────────────────
+  // PERSONALITY
+  // ─────────────────────────────────────────────
+  static get PERSONALITY() {
+    return `You are "Youssef", a shopping buddy at YSHOP. You talk like a real friend — casual, warm, sometimes funny.
+
+Voice rules:
+- Talk like a friend, NOT a customer service bot
+- Match the user's language (Arabic = Arabic, English = English)
+- NEVER say "Great choice!", "How can I assist you?", "I'd be happy to help"
+- Say things like "Ooh nice taste!", "Man you're gonna love this", "Honestly? This one's fire"
+- Keep it SHORT — 1-2 sentences, like texting a friend
+- NEVER use emojis
+
+TTS tags (use naturally, not every sentence):
+- <break time="0.5s" /> for pauses
+- (haha) or (hehe) for light laughs
+- (hmm) for thinking
+- ... for trailing off`;
+  }
+
+  // ─────────────────────────────────────────────
   // SAFE TEXT EXTRACTOR
-  // Handles all the ways Gemini can return text
   // ─────────────────────────────────────────────
   static extractText(response) {
     try {
-      // Method 1: Standard .text() method
       if (response?.response?.text) {
         const t = response.response.text();
         if (t && t.trim().length > 0) return t.trim();
       }
-
-      // Method 2: Direct candidates access
       const candidates = response?.response?.candidates;
       if (candidates && candidates.length > 0) {
-        const candidate = candidates[0];
-
-        // Check finish reason
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-          logger.warn(`[YShopAI] Finish reason: ${candidate.finishReason}`);
-        }
-
-        const parts = candidate?.content?.parts;
+        const parts = candidates[0]?.content?.parts;
         if (parts && parts.length > 0) {
           const text = parts.map(p => p.text || '').join('');
           if (text.trim().length > 0) return text.trim();
         }
       }
-
-      // Method 3: promptFeedback check
-      const feedback = response?.response?.promptFeedback;
-      if (feedback?.blockReason) {
-        logger.warn(`[YShopAI] Blocked: ${feedback.blockReason}`);
-      }
-
       return '';
     } catch (err) {
       logger.error('[YShopAI] extractText error:', err.message);
@@ -74,24 +78,18 @@ export class YShopAIService {
   static parseJSON(text) {
     if (!text) return null;
     try {
-      // Remove markdown fences
       let cleaned = text
         .replace(/^```json\s*/im, '')
         .replace(/^```\s*/im, '')
         .replace(/```\s*$/im, '')
         .trim();
-
-      // Try direct parse
       if (cleaned.startsWith('{')) {
         try { return JSON.parse(cleaned); } catch { /* continue */ }
       }
-
-      // Extract JSON object
       const match = cleaned.match(/\{[\s\S]*\}/);
       if (match) {
         try { return JSON.parse(match[0]); } catch { /* continue */ }
       }
-
       return null;
     } catch {
       return null;
@@ -101,8 +99,6 @@ export class YShopAIService {
   // ─────────────────────────────────────────────
   // MEMORY
   // ─────────────────────────────────────────────
-  static shownProducts = new Map(); // userId → last shown products
-
   static getMemory(userId) {
     if (!this.conversationMemory.has(userId)) {
       this.conversationMemory.set(userId, []);
@@ -139,21 +135,16 @@ export class YShopAIService {
       const connection = await pool.getConnection();
       let query = `
         SELECT
-          p.id,
-          p.name,
+          p.id, p.name,
           COALESCE(p.description, '') AS description,
-          p.price,
-          p.currency,
-          p.stock,
-          p.image_url,
-          s.name      AS store_name,
-          s.store_type,
+          p.price, p.currency, p.stock, p.image_url,
+          s.name AS store_name, s.store_type,
           s.email AS store_owner_email
         FROM products p
         JOIN stores s ON p.store_id = s.id
-        WHERE p.status  = 'approved'
+        WHERE p.status = 'approved'
           AND p.is_active = 1
-          AND s.status  = 'approved'
+          AND s.status = 'approved'
       `;
       const params = [];
       if (storeType) {
@@ -180,74 +171,78 @@ export class YShopAIService {
 
   // ─────────────────────────────────────────────
   // STEP 1: Understand intent
-  // Simple & focused prompt — avoids safety filters
+  //
+  // KEY CHANGE: "showProducts" controls when products appear
+  //   - showProducts = true  → fetch and display products NOW
+  //   - showProducts = false → just talk, no products yet
   // ─────────────────────────────────────────────
   static async understandMessage(userMessage, history, shownProducts = []) {
     const historyText = history.slice(-6)
-      .map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.text}`)
+      .map(m => `${m.role === 'user' ? 'User' : 'Youssef'}: ${m.text}`)
       .join('\n');
 
-    // Build context of previously shown products
     const shownContext = shownProducts.length > 0
-      ? `\nProducts currently shown to user:\n${shownProducts.map(p => `- ${p.name} (${p.price} ${p.currency}) from ${p.store_name}: ${(p.description || '').substring(0, 80)}`).join('\n')}\n`
+      ? `\nProducts user already saw:\n${shownProducts.map(p => `- ${p.name} (${p.price} ${p.currency}) from ${p.store_name}: ${(p.description || '').substring(0, 100)}`).join('\n')}\n`
       : '';
 
-    const prompt = `Task: Analyze this shopping assistant message and return JSON.
+    const prompt = `${this.PERSONALITY}
 
-Previous chat:
-${historyText || 'none'}
+Chat so far:
+${historyText || '(first message)'}
 ${shownContext}
-User said: "${userMessage}"
+User: "${userMessage}"
 
-Store types available: Food, Pharmacy, Clothes, Market
+Store types: Food, Pharmacy, Clothes, Market
 
-Return this exact JSON format:
-{"needsProducts":true,"storeType":"Food","keywords":["burger","meal"],"quantity":3,"reply":"Great choice! Let me find something delicious for you.","isProductDiscussion":false}
+Return JSON:
+{"showProducts":true/false,"storeType":"Food"/null,"keywords":[],"quantity":3,"reply":"...","isProductDiscussion":false}
 
-OR if user is asking/discussing about a product already shown (e.g. "tell me more about X", "is it good?", "what's in the cruncher?"):
-{"needsProducts":false,"storeType":null,"keywords":[],"quantity":0,"reply":"The Cruncher is a crispy chicken sandwich with ...","isProductDiscussion":true}
+CRITICAL RULE — showProducts:
+- showProducts = false when you want to TALK first (greetings, asking questions, narrowing down what they want)
+- showProducts = true ONLY when you are READY to present products (user gave enough info)
 
-OR if casual greeting:
-{"needsProducts":false,"storeType":null,"keywords":[],"quantity":0,"reply":"Hello! What can I help you find today?","isProductDiscussion":false}
+Examples:
+- User: "hi" → showProducts:false, reply: greet and ask what they want
+- User: "I'm hungry" → showProducts:false, reply: ask what kind of food / what mood
+- User: "I want a burger" → showProducts:true, reply: "let me show you..." storeType:"Food" keywords:["burger"]
+- User: "anything, surprise me" → showProducts:true, reply: "alright check these out..."
+- User: "tell me about the cruncher" → showProducts:false, isProductDiscussion:true, reply: talk about that product
 
-Rules:
-- needsProducts = true if user wants to buy/find products
-- isProductDiscussion = true if user is asking about a product already shown to them. In this case, use the product details shown above to give a helpful, convincing answer about that product.
-- storeType = Food if hungry/thirsty/food/drink, Pharmacy if medicine/health, Clothes if fashion, Market if groceries
-- keywords = specific product words only
-- quantity = how many products the user asked for. If user says "one water" or "1 burger" return 1. If they say "2 meals" return 2. If no specific quantity, default to 3. Maximum is 5.
-- reply = friendly 1 sentence, same language as user. If isProductDiscussion, give a detailed helpful answer about that product (price, description, store, etc.)
-- NEVER use emojis in the reply
-- Return ONLY the JSON, nothing else`;
+Other rules:
+- isProductDiscussion = true if discussing a product already shown
+- quantity = number user asked for (1-5), default 3
+- reply = your friendly response with TTS tags
+- Return ONLY JSON`;
 
     try {
       const response = await this.model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 1024,
-          stopSequences: [],
-        },
+        generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
       });
 
       const raw = this.extractText(response);
       logger.info(`[YShopAI] understandMessage raw: "${raw.substring(0, 200)}"`);
 
       if (!raw) {
-        logger.warn('[YShopAI] Empty AI response — using local intent detection');
+        logger.warn('[YShopAI] Empty response — local fallback');
         return this.localIntentDetection(userMessage);
       }
 
       const parsed = this.parseJSON(raw);
       if (parsed && parsed.reply) {
-        logger.info(`[YShopAI] Understood | needsProducts=${parsed.needsProducts} | store=${parsed.storeType} | qty=${parsed.quantity || 3} | discussion=${parsed.isProductDiscussion || false}`);
-        // Ensure quantity defaults
+        // Normalize fields
+        parsed.showProducts = parsed.showProducts === true;
         parsed.quantity = Math.min(Math.max(parsed.quantity || 3, 1), 5);
         parsed.isProductDiscussion = parsed.isProductDiscussion || false;
+
+        // Backward compat: map to needsProducts
+        parsed.needsProducts = parsed.showProducts;
+
+        logger.info(`[YShopAI] Intent | show=${parsed.showProducts} | store=${parsed.storeType} | qty=${parsed.quantity} | discussion=${parsed.isProductDiscussion}`);
         return parsed;
       }
 
-      logger.warn('[YShopAI] Could not parse JSON — using local detection');
+      logger.warn('[YShopAI] Parse failed — local fallback');
       return this.localIntentDetection(userMessage);
 
     } catch (err) {
@@ -257,18 +252,15 @@ Rules:
   }
 
   // ─────────────────────────────────────────────
-  // LOCAL INTENT DETECTION
-  // Runs when AI fails — no API call needed
+  // LOCAL INTENT DETECTION (fallback)
   // ─────────────────────────────────────────────
   static localIntentDetection(msg) {
     const m = msg.toLowerCase();
 
-    // Extract quantity from message
     const qtyMatch = m.match(/(\d+)\s+\w/);
     const wordQty = { one: 1, two: 2, three: 3, four: 4, five: 5,
-      واحد: 1, اثنين: 2, ثلاث: 3, اربع: 4, خمس: 5,
-      حبه: 1, حبتين: 2 };
-    let quantity = 3; // default
+      واحد: 1, اثنين: 2, ثلاث: 3, اربع: 4, خمس: 5, حبه: 1, حبتين: 2 };
+    let quantity = 3;
     if (qtyMatch) {
       quantity = Math.min(Math.max(parseInt(qtyMatch[1]), 1), 5);
     } else {
@@ -277,114 +269,116 @@ Rules:
       }
     }
 
-    // Greetings
+    // Greetings — talk only, no products
     const greetings = ['hello', 'hi ', 'hey', 'greetings', 'good morning', 'good evening',
-      'مرحبا', 'السلام', 'هلا', 'اهلا', 'صباح', 'مساء'];
-    if (greetings.some(g => m.includes(g)) && m.length < 40 && !m.includes('want') && !m.includes('need')) {
+      'مرحبا', 'السلام', 'هلا', 'اهلا', 'صباح', 'مساء', 'how are'];
+    if (greetings.some(g => m.includes(g)) && m.length < 50 && !m.includes('want') && !m.includes('need') && !m.includes('burger') && !m.includes('pizza')) {
       return {
-        needsProducts: false,
-        storeType: null,
-        keywords: [],
-        quantity: 0,
-        isProductDiscussion: false,
-        reply: "Hello! Welcome to YSHOP. What can I help you find today?",
+        needsProducts: false, showProducts: false, storeType: null,
+        keywords: [], quantity: 0, isProductDiscussion: false,
+        reply: "(hmm) يا هلا والله! <break time=\"0.3s\" /> وش تبي تاكل اليوم؟ قلي وانا ادبرك",
       };
     }
 
-    // Food / Hunger / Thirst
-    const foodWords = ['food', 'eat', 'hungry', 'hunger', 'hungary', 'meal', 'lunch', 'dinner',
-      'breakfast', 'burger', 'pizza', 'chicken', 'rice', 'drink', 'water', 'juice',
-      'thirsty', 'beverage', 'coffee', 'tea', 'snack', 'dessert', 'cake', 'sandwich',
-      'جوعان', 'عطشان', 'اكل', 'طعام', 'شرب', 'ماء'];
-    if (foodWords.some(w => m.includes(w))) {
-      const keywords = foodWords.filter(w => m.includes(w) && w.length > 3);
+    // Vague hunger — ASK first, don't show products yet
+    const vagueHunger = ['hungry', 'hunger', 'جوعان', 'عطشان', 'i want to eat', 'i want food',
+      'اكل', 'جعت', 'ابي اكل'];
+    const specificFood = ['burger', 'pizza', 'chicken', 'rice', 'sandwich', 'coffee', 'tea',
+      'water', 'juice', 'cake', 'snack', 'برجر', 'بيتزا', 'دجاج', 'ماء'];
+
+    const hasSpecific = specificFood.some(w => m.includes(w));
+    const hasVague = vagueHunger.some(w => m.includes(w));
+
+    // User said something specific like "I want a burger" → show products
+    if (hasSpecific) {
+      const keywords = specificFood.filter(w => m.includes(w)).slice(0, 3);
       return {
-        needsProducts: true,
-        storeType: 'Food',
-        keywords: keywords.slice(0, 3),
-        reply: "Great! Let me find some delicious options for you.",
-        quantity: quantity,
-        isProductDiscussion: false,
+        needsProducts: true, showProducts: true, storeType: 'Food',
+        keywords, quantity, isProductDiscussion: false,
+        reply: "تمام <break time=\"0.2s\" /> خلني اجيب لك خيارات حلوه",
       };
     }
 
-    // Pharmacy / Health
-    const pharmaWords = ['medicine', 'pharmacy', 'health', 'sick', 'pain', 'pill', 'tablet',
-      'vitamin', 'doctor', 'headache', 'fever', 'cold', 'treatment', 'دواء', 'صيدليه'];
+    // User is vague "I'm hungry" → ask what kind, NO products
+    if (hasVague) {
+      return {
+        needsProducts: false, showProducts: false, storeType: null,
+        keywords: [], quantity: 0, isProductDiscussion: false,
+        reply: "(hmm) وش مودك اليوم؟ <break time=\"0.3s\" /> برجر؟ بيتزا؟ ولا شي خفيف؟",
+      };
+    }
+
+    // Pharmacy
+    const pharmaWords = ['medicine', 'pharmacy', 'health', 'sick', 'pain', 'pill',
+      'vitamin', 'headache', 'fever', 'دواء', 'صيدليه'];
     if (pharmaWords.some(w => m.includes(w))) {
       return {
-        needsProducts: true,
-        storeType: 'Pharmacy',
+        needsProducts: true, showProducts: true, storeType: 'Pharmacy',
         keywords: pharmaWords.filter(w => m.includes(w)).slice(0, 3),
-        reply: "I'll find the right healthcare products for you.",
-        quantity: quantity,
-        isProductDiscussion: false,
+        reply: "سلامتك! <break time=\"0.3s\" /> خلني اشوف لك شي يساعدك",
+        quantity, isProductDiscussion: false,
       };
     }
 
-    // Clothes / Fashion
-    const clothesWords = ['clothes', 'shirt', 'dress', 'shoes', 'fashion', 'jacket', 'pants',
-      'outfit', 'wear', 'style', 'ملابس', 'قميص', 'فستان'];
+    // Clothes
+    const clothesWords = ['clothes', 'shirt', 'dress', 'shoes', 'fashion', 'jacket',
+      'ملابس', 'قميص', 'فستان'];
     if (clothesWords.some(w => m.includes(w))) {
       return {
-        needsProducts: true,
-        storeType: 'Clothes',
+        needsProducts: true, showProducts: true, storeType: 'Clothes',
         keywords: clothesWords.filter(w => m.includes(w)).slice(0, 3),
-        reply: "Let me show you some great fashion options.",
-        quantity: quantity,
-        isProductDiscussion: false,
+        reply: "تبي تتأنق؟ (haha) <break time=\"0.3s\" /> خلني اعطيك خيارات",
+        quantity, isProductDiscussion: false,
       };
     }
 
-    // Market / Grocery
-    const marketWords = ['market', 'grocery', 'vegetable', 'fruit', 'fresh', 'organic', 'produce',
-      'خضار', 'فاكهة', 'سوق'];
+    // Market
+    const marketWords = ['market', 'grocery', 'vegetable', 'fruit', 'خضار', 'فاكهة', 'سوق'];
     if (marketWords.some(w => m.includes(w))) {
       return {
-        needsProducts: true,
-        storeType: 'Market',
+        needsProducts: true, showProducts: true, storeType: 'Market',
         keywords: marketWords.filter(w => m.includes(w)).slice(0, 3),
-        reply: "I'll find fresh market products for you.",
-        quantity: quantity,
-        isProductDiscussion: false,
+        reply: "طازج وفريش! <break time=\"0.3s\" /> خلني اشوف وش عندنا",
+        quantity, isProductDiscussion: false,
       };
     }
 
-    // "Give me another", "different option"
+    // "another" / "different" — show products
     if (m.includes('another') || m.includes('different') || m.includes('other') ||
-        m.includes('change') || m.includes('else') || m.includes('more')) {
+        m.includes('change') || m.includes('else') || m.includes('غير') || m.includes('ثاني')) {
       return {
-        needsProducts: true,
-        storeType: null,
-        keywords: [],
-        reply: "Sure! Let me find you something different.",
-        quantity: quantity,
-        isProductDiscussion: false,
+        needsProducts: true, showProducts: true, storeType: null, keywords: [],
+        reply: "تبي شي ثاني؟ اوكي <break time=\"0.3s\" /> خلني اغير لك",
+        quantity, isProductDiscussion: false,
       };
     }
 
-    // "I want ..."
+    // "surprise me" / "anything" — show products
+    if (m.includes('surprise') || m.includes('anything') || m.includes('whatever') ||
+        m.includes('اي شي') || m.includes('فاجئني')) {
+      return {
+        needsProducts: true, showProducts: true, storeType: null, keywords: [],
+        reply: "<prosody rate=\"fast\">اوكي اوكي</prosody> <break time=\"0.2s\" /> شوف هذي",
+        quantity, isProductDiscussion: false,
+      };
+    }
+
+    // "I want..." (vague) — ask what
     if (m.includes('want') || m.includes('need') || m.includes('looking for') ||
         m.includes('find') || m.includes('show') || m.includes('get me') ||
         m.includes('اريد') || m.includes('ابغى') || m.includes('بغيت')) {
       return {
-        needsProducts: true,
-        storeType: null,
-        keywords: [],
-        reply: "I'll help you find that! Let me search our products for you.",
-        quantity: quantity,
-        isProductDiscussion: false,
+        needsProducts: false, showProducts: false, storeType: null,
+        keywords: [], quantity: 0, isProductDiscussion: false,
+        reply: "تمام <break time=\"0.2s\" /> وش بالضبط تدور عليه؟",
       };
     }
 
-    // Default — ask what they want
+    // Default — just chat
     return {
-      needsProducts: false,
-      storeType: null,
-      keywords: [],
-      reply: "I'm here to help! What would you like to find today?",
-      quantity: 0,
-      isProductDiscussion: false,
+      needsProducts: false, showProducts: false, storeType: null,
+      keywords: [], quantity: 0, isProductDiscussion: false,
+      reply: "قلي وش تبي وانا اساعدك <break time=\"0.3s\" /> اكل؟ ملابس؟ شي من الصيدلية؟",
     };
   }
 
@@ -392,12 +386,10 @@ Rules:
   // STEP 2: Select products with AI
   // ─────────────────────────────────────────────
   static async selectProductsWithAI(userMessage, products, keywords, history, limit = 3) {
-    // Build compact catalog
     const catalog = products.slice(0, 50).map(p =>
       `${p.id}|${p.name}|${p.description.substring(0, 50)}|${p.price}${p.currency}`
     ).join('\n');
 
-    // Get IDs shown before (to avoid repeating)
     const shownIds = [];
     for (const m of history.slice(-6)) {
       const matches = m.text?.match(/\[shown:([^\]]+)\]/g);
@@ -409,15 +401,14 @@ Rules:
       }
     }
 
-    const prompt = `Pick ${limit} products for: "${userMessage}"
+    const prompt = `Pick the ${limit} BEST products for: "${userMessage}"
 Keywords: ${keywords.join(', ') || 'any'}
-${shownIds.length > 0 ? `Already shown IDs (avoid): ${shownIds.join(', ')}` : ''}
+${shownIds.length > 0 ? `Already shown (avoid): ${shownIds.join(', ')}` : ''}
 
-Products (id|name|description|price):
+Products:
 ${catalog}
 
-Return JSON only:
-{"ids":[id1,id2,id3]}`;
+Return JSON only: {"ids":[id1,id2]}`;
 
     try {
       const response = await this.model.generateContent({
@@ -426,8 +417,6 @@ Return JSON only:
       });
 
       const raw = this.extractText(response);
-      logger.info(`[YShopAI] selectProducts raw: "${raw.substring(0, 100)}"`);
-
       const parsed = this.parseJSON(raw);
       if (parsed?.ids?.length) {
         const selected = products.filter(p => parsed.ids.includes(p.id));
@@ -437,72 +426,65 @@ Return JSON only:
       logger.error('[YShopAI] selectProducts error:', err.message);
     }
 
-    // Fallback: keyword-based selection
     return this.keywordSelect(products, keywords, userMessage, limit);
   }
 
   // ─────────────────────────────────────────────
-  // STEP 3: Generate smart reasons for products using AI
+  // STEP 3: Generate reasons (human-like + TTS)
   // ─────────────────────────────────────────────
   static async generateProductReasons(userMessage, products) {
     if (!products || products.length === 0) return products;
 
     const productList = products.map(p =>
-      `- ${p.name}: ${p.description ? p.description.substring(0, 60) : 'No description'}`
+      `- ${p.name}: ${p.description ? p.description.substring(0, 80) : 'No description'} (${p.price} ${p.currency})`
     ).join('\n');
 
-    const prompt = `User asked: "${userMessage}"
+    const prompt = `${this.PERSONALITY}
 
-Here are the products we're showing them:
+User asked: "${userMessage}"
+
+Products:
 ${productList}
 
-For EACH product, write ONE short, catchy reason why they should try it (1-2 sentences max).
-Be specific, relevant to their request, and enthusiastic but professional.
+For EACH product write 1 short friend-style reason why they'd love it.
+Talk like you tried it. Be specific. Use TTS tags where natural.
 NEVER use emojis.
 
 Return JSON only:
-{"reasons":{"<product_name>":"reason text here", "<product_name_2>":"reason text here"}}`;
+{"reasons":{"ProductName":"reason"}}`;
 
     try {
       const response = await this.model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 512 },
+        generationConfig: { temperature: 0.5, maxOutputTokens: 512 },
       });
 
       const raw = this.extractText(response);
-      logger.info(`[YShopAI] generateReasons raw: "${raw.substring(0, 150)}"`);
-
       const parsed = this.parseJSON(raw);
       if (parsed?.reasons && typeof parsed.reasons === 'object') {
         return products.map(p => ({
           ...p,
-          reason: parsed.reasons[p.name] || 'Great choice for you!',
+          reason: parsed.reasons[p.name] || 'This one is solid, trust me.',
         }));
       }
     } catch (err) {
       logger.error('[YShopAI] generateReasons error:', err.message);
     }
 
-    // Fallback: generic reasons
-    return products.map(p => ({
-      ...p,
-      reason: 'Excellent choice for you!',
-    }));
+    return products.map(p => ({ ...p, reason: 'This one is solid, trust me.' }));
   }
 
   // ─────────────────────────────────────────────
-  // KEYWORD-BASED PRODUCT SELECTION (no AI needed)
+  // KEYWORD-BASED SELECTION (no AI)
   // ─────────────────────────────────────────────
   static keywordSelect(products, keywords, userMessage, limit = 3) {
     const msg = userMessage.toLowerCase();
     const kws = [...keywords, ...msg.split(/\s+/).filter(w => w.length > 3)];
 
-    // Score each product
     const scored = products.map(p => {
       let score = 0;
       const name = (p.name || '').toLowerCase();
       const desc = (p.description || '').toLowerCase();
-
       for (const kw of kws) {
         if (name === kw) score += 10;
         else if (name.startsWith(kw)) score += 6;
@@ -512,97 +494,70 @@ Return JSON only:
       return { ...p, _score: score };
     });
 
-    // Sort by score, then by stock
     scored.sort((a, b) => b._score - a._score || b.stock - a.stock);
-
-    logger.info(`[YShopAI] keywordSelect top 3: ${scored.slice(0, 3).map(p => `${p.name}(${p._score})`).join(', ')}`);
-
     return scored.slice(0, limit);
   }
 
   // ─────────────────────────────────────────────
-  // MAIN ENTRY: generateResponse
+  // MAIN: generateResponse
   // ─────────────────────────────────────────────
   static async generateResponse(userMessage, userId) {
     try {
       const history = this.getMemory(userId);
       const previousProducts = this.getShownProducts(userId);
 
-      // Step 1: Understand message (pass shown products for context)
+      // Step 1: Understand
       const understanding = await this.understandMessage(userMessage, history, previousProducts);
 
-      let reply = understanding.reply || "I'm here to help! What would you like today?";
+      let reply = understanding.reply || "(hmm) قلي وش تبي وانا معك";
       let products = [];
-
-      // Determine product limit from quantity (default 3, max 5)
       const productLimit = understanding.quantity > 0 ? Math.min(understanding.quantity, 5) : 3;
 
-      // Handle product discussion (user asking about previously shown products)
+      // ── Product discussion (about already shown products) ──
       if (understanding.isProductDiscussion && previousProducts.length > 0) {
-        // No new product fetch — just return the AI's discussion reply
         this.addToMemory(userId, 'user', userMessage);
         this.addToMemory(userId, 'ai', reply);
-
-        logger.info(
-          `[YShopAI] ProductDiscussion | userId=${userId} | ` +
-          `shownProducts=${previousProducts.length} | reply="${reply.substring(0, 60)}"`
-        );
-
         return { reply, products: [] };
       }
 
-      // Step 2: Find products if needed
-      if (understanding.needsProducts) {
+      // ── SHOW PRODUCTS only when AI decided it's time ──
+      if (understanding.showProducts) {
         const allProducts = await this.fetchProducts(understanding.storeType);
 
         if (allProducts.length > 0) {
-          // Try AI selection first
           products = await this.selectProductsWithAI(
-            userMessage,
-            allProducts,
-            understanding.keywords || [],
-            history,
-            productLimit,
+            userMessage, allProducts, understanding.keywords || [], history, productLimit,
           );
 
-          // If AI selection failed, use keyword selection
           if (products.length === 0) {
-            logger.warn('[YShopAI] AI selection failed, using keyword select');
-            products = this.keywordSelect(
-              allProducts,
-              understanding.keywords || [],
-              userMessage,
-              productLimit,
-            );
+            products = this.keywordSelect(allProducts, understanding.keywords || [], userMessage, productLimit);
           }
 
-          // Step 3: Generate smart reasons for each product using AI
           if (products.length > 0) {
             products = await this.generateProductReasons(userMessage, products);
-            // Save shown products for future discussion
             this.setShownProducts(userId, products);
           }
         }
 
         if (products.length === 0) {
-          reply = "I couldn't find matching products right now. Try being more specific!";
+          reply = "(hmm) ما لقيت شي يناسب... <break time=\"0.3s\" /> جرب تكون اوضح شوي؟";
         }
       }
+      // If showProducts is false → just return the reply, no products
 
-      // Save to memory
       this.addToMemory(userId, 'user', userMessage);
       this.addToMemory(userId, 'ai', reply);
 
       logger.info(
-        `[YShopAI] Result | userId=${userId} | ` +
-        `products=${products.length} | limit=${productLimit} | reply="${reply.substring(0, 60)}"`
+        `[YShopAI] Result | userId=${userId} | show=${understanding.showProducts} | ` +
+        `products=${products.length} | reply="${reply.substring(0, 60)}"`
       );
 
       return { reply, products };
 
     } catch (err) {
       logger.error('[YShopAI] generateResponse error:', err.message);
-      const fallback = "Sorry, I'm having trouble. Please try again!";
+      const fallback = "اوف صار شي غلط... <break time=\"0.3s\" /> جرب مره ثانيه";
       this.addToMemory(userId, 'user', userMessage);
       this.addToMemory(userId, 'ai', fallback);
       return { reply: fallback, products: [] };
@@ -626,7 +581,6 @@ Return JSON only:
       if (fresh.length === 0) this.conversationMemory.delete(uid);
       else this.conversationMemory.set(uid, fresh);
     }
-    logger.debug('[YShopAI] Memory cleanup done');
   }
 }
 

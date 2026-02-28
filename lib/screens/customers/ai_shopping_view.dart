@@ -17,7 +17,7 @@ import '../../models/currency.dart';
 import 'product_detail_view.dart';
 
 // ═══════════════════════════════════════════════════════════════
-// 🤖 AI SHOPPING VIEW — Immersive Conversational Commerce
+//  AI SHOPPING VIEW — Immersive Conversational Commerce
 // A revolutionary full-screen AI shopping assistant
 // ═══════════════════════════════════════════════════════════════
 class AIShoppingView extends StatefulWidget {
