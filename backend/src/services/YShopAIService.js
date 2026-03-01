@@ -230,12 +230,12 @@ Other rules:
 
       const parsed = this.parseJSON(raw);
       if (parsed && parsed.reply) {
-        // Normalize fields
+        // Normalize fields and apply defaults
         parsed.showProducts = parsed.showProducts === true;
         parsed.quantity = Math.min(Math.max(parsed.quantity || 3, 1), 5);
         parsed.isProductDiscussion = parsed.isProductDiscussion || false;
 
-        // Backward compat: map to needsProducts
+        // Backward compat: map to needsProducts for older code that checks it
         parsed.needsProducts = parsed.showProducts;
 
         logger.info(`[YShopAI] Intent | show=${parsed.showProducts} | store=${parsed.storeType} | qty=${parsed.quantity} | discussion=${parsed.isProductDiscussion}`);

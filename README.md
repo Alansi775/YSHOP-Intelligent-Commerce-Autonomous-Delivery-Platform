@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/images/yshop_logo.png" alt="YShop Logo" width="120"/>
+  <img src="assets/images/yshop.png" alt="YShop Logo" width="120"/>
 </p>
 
 <h1 align="center">YShop — Intelligent Commerce & Autonomous Delivery Platform</h1>
@@ -32,7 +32,7 @@
 
 ## Demo
 
-https://youtu.be/5tWGJeg-cWQ
+https://www.youtube.com/watch?v=5tWGJeg-cWQ
 
 The demo shows a customer interacting with the platform using natural language. The user speaks to the system, the STT model transcribes the audio, the LLM interprets the intent and retrieves matching products, and the results are rendered in real time.
 
@@ -48,7 +48,7 @@ What makes this different from a typical e-commerce project:
 
 - Customers can talk to the platform. A custom STT pipeline converts speech to text, a custom LLM processes the query and returns relevant products. No typing needed.
 - Every product image uploaded by a store owner goes through a CNN classifier trained to flag policy violations before the listing goes live.
-- Orders can be fulfilled by an autonomous drone system controlled via Pixhawk, with OpenCV handling obstacle detection during flight.
+- Orders can be fulfilled by an autonomous drone system running NVIDIA Jetson for onboard inference and STM32 for flight control, with OpenCV handling obstacle detection during flight.
 - The admin panel covers everything from store approvals to order tracking to AI model monitoring, essentially acting as a lightweight ERP + CRM.
 
 This is not a finished product. The AI models are still being trained and improved. But the architecture is real, the integrations work end to end, and everything shown in the demo is running on actual infrastructure.
@@ -73,7 +73,7 @@ This is not a finished product. The AI models are still being trained and improv
        ▼          ▼              ▼             ▼
 ┌──────────┐ ┌─────────┐ ┌───────────┐ ┌─────────────────┐
 │ STT Model│ │   LLM   │ │ CNN Model │ │  Drone System   │
-│ (Custom) │ │ (Custom) │ │ (PyTorch) │ │ Pixhawk+OpenCV  │
+│ (Custom) │ │ (Custom) │ │ (PyTorch) │ │ Jetson+STM32+CV │
 └──────────┘ └─────────┘ └───────────┘ └─────────────────┘
 ```
 
@@ -91,7 +91,7 @@ Custom transformer decoder model (~3.4B parameters) fine-tuned specifically for 
 Convolutional neural network trained on ~15K product images to classify whether a listing complies with platform policies. Uses a ResNet-50 backbone fine-tuned on our custom dataset. Achieves 94.3% accuracy on the validation set. Flags inappropriate content, misleading images, and policy violations before a product goes live.
 
 ### Drone Navigation (OpenCV)
-Computer vision pipeline for real-time obstacle detection during autonomous delivery flights. Uses classical CV (edge detection, contour analysis) combined with a lightweight object detector for path planning. The drone hardware runs on Pixhawk with custom firmware modifications.
+Computer vision pipeline for real-time obstacle detection during autonomous delivery flights. Uses classical CV (edge detection, contour analysis) combined with a lightweight object detector for path planning. The drone hardware runs on NVIDIA Jetson for onboard inference and STM32 microcontrollers for low-level flight control, with custom firmware modifications.
 
 > All AI models are under active development. Performance numbers reflect current benchmarks and will continue to improve.
 
@@ -116,7 +116,7 @@ Full screenshots of the web and iOS versions are available here:
 | Cloud | AWS (EC2, S3), Firebase |
 | AI / ML | PyTorch, Python, Custom Transformer Models, LoRA |
 | Computer Vision | OpenCV, ResNet-50 (CNN) |
-| Drone | Pixhawk, MAVLink, Custom Flight Controller |
+| Drone | NVIDIA Jetson, STM32, MAVLink, Custom Flight Controller |
 | Auth | Firebase Auth, JWT |
 | Payments | Visa, Apple Pay, OneCash (in progress) |
 
@@ -229,6 +229,6 @@ The drone system is a separate hardware project integrated into the platform. Tw
 
 MIT
 
----
+----
 
 <p align="center">Built by <a href="https://github.com/Alansi775">Mohammed Saleh</a></p>
