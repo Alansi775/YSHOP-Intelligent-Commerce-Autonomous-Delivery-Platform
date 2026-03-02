@@ -252,7 +252,7 @@ Other rules:
   }
 
   // ─────────────────────────────────────────────
-  // LOCAL INTENT DETECTION (fallback)
+  // LOCAL INTENT DETECTION (fallback) 
   // ─────────────────────────────────────────────
   static localIntentDetection(msg) {
     const m = msg.toLowerCase();
@@ -269,7 +269,7 @@ Other rules:
       }
     }
 
-    // Greetings — talk only, no products
+    // Greetings — talk only, no products 
     const greetings = ['hello', 'hi ', 'hey', 'greetings', 'good morning', 'good evening',
       'مرحبا', 'السلام', 'هلا', 'اهلا', 'صباح', 'مساء', 'how are'];
     if (greetings.some(g => m.includes(g)) && m.length < 50 && !m.includes('want') && !m.includes('need') && !m.includes('burger') && !m.includes('pizza')) {
@@ -280,7 +280,7 @@ Other rules:
       };
     }
 
-    // Vague hunger — ASK first, don't show products yet
+    // Vague hunger — ASK first, don't show products yet 
     const vagueHunger = ['hungry', 'hunger', 'جوعان', 'عطشان', 'i want to eat', 'i want food',
       'اكل', 'جعت', 'ابي اكل'];
     const specificFood = ['burger', 'pizza', 'chicken', 'rice', 'sandwich', 'coffee', 'tea',
@@ -320,7 +320,7 @@ Other rules:
       };
     }
 
-    // Clothes
+    // Clothes 
     const clothesWords = ['clothes', 'shirt', 'dress', 'shoes', 'fashion', 'jacket',
       'ملابس', 'قميص', 'فستان'];
     if (clothesWords.some(w => m.includes(w))) {
@@ -343,7 +343,7 @@ Other rules:
       };
     }
 
-    // "another" / "different" — show products
+    // "another" / "different" — show products 
     if (m.includes('another') || m.includes('different') || m.includes('other') ||
         m.includes('change') || m.includes('else') || m.includes('غير') || m.includes('ثاني')) {
       return {
@@ -383,7 +383,7 @@ Other rules:
   }
 
   // ─────────────────────────────────────────────
-  // STEP 2: Select products with AI
+  // STEP 2: Select products with AI (catalog + keywords + memory)
   // ─────────────────────────────────────────────
   static async selectProductsWithAI(userMessage, products, keywords, history, limit = 3) {
     const catalog = products.slice(0, 50).map(p =>
