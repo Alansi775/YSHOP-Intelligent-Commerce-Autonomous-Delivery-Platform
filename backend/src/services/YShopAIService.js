@@ -383,7 +383,7 @@ Other rules:
   }
 
   // ─────────────────────────────────────────────
-  // STEP 2: Select products with AI (catalog + keywords + memory)
+  // STEP 2: Select products with AI (catalog + keywords + memory) s
   // ─────────────────────────────────────────────
   static async selectProductsWithAI(userMessage, products, keywords, history, limit = 3) {
     const catalog = products.slice(0, 50).map(p =>
