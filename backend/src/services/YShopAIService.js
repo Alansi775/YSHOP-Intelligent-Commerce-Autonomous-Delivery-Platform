@@ -383,7 +383,7 @@ Other rules:
   }
 
   // ─────────────────────────────────────────────
-  // STEP 2: Select products with AI (catalog + keywords + memory) s
+  // STEP 2: Select products with AI (catalog + keywords + memory) 
   // ─────────────────────────────────────────────
   static async selectProductsWithAI(userMessage, products, keywords, history, limit = 3) {
     const catalog = products.slice(0, 50).map(p =>
@@ -430,7 +430,7 @@ Return JSON only: {"ids":[id1,id2]}`;
   }
 
   // ─────────────────────────────────────────────
-  // STEP 3: Generate reasons (human-like + TTS)
+  // STEP 3: Generate reasons (human-like + TTS) for each product
   // ─────────────────────────────────────────────
   static async generateProductReasons(userMessage, products) {
     if (!products || products.length === 0) return products;
