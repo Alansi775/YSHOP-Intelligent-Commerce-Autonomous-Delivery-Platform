@@ -430,7 +430,7 @@ Return JSON only: {"ids":[id1,id2]}`;
   }
 
   // ─────────────────────────────────────────────
-  // STEP 3: Generate reasons (human-like + TTS) for each product
+  // STEP 3: Generate reasons (human-like + TTS) for each product 
   // ─────────────────────────────────────────────
   static async generateProductReasons(userMessage, products) {
     if (!products || products.length === 0) return products;
@@ -475,7 +475,7 @@ Return JSON only:
   }
 
   // ─────────────────────────────────────────────
-  // KEYWORD-BASED SELECTION (no AI)
+  // KEYWORD-BASED SELECTION (no AI) for fallback or when AI doesn't return products
   // ─────────────────────────────────────────────
   static keywordSelect(products, keywords, userMessage, limit = 3) {
     const msg = userMessage.toLowerCase();
@@ -499,7 +499,7 @@ Return JSON only:
   }
 
   // ─────────────────────────────────────────────
-  // MAIN: generateResponse
+  // MAIN: generateResponse - the single method to call from outside
   // ─────────────────────────────────────────────
   static async generateResponse(userMessage, userId) {
     try {
