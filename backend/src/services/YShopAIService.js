@@ -520,7 +520,7 @@ Return JSON only:
         return { reply, products: [] };
       }
 
-      // ── SHOW PRODUCTS only when AI decided it's time ──
+      // ── SHOW PRODUCTS only when AI decided it's time ── 
       if (understanding.showProducts) {
         const allProducts = await this.fetchProducts(understanding.storeType);
 
@@ -565,7 +565,7 @@ Return JSON only:
   }
 
   // ─────────────────────────────────────────────
-  // BACKWARD COMPAT
+  // BACKWARD COMPAT METHODS (for older code that calls these directly)
   // ─────────────────────────────────────────────
   static async findRelevantProducts() { return []; }
   static getRecommendationReason() { return 'Recommended for you'; }
