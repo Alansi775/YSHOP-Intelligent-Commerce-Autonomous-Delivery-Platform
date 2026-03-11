@@ -585,7 +585,7 @@ Return JSON only:
 }
 
 // ─────────────────────────────────────────────
-// AUTO INIT
+// AUTO INIT and periodic cleanup when enabled via env variable
 // ─────────────────────────────────────────────
 if (process.env.YSHOP_AI_ENABLED !== 'false') {
   try {
