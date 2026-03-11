@@ -28,6 +28,14 @@ export class YShopAIService {
   }
 
   // ─────────────────────────────────────────────
+  // DETECT LANGUAGE
+  // ─────────────────────────────────────────────
+  static detectLanguage(text) {
+    const arabicRegex = /[\u0600-\u06FF]/;
+    return arabicRegex.test(text) ? 'arabic' : 'english';
+  }
+
+  // ─────────────────────────────────────────────
   // PERSONALITY
   // ─────────────────────────────────────────────
   static get PERSONALITY() {
@@ -35,11 +43,12 @@ export class YShopAIService {
 
 Voice rules:
 - Talk like a friend, NOT a customer service bot
-- Match the user's language (Arabic = Arabic, English = English)
+- MATCH the user's language exactly: if they write in Arabic→reply ONLY in Arabic, if English→reply ONLY in English
 - NEVER say "Great choice!", "How can I assist you?", "I'd be happy to help"
-- Say things like "Ooh nice taste!", "Man you're gonna love this", "Honestly? This one's fire"
+- Say things like "Ooh nice taste!", "Man you're gonna love this", "Honestly? This one's fire" (in user's language)
 - Keep it SHORT — 1-2 sentences, like texting a friend
 - NEVER use emojis
+- NEVER mix languages
 
 TTS tags (use naturally, not every sentence):
 - <break time="0.5s" /> for pauses
@@ -175,17 +184,22 @@ TTS tags (use naturally, not every sentence):
   // KEY CHANGE: "showProducts" controls when products appear
   //   - showProducts = true  → fetch and display products NOW
   //   - showProducts = false → just talk, no products yet
+  //   - isProductDiscussion = true → user asking about already-shown product
   // ─────────────────────────────────────────────
   static async understandMessage(userMessage, history, shownProducts = []) {
+    const userLang = this.detectLanguage(userMessage);
+
     const historyText = history.slice(-6)
       .map(m => `${m.role === 'user' ? 'User' : 'Youssef'}: ${m.text}`)
       .join('\n');
 
     const shownContext = shownProducts.length > 0
-      ? `\nProducts user already saw:\n${shownProducts.map(p => `- ${p.name} (${p.price} ${p.currency}) from ${p.store_name}: ${(p.description || '').substring(0, 100)}`).join('\n')}\n`
+      ? `\nProducts user already saw:\n${shownProducts.map(p => `- ID:${p.id} | ${p.name} | ${p.price}${p.currency} | from ${p.store_name} | ${(p.description || '').substring(0, 100)}`).join('\n')}\n`
       : '';
 
     const prompt = `${this.PERSONALITY}
+
+User's language: ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'} — REPLY ONLY IN ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}
 
 Chat so far:
 ${historyText || '(first message)'}
@@ -195,28 +209,38 @@ User: "${userMessage}"
 Store types: Food, Pharmacy, Clothes, Market
 
 Return JSON:
-{"showProducts":true/false,"storeType":"Food"/null,"keywords":[],"quantity":3,"reply":"...","isProductDiscussion":false}
+{"showProducts":true/false,"storeType":"Food"/null,"keywords":[],"quantity":3,"reply":"...","isProductDiscussion":false,"discussionProductId":null}
 
-CRITICAL RULE — showProducts:
-- showProducts = false when you want to TALK first (greetings, asking questions, narrowing down what they want)
-- showProducts = true ONLY when you are READY to present products (user gave enough info)
+CRITICAL RULES:
+1. showProducts logic:
+   - showProducts = false when you want to TALK first (greetings, asking questions, narrowing down)
+   - showProducts = true ONLY when you are READY to present products (user gave enough info)
+
+2. Product Discussion Detection (isProductDiscussion):
+   - TRUE if user mentions a product name/price/description from "Products user already saw" above
+   - TRUE if user says "tell me about...", "explain...", "why this...", "about that..."
+   - Include discussionProductId with the ID from the shown products
+   - FALSE if asking for new products
+
+3. Language Rule (CRITICAL):
+   - If user spoke Arabic → ALL your reply MUST be Arabic
+   - If user spoke English → ALL your reply MUST be English
+   - NEVER mix languages in the reply
 
 Examples:
-- User: "hi" → showProducts:false, reply: greet and ask what they want
-- User: "I'm hungry" → showProducts:false, reply: ask what kind of food / what mood
-- User: "I want a burger" → showProducts:true, reply: "let me show you..." storeType:"Food" keywords:["burger"]
-- User: "anything, surprise me" → showProducts:true, reply: "alright check these out..."
-- User: "tell me about the cruncher" → showProducts:false, isProductDiscussion:true, reply: talk about that product
+- User: "hi" → showProducts:false, isProductDiscussion:false, reply: greet in same language
+- User: "tell me about burger" (with burger shown) → showProducts:false, isProductDiscussion:true, discussionProductId:XXX
+- User: "I want a burger" (new request) → showProducts:true
+- User: "why this one?" (about shown product) → showProducts:false, isProductDiscussion:true
 
-Other rules:
-- isProductDiscussion = true if discussing a product already shown
+Other:
 - quantity = number user asked for (1-5), default 3
-- reply = your friendly response with TTS tags
+- reply = friendly response in user's language
 - Return ONLY JSON`;
 
     try {
       const response = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
       });
 
@@ -234,11 +258,13 @@ Other rules:
         parsed.showProducts = parsed.showProducts === true;
         parsed.quantity = Math.min(Math.max(parsed.quantity || 3, 1), 5);
         parsed.isProductDiscussion = parsed.isProductDiscussion || false;
+        parsed.discussionProductId = parsed.discussionProductId || this.detectProductDiscussion(userMessage, shownProducts);
+        parsed.userLanguage = userLang;
 
         // Backward compat: map to needsProducts for older code that checks it
         parsed.needsProducts = parsed.showProducts;
 
-        logger.info(`[YShopAI] Intent | show=${parsed.showProducts} | store=${parsed.storeType} | qty=${parsed.quantity} | discussion=${parsed.isProductDiscussion}`);
+        logger.info(`[YShopAI] Intent | lang=${userLang} | show=${parsed.showProducts} | store=${parsed.storeType} | qty=${parsed.quantity} | discussion=${parsed.isProductDiscussion}`);
         return parsed;
       }
 
@@ -252,10 +278,52 @@ Other rules:
   }
 
   // ─────────────────────────────────────────────
+  // DETECT IF USER DISCUSSING A SPECIFIC PRODUCT
+  // ─────────────────────────────────────────────
+  static detectProductDiscussion(userMessage, shownProducts) {
+    if (!shownProducts || shownProducts.length === 0) return null;
+    
+    const m = userMessage.toLowerCase();
+    
+    // Check if user mentions product by name, price, or description
+    for (const product of shownProducts) {
+      const prodName = product.name.toLowerCase();
+      const prodPrice = String(product.price).toLowerCase();
+      const prodDesc = (product.description || '').toLowerCase();
+      
+      // Match by name
+      if (m.includes(prodName) || prodName.includes(m.split(' ')[0])) {
+        return product.id;
+      }
+      
+      // Match by price
+      if (m.includes(prodPrice) || m.includes(`${product.price}`)) {
+        return product.id;
+      }
+      
+      // Match by keywords in description
+      const keywords = prodDesc.split(/\s+/).filter(w => w.length > 3);
+      if (keywords.some(kw => m.includes(kw))) {
+        return product.id;
+      }
+    }
+    
+    // Check if asking "about this/that" + descriptor
+    const aboutMatch = m.match(/(?:about|tell me about|explain|what about|this|that|these|those|one|it)\s+(.+)/);
+    if (aboutMatch && shownProducts.length > 0) {
+      // Usually refers to the first or last shown product if context is unclear
+      return shownProducts[0].id;
+    }
+    
+    return null;
+  }
+
+  // ─────────────────────────────────────────────
   // LOCAL INTENT DETECTION (fallback) 
   // ─────────────────────────────────────────────
   static localIntentDetection(msg) {
     const m = msg.toLowerCase();
+    const lang = this.detectLanguage(msg);
 
     const qtyMatch = m.match(/(\d+)\s+\w/);
     const wordQty = { one: 1, two: 2, three: 3, four: 4, five: 5,
@@ -270,115 +338,162 @@ Other rules:
     }
 
     // Greetings — talk only, no products 
-    const greetings = ['hello', 'hi ', 'hey', 'greetings', 'good morning', 'good evening',
-      'مرحبا', 'السلام', 'هلا', 'اهلا', 'صباح', 'مساء', 'how are'];
-    if (greetings.some(g => m.includes(g)) && m.length < 50 && !m.includes('want') && !m.includes('need') && !m.includes('burger') && !m.includes('pizza')) {
+    const greetingsEn = ['hello', 'hi ', 'hey', 'greetings', 'good morning', 'good evening', 'how are'];
+    const greetingsAr = ['مرحبا', 'السلام', 'هلا', 'اهلا', 'صباح', 'مساء'];
+    const isGreeting = (lang === 'english' && greetingsEn.some(g => m.includes(g))) || 
+                       (lang === 'arabic' && greetingsAr.some(g => m.includes(g)));
+    
+    if (isGreeting && m.length < 50 && !m.includes('want') && !m.includes('need') && !m.includes('burger') && !m.includes('pizza') &&
+        !m.includes('ابي') && !m.includes('ابغى') && !m.includes('اريد')) {
+      const replyEn = "Hey! What are you in the mood for today? Hungry for something?";
+      const replyAr = "(hmm) يا هلا والله! <break time=\"0.3s\" /> ايش تشتي تاكل اليوم؟ قلي وانا اساعدك";
       return {
         needsProducts: false, showProducts: false, storeType: null,
         keywords: [], quantity: 0, isProductDiscussion: false,
-        reply: "(hmm) يا هلا والله! <break time=\"0.3s\" /> وش تبي تاكل اليوم؟ قلي وانا ادبرك",
+        reply: lang === 'english' ? replyEn : replyAr,
+        userLanguage: lang,
       };
     }
 
     // Vague hunger — ASK first, don't show products yet 
-    const vagueHunger = ['hungry', 'hunger', 'جوعان', 'عطشان', 'i want to eat', 'i want food',
-      'اكل', 'جعت', 'ابي اكل'];
-    const specificFood = ['burger', 'pizza', 'chicken', 'rice', 'sandwich', 'coffee', 'tea',
-      'water', 'juice', 'cake', 'snack', 'برجر', 'بيتزا', 'دجاج', 'ماء'];
+    const vagueHungerEn = ['hungry', 'hunger', 'i want to eat', 'i want food', 'starving'];
+    const vagueHungerAr = ['جوعان', 'عطشان', 'اكل', 'جعت', 'ابي اكل'];
+    const specificFoodEn = ['burger', 'pizza', 'chicken', 'rice', 'sandwich', 'coffee', 'tea', 'water', 'juice', 'cake', 'snack'];
+    const specificFoodAr = ['برجر', 'بيتزا', 'دجاج', 'ماء', 'عصير', 'قهوة', 'شاي', 'كيك', 'ساندوتش'];
 
-    const hasSpecific = specificFood.some(w => m.includes(w));
-    const hasVague = vagueHunger.some(w => m.includes(w));
+    const hasSpecific = (lang === 'english' && specificFoodEn.some(w => m.includes(w))) ||
+                        (lang === 'arabic' && specificFoodAr.some(w => m.includes(w)));
+    const hasVague = (lang === 'english' && vagueHungerEn.some(w => m.includes(w))) ||
+                     (lang === 'arabic' && vagueHungerAr.some(w => m.includes(w)));
 
     // User said something specific like "I want a burger" → show products
     if (hasSpecific) {
-      const keywords = specificFood.filter(w => m.includes(w)).slice(0, 3);
+      const keywordsEn = specificFoodEn.filter(w => m.includes(w)).slice(0, 3);
+      const keywordsAr = specificFoodAr.filter(w => m.includes(w)).slice(0, 3);
+      const keywords = lang === 'english' ? keywordsEn : keywordsAr;
+      const replyEn = "Awesome! Let me find some great options for you";
+      const replyAr = "تمام <break time=\"0.2s\" /> خلني اجيب لك خيارات حلوه";
       return {
         needsProducts: true, showProducts: true, storeType: 'Food',
         keywords, quantity, isProductDiscussion: false,
-        reply: "تمام <break time=\"0.2s\" /> خلني اجيب لك خيارات حلوه",
+        reply: lang === 'english' ? replyEn : replyAr,
+        userLanguage: lang,
       };
     }
 
     // User is vague "I'm hungry" → ask what kind, NO products
     if (hasVague) {
+      const replyEn = "(hmm) What are you craving? Burger? Pizza? Something light?";
+      const replyAr = "(hmm) ايش مودك اليوم؟ <break time=\"0.3s\" /> برجر؟ بيتزا؟ ولا شي خفيف؟";
       return {
         needsProducts: false, showProducts: false, storeType: null,
         keywords: [], quantity: 0, isProductDiscussion: false,
-        reply: "(hmm) وش مودك اليوم؟ <break time=\"0.3s\" /> برجر؟ بيتزا؟ ولا شي خفيف؟",
+        reply: lang === 'english' ? replyEn : replyAr,
+        userLanguage: lang,
       };
     }
 
     // Pharmacy
-    const pharmaWords = ['medicine', 'pharmacy', 'health', 'sick', 'pain', 'pill',
-      'vitamin', 'headache', 'fever', 'دواء', 'صيدليه'];
-    if (pharmaWords.some(w => m.includes(w))) {
+    const pharmaWordsEn = ['medicine', 'pharmacy', 'health', 'sick', 'pain', 'pill', 'vitamin', 'headache', 'fever'];
+    const pharmaWordsAr = ['دواء', 'صيدليه', 'صحة', 'مريض', 'ألم', 'حبة', 'فيتامين', 'صداع'];
+    const pharmaWords = lang === 'english' ? pharmaWordsEn : pharmaWordsAr;
+    const hasPharm = pharmaWords.some(w => m.includes(w));
+    
+    if (hasPharm) {
+      const replyEn = "Got it, let me find what you need";
+      const replyAr = "سلامتك! <break time=\"0.3s\" /> خلني اشوف لك شي يساعدك";
       return {
         needsProducts: true, showProducts: true, storeType: 'Pharmacy',
         keywords: pharmaWords.filter(w => m.includes(w)).slice(0, 3),
-        reply: "سلامتك! <break time=\"0.3s\" /> خلني اشوف لك شي يساعدك",
+        reply: lang === 'english' ? replyEn : replyAr,
         quantity, isProductDiscussion: false,
+        userLanguage: lang,
       };
     }
 
     // Clothes 
-    const clothesWords = ['clothes', 'shirt', 'dress', 'shoes', 'fashion', 'jacket',
-      'ملابس', 'قميص', 'فستان'];
-    if (clothesWords.some(w => m.includes(w))) {
+    const clothesWordsEn = ['clothes', 'shirt', 'dress', 'shoes', 'fashion', 'jacket'];
+    const clothesWordsAr = ['ملابس', 'قميص', 'فستان', 'حذاء'];
+    const clothesWords = lang === 'english' ? clothesWordsEn : clothesWordsAr;
+    const hasClothes = clothesWords.some(w => m.includes(w));
+    
+    if (hasClothes) {
+      const replyEn = "Let me show you some fresh styles";
+      const replyAr = "تشتي تتأنق؟ (haha) <break time=\"0.3s\" /> خلني اعطيك خيارات";
       return {
         needsProducts: true, showProducts: true, storeType: 'Clothes',
         keywords: clothesWords.filter(w => m.includes(w)).slice(0, 3),
-        reply: "تبي تتأنق؟ (haha) <break time=\"0.3s\" /> خلني اعطيك خيارات",
+        reply: lang === 'english' ? replyEn : replyAr,
         quantity, isProductDiscussion: false,
+        userLanguage: lang,
       };
     }
 
     // Market
-    const marketWords = ['market', 'grocery', 'vegetable', 'fruit', 'خضار', 'فاكهة', 'سوق'];
-    if (marketWords.some(w => m.includes(w))) {
+    const marketWordsEn = ['market', 'grocery', 'vegetable', 'fruit'];
+    const marketWordsAr = ['خضار', 'فاكهة', 'سوق', 'بقال'];
+    const marketWords = lang === 'english' ? marketWordsEn : marketWordsAr;
+    const hasMarket = marketWords.some(w => m.includes(w));
+    
+    if (hasMarket) {
+      const replyEn = "Fresh and clean! Let me see what we have";
+      const replyAr = "طازج وفريش! <break time=\"0.3s\" /> خلني اشوف ايش عندنا";
       return {
         needsProducts: true, showProducts: true, storeType: 'Market',
         keywords: marketWords.filter(w => m.includes(w)).slice(0, 3),
-        reply: "طازج وفريش! <break time=\"0.3s\" /> خلني اشوف وش عندنا",
+        reply: lang === 'english' ? replyEn : replyAr,
         quantity, isProductDiscussion: false,
+        userLanguage: lang,
       };
     }
 
     // "another" / "different" — show products 
-    if (m.includes('another') || m.includes('different') || m.includes('other') ||
-        m.includes('change') || m.includes('else') || m.includes('غير') || m.includes('ثاني')) {
+    if ((lang === 'english' && (m.includes('another') || m.includes('different') || m.includes('other') || m.includes('change') || m.includes('else'))) ||
+        (lang === 'arabic' && (m.includes('غير') || m.includes('ثاني') || m.includes('تاني')))) {
+      const replyEn = "Want something different? Let me grab some new ones";
+      const replyAr = "تشتي شي ثاني؟ اوكي <break time=\"0.3s\" /> خلني اغير لك";
       return {
         needsProducts: true, showProducts: true, storeType: null, keywords: [],
-        reply: "تبي شي ثاني؟ اوكي <break time=\"0.3s\" /> خلني اغير لك",
+        reply: lang === 'english' ? replyEn : replyAr,
         quantity, isProductDiscussion: false,
+        userLanguage: lang,
       };
     }
 
     // "surprise me" / "anything" — show products
-    if (m.includes('surprise') || m.includes('anything') || m.includes('whatever') ||
-        m.includes('اي شي') || m.includes('فاجئني')) {
+    if ((lang === 'english' && (m.includes('surprise') || m.includes('anything') || m.includes('whatever'))) ||
+        (lang === 'arabic' && (m.includes('اي شي') || m.includes('فاجئني') || m.includes('ادهشني')))) {
+      const replyEn = "Alright, let me blow your mind with these";
+      const replyAr = "<prosody rate=\"fast\">اوكي اوكي</prosody> <break time=\"0.2s\" /> شوف هذي";
       return {
         needsProducts: true, showProducts: true, storeType: null, keywords: [],
-        reply: "<prosody rate=\"fast\">اوكي اوكي</prosody> <break time=\"0.2s\" /> شوف هذي",
+        reply: lang === 'english' ? replyEn : replyAr,
         quantity, isProductDiscussion: false,
+        userLanguage: lang,
       };
     }
 
     // "I want..." (vague) — ask what
-    if (m.includes('want') || m.includes('need') || m.includes('looking for') ||
-        m.includes('find') || m.includes('show') || m.includes('get me') ||
-        m.includes('اريد') || m.includes('ابغى') || m.includes('بغيت')) {
+    if ((lang === 'english' && (m.includes('want') || m.includes('need') || m.includes('looking for') || m.includes('find') || m.includes('show') || m.includes('get me'))) ||
+        (lang === 'arabic' && (m.includes('اريد') || m.includes('ابغى') || m.includes('بغيت') || m.includes('ودي') || m.includes('احتاج')))) {
+      const replyEn = "Sure! What exactly are you looking for?";
+      const replyAr = "تمام <break time=\"0.2s\" /> ايش بالضبط تدور عليه؟";
       return {
         needsProducts: false, showProducts: false, storeType: null,
         keywords: [], quantity: 0, isProductDiscussion: false,
-        reply: "تمام <break time=\"0.2s\" /> وش بالضبط تدور عليه؟",
+        reply: lang === 'english' ? replyEn : replyAr,
+        userLanguage: lang,
       };
     }
 
     // Default — just chat
+    const defaultReplyEn = "Tell me what you're looking for and I'll help you! Food? Clothes? Pharmacy?";
+    const defaultReplyAr = "قلي ايش تشتي وانا اساعدك <break time=\"0.3s\" /> اكل؟ ملابس؟ شي من الصيدلية؟";
     return {
       needsProducts: false, showProducts: false, storeType: null,
       keywords: [], quantity: 0, isProductDiscussion: false,
-      reply: "قلي وش تبي وانا اساعدك <break time=\"0.3s\" /> اكل؟ ملابس؟ شي من الصيدلية؟",
+      reply: lang === 'english' ? defaultReplyEn : defaultReplyAr,
+      userLanguage: lang,
     };
   }
 
@@ -435,27 +550,31 @@ Return JSON only: {"ids":[id1,id2]}`;
   static async generateProductReasons(userMessage, products) {
     if (!products || products.length === 0) return products;
 
+    const userLang = this.detectLanguage(userMessage);
+
     const productList = products.map(p =>
       `- ${p.name}: ${p.description ? p.description.substring(0, 80) : 'No description'} (${p.price} ${p.currency})`
     ).join('\n');
 
     const prompt = `${this.PERSONALITY}
 
+User's language: ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}
 User asked: "${userMessage}"
 
 Products:
 ${productList}
 
-For EACH product write 1 short friend-style reason why they'd love it.
+For EACH product write 1 short reason why they'd love it.
+REPLY ONLY IN ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}
 Talk like you tried it. Be specific. Use TTS tags where natural.
-NEVER use emojis.
+NEVER use emojis. NEVER mix languages.
 
 Return JSON only:
-{"reasons":{"ProductName":"reason"}}`;
+{"reasons":{"ProductName":"reason in ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}"}}`;
 
     try {
       const response = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.5, maxOutputTokens: 512 },
       });
 
@@ -464,14 +583,15 @@ Return JSON only:
       if (parsed?.reasons && typeof parsed.reasons === 'object') {
         return products.map(p => ({
           ...p,
-          reason: parsed.reasons[p.name] || 'This one is solid, trust me.',
+          reason: parsed.reasons[p.name] || (userLang === 'arabic' ? 'ده حلو جداً، صدقني' : 'This one is solid, trust me.'),
         }));
       }
     } catch (err) {
       logger.error('[YShopAI] generateReasons error:', err.message);
     }
 
-    return products.map(p => ({ ...p, reason: 'This one is solid, trust me.' }));
+    const defaultReason = userLang === 'arabic' ? 'ده حلو جداً، صدقني' : 'This one is solid, trust me.';
+    return products.map(p => ({ ...p, reason: defaultReason }));
   }
 
   // ─────────────────────────────────────────────
@@ -505,16 +625,32 @@ Return JSON only:
     try {
       const history = this.getMemory(userId);
       const previousProducts = this.getShownProducts(userId);
+      const userLang = this.detectLanguage(userMessage);
 
       // Step 1: Understand
       const understanding = await this.understandMessage(userMessage, history, previousProducts);
 
-      let reply = understanding.reply || "(hmm) قلي وش تبي وانا معك";
+      let reply = understanding.reply || (userLang === 'arabic' ? "قلي ايش تشتي وانا معك" : "Tell me what you need and I'll help");
       let products = [];
       const productLimit = understanding.quantity > 0 ? Math.min(understanding.quantity, 5) : 3;
 
       // ── Product discussion (about already shown products) ──
       if (understanding.isProductDiscussion && previousProducts.length > 0) {
+        // If discussing a specific product, provide details about it
+        let discussedProduct = null;
+        if (understanding.discussionProductId) {
+          discussedProduct = previousProducts.find(p => p.id === understanding.discussionProductId);
+        }
+        
+        // If we found the product, add more detail to the reply
+        if (discussedProduct && !reply.includes(discussedProduct.name)) {
+          const desc = discussedProduct.description || 'No details available';
+          const langNote = userLang === 'arabic' 
+            ? `\n\n📦 ${discussedProduct.name}\n💰 ${discussedProduct.price}${discussedProduct.currency}\n📝 ${desc}`
+            : `\n\n📦 ${discussedProduct.name}\n💰 ${discussedProduct.price}${discussedProduct.currency}\n📝 ${desc}`;
+          reply += langNote;
+        }
+        
         this.addToMemory(userId, 'user', userMessage);
         this.addToMemory(userId, 'ai', reply);
         return { reply, products: [] };
@@ -540,7 +676,9 @@ Return JSON only:
         }
 
         if (products.length === 0) {
-          reply = "(hmm) ما لقيت شي يناسب... <break time=\"0.3s\" /> جرب تكون اوضح شوي؟";
+          reply = userLang === 'arabic' 
+            ? "(hmm) ما لقيت شي يناسب... <break time=\"0.3s\" /> جرب تكون اوضح شوي؟"
+            : "(hmm) Couldn't find anything matching... <break time=\"0.3s\" /> Can you be more specific?";
         }
       }
       // If showProducts is false → just return the reply, no products
@@ -549,7 +687,7 @@ Return JSON only:
       this.addToMemory(userId, 'ai', reply);
 
       logger.info(
-        `[YShopAI] Result | userId=${userId} | show=${understanding.showProducts} | ` +
+        `[YShopAI] Result | userId=${userId} | lang=${userLang} | show=${understanding.showProducts} | ` +
         `products=${products.length} | reply="${reply.substring(0, 60)}"`
       );
 
@@ -557,7 +695,10 @@ Return JSON only:
 
     } catch (err) {
       logger.error('[YShopAI] generateResponse error:', err.message);
-      const fallback = "اوف صار شي غلط... <break time=\"0.3s\" /> جرب مره ثانيه";
+      const userLang = this.detectLanguage(userMessage);
+      const fallback = userLang === 'arabic' 
+        ? "اوف صار شي غلط... <break time=\"0.3s\" /> جرب مره ثانيه"
+        : "Oops something went wrong... <break time=\"0.3s\" /> Try again?";
       this.addToMemory(userId, 'user', userMessage);
       this.addToMemory(userId, 'ai', fallback);
       return { reply: fallback, products: [] };
@@ -572,7 +713,7 @@ Return JSON only:
   static extractIntent() { return 'GENERAL_INQUIRY'; }
 
   // ─────────────────────────────────────────────
-  // CLEANUP in memory to prevent bloat (keep only last 2 hours of conversation)
+  // CLEANUP
   // ─────────────────────────────────────────────
   static cleanupMemory() {
     const cutoff = Date.now() - 2 * 60 * 60 * 1000;
@@ -585,7 +726,7 @@ Return JSON only:
 }
 
 // ─────────────────────────────────────────────
-// AUTO INIT and periodic cleanup when enabled via env variable
+// AUTO INIT
 // ─────────────────────────────────────────────
 if (process.env.YSHOP_AI_ENABLED !== 'false') {
   try {
