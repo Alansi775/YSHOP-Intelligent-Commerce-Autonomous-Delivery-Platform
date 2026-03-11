@@ -308,7 +308,7 @@ Other:
       }
     }
     
-    // Check if asking "about this/that" + descriptor
+    // Check if asking "about this/that" + descriptor 
     const aboutMatch = m.match(/(?:about|tell me about|explain|what about|this|that|these|those|one|it)\s+(.+)/);
     if (aboutMatch && shownProducts.length > 0) {
       // Usually refers to the first or last shown product if context is unclear
@@ -344,7 +344,7 @@ Other:
                        (lang === 'arabic' && greetingsAr.some(g => m.includes(g)));
     
     if (isGreeting && m.length < 50 && !m.includes('want') && !m.includes('need') && !m.includes('burger') && !m.includes('pizza') &&
-        !m.includes('ابي') && !m.includes('ابغى') && !m.includes('اريد')) {
+        !m.includes('اشتي') && !m.includes('ابغى') && !m.includes('اريد')) {
       const replyEn = "Hey! What are you in the mood for today? Hungry for something?";
       const replyAr = "(hmm) يا هلا والله! <break time=\"0.3s\" /> ايش تشتي تاكل اليوم؟ قلي وانا اساعدك";
       return {
@@ -357,7 +357,7 @@ Other:
 
     // Vague hunger — ASK first, don't show products yet 
     const vagueHungerEn = ['hungry', 'hunger', 'i want to eat', 'i want food', 'starving'];
-    const vagueHungerAr = ['جوعان', 'عطشان', 'اكل', 'جعت', 'ابي اكل'];
+    const vagueHungerAr = ['جوعان', 'عطشان', 'اكل', 'جعت', 'اشتي اكل'];
     const specificFoodEn = ['burger', 'pizza', 'chicken', 'rice', 'sandwich', 'coffee', 'tea', 'water', 'juice', 'cake', 'snack'];
     const specificFoodAr = ['برجر', 'بيتزا', 'دجاج', 'ماء', 'عصير', 'قهوة', 'شاي', 'كيك', 'ساندوتش'];
 
