@@ -572,7 +572,7 @@ Return JSON only:
   static extractIntent() { return 'GENERAL_INQUIRY'; }
 
   // ─────────────────────────────────────────────
-  // CLEANUP
+  // CLEANUP in memory to prevent bloat (keep only last 2 hours of conversation)
   // ─────────────────────────────────────────────
   static cleanupMemory() {
     const cutoff = Date.now() - 2 * 60 * 60 * 1000;
