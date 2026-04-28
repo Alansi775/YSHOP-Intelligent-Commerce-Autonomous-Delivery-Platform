@@ -579,7 +579,7 @@ class GlassImageContainer extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✨ SHIMMER PLACEHOLDER - Loading animation
+//  SHIMMER PLACEHOLDER - Loading animation
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ShimmerPlaceholder extends StatefulWidget {

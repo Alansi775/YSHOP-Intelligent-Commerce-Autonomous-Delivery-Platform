@@ -25,6 +25,42 @@ function _safeParseJSON(value) {
 }
 
 export class Order {
+  static _schemaReadyPromise = null;
+
+  static async _ensureSchema() {
+    if (Order._schemaReadyPromise) return Order._schemaReadyPromise;
+
+    Order._schemaReadyPromise = (async () => {
+      const [columnRows] = await pool.query(
+        `SELECT COLUMN_NAME
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'orders'`
+      );
+
+      const columns = new Set(columnRows.map((r) => r.COLUMN_NAME));
+      const alterStatements = [];
+
+      if (!columns.has('driver_location')) {
+        alterStatements.push('ALTER TABLE orders ADD COLUMN driver_location JSON NULL');
+      }
+      if (!columns.has('picked_up_at')) {
+        alterStatements.push('ALTER TABLE orders ADD COLUMN picked_up_at DATETIME NULL');
+      }
+      if (!columns.has('delivered_at')) {
+        alterStatements.push('ALTER TABLE orders ADD COLUMN delivered_at DATETIME NULL');
+      }
+
+      for (const sql of alterStatements) {
+        await pool.query(sql);
+      }
+    })().catch((error) => {
+      Order._schemaReadyPromise = null;
+      throw error;
+    });
+
+    return Order._schemaReadyPromise;
+  }
   
   // ═══════════════════════════════════════════════════════════════════════════
   // 📝 CREATE ORDER
@@ -110,6 +146,7 @@ export class Order {
   // ═══════════════════════════════════════════════════════════════════════════
 
   static async findRecent(limit = 50) {
+    await Order._ensureSchema();
     const l = Number.parseInt(limit, 10) || 50;
     const connection = await pool.getConnection();
     try {
@@ -172,6 +209,7 @@ export class Order {
   }
 
   static async findById(id) {
+    await Order._ensureSchema();
     const connection = await pool.getConnection();
     try {
       const [rows] = await connection.execute(
@@ -289,6 +327,7 @@ export class Order {
   }
 
   static async findByUserId(userId, page = 1, limit = 20) {
+    await Order._ensureSchema();
     const l = Number.parseInt(limit, 10) || 20;
     const p = Number.parseInt(page, 10) || 1;
     const offset = (p - 1) * l;
@@ -348,6 +387,7 @@ export class Order {
   }
 
   static async findByStoreId(storeId, page = 1, limit = 50) {
+    await Order._ensureSchema();
     const l = Number.parseInt(limit, 10) || 50;
     const p = Number.parseInt(page, 10) || 1;
     const offset = (p - 1) * l;
@@ -436,6 +476,7 @@ export class Order {
   // ═══════════════════════════════════════════════════════════════════════════
 
   static async findPendingForAssignment() {
+    await Order._ensureSchema();
     const connection = await pool.getConnection();
     try {
       const sql = `
@@ -563,6 +604,7 @@ export class Order {
   }
 
   static async findActiveByDriverId(driverId) {
+    await Order._ensureSchema();
     const connection = await pool.getConnection();
     try {
       const [rows] = await connection.execute(
@@ -685,6 +727,7 @@ export class Order {
   }
 
   static async updateDriverLocation(orderId, latitude, longitude) {
+    await Order._ensureSchema();
     const connection = await pool.getConnection();
     try {
       const location = JSON.stringify({ latitude, longitude });
@@ -724,6 +767,7 @@ export class Order {
   }
 
   static async setPickedUpAt(orderId) {
+    await Order._ensureSchema();
     const connection = await pool.getConnection();
     try {
       await connection.execute(
@@ -739,6 +783,7 @@ export class Order {
   }
 
   static async setDeliveredAt(orderId) {
+    await Order._ensureSchema();
     const connection = await pool.getConnection();
     try {
       await connection.execute(
@@ -758,6 +803,7 @@ export class Order {
   // ═══════════════════════════════════════════════════════════════════════════
 
   static async findCompletedByDriverId(driverId, options = {}) {
+    await Order._ensureSchema();
     const { month, year, page = 1, limit = 50 } = options;
     const l = Number.parseInt(limit, 10) || 50;
     const p = Number.parseInt(page, 10) || 1;

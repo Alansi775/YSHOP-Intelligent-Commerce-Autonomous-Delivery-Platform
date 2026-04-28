@@ -24,7 +24,7 @@ import adminRoutes from './routes/adminRoutes.js'; // this is yahop admin routes
 import adminsMgmtRoutes from './routes/adminsRoutes.js';
 import staffRoutes from './routes/staffRoutes.js';
 import authRoutes from './routes/authRoutes.js';
-import categoryRoutes from './routes/categoryRoutes.js'; // ✨ Categories
+import categoryRoutes from './routes/categoryRoutes.js'; //  Categories
 import returnsRoutes from './routes/returnsRoutes.js'; // 📦 Returns Management
 import aiRoutes from './routes/aiRoutes.js'; //  YSHOP AI Conversational Shopping
 
@@ -131,9 +131,9 @@ app.use('/api/v1/admins', adminsMgmtRoutes);
 app.use('/api/v1/staff', staffRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/returns', returnsRoutes); // 📦 Returns Management
-app.use('/api/v1/stores', categoryRoutes); // ✨ Categories under stores
-app.use('/api/v1/categories', categoryRoutes); // ✨ Categories direct access
-app.use('/api/v1', categoryRoutes); // ✨ Products category assignment
+app.use('/api/v1/stores', categoryRoutes); //  Categories under stores
+app.use('/api/v1/categories', categoryRoutes); //  Categories direct access
+app.use('/api/v1', categoryRoutes); //  Products category assignment
 app.use('/api/v1/ai', aiRoutes); //  YSHOP AI Conversational Shopping
 
 // Health check

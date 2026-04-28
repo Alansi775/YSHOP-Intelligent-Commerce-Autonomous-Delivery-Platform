@@ -1366,7 +1366,7 @@ class _FullScreenImageViewer extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ✨ CART NOTIFICATION OVERLAY (Refined Animation)
+//  CART NOTIFICATION OVERLAY (Refined Animation)
 // ═══════════════════════════════════════════════════════════════
 class FocusTransitionOverlay extends StatefulWidget {
   final String productName;

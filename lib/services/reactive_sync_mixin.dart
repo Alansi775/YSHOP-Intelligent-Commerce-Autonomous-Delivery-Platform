@@ -69,7 +69,7 @@ mixin ReactiveSyncMixin<T extends StatefulWidget> on State<T> {
         final channel = update['channel'] as String?;
         
         if (channel == reactiveChannel && mounted) {
-          debugPrint('✨ REACTIVE UPDATE on $reactiveChannel: ${update['count']} items');
+          debugPrint(' REACTIVE UPDATE on $reactiveChannel: ${update['count']} items');
           onReactiveUpdate(update);
         }
       }, onError: (error) {

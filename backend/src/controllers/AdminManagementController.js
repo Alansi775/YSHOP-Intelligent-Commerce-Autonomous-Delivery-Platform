@@ -103,9 +103,9 @@ export async function getPendingStores(req, res, next) {
   try {
     const connection = await pool.getConnection();
     const [stores] = await connection.execute(
-      `SELECT id, uid, email, name, owner_name, phone, address, status, email_verified, created_at 
+      `SELECT id, uid, email, name, phone, address, status, email_verified, created_at, owner_uid 
        FROM stores 
-       WHERE status = 'pending' OR status = 'rejected'
+       WHERE (status = 'pending' OR status = 'rejected') AND email_verified = 1
        ORDER BY created_at DESC`
     );
     connection.release();
@@ -287,9 +287,9 @@ export async function getApprovedStores(req, res, next) {
   try {
     const connection = await pool.getConnection();
     const [stores] = await connection.execute(
-      `SELECT id, uid, email, name, owner_name, phone, address, status, latitude, longitude, created_at 
+      `SELECT id, uid, email, name, phone, address, status, latitude, longitude, created_at, owner_uid 
        FROM stores 
-       WHERE status = 'approved'
+       WHERE status = 'approved' AND email_verified = 1
        ORDER BY created_at DESC`
     );
     connection.release();
@@ -318,14 +318,16 @@ export async function getAllStoresAdmin(req, res, next) {
         uid, 
         email, 
         name, 
-        owner_name, 
         phone, 
         address, 
         status,
         latitude, 
         longitude, 
-        created_at 
+        created_at,
+        owner_uid,
+        email_verified
        FROM stores 
+       WHERE email_verified = 1
        ORDER BY created_at DESC`
     );
     connection.release();

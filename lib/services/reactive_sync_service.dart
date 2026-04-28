@@ -138,7 +138,7 @@ class ReactiveSyncService extends ChangeNotifier {
         _messageCount++;
 
         debugPrint(
-            '✨ DELTA UPDATE: $channel - ${updatesList.length} items (Total: $_messageCount)');
+            ' DELTA UPDATE: $channel - ${updatesList.length} items (Total: $_messageCount)');
 
         // Emit to listeners
         _dataStreamController.add({

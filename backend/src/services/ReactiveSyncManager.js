@@ -142,7 +142,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.info(`✨ DELTA EMITTED`, {
+            logger.info(` DELTA EMITTED`, {
               channel,
               subscribers: subCount,
               dataRows: returns.length,
@@ -217,7 +217,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.info(`✨ ORDERS DELTA EMITTED`, {
+            logger.info(` ORDERS DELTA EMITTED`, {
               channel,
               subscribers: this.subscribers.get(channel)?.size || 0,
               dataRows: orders.length,
@@ -266,7 +266,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.info(`✨ ADMIN RETURNS DELTA EMITTED`, {
+            logger.info(` ADMIN RETURNS DELTA EMITTED`, {
               channel,
               subscribers: subCount,
               dataRows: returns.length,
@@ -339,7 +339,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.info(`✨ ADMIN ORDERS DELTA EMITTED`, {
+            logger.info(` ADMIN ORDERS DELTA EMITTED`, {
               channel,
               dataRows: orders.length,
             });
@@ -409,7 +409,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.debug(`✨ CUSTOMER ORDERS DELTA EMITTED`, {
+            logger.debug(` CUSTOMER ORDERS DELTA EMITTED`, {
               channel,
               customerId: id,
               dataRows: orders.length,
@@ -449,7 +449,7 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.debug(`✨ DELIVERY REQUESTS DELTA EMITTED`, {
+            logger.debug(` DELIVERY REQUESTS DELTA EMITTED`, {
               channel,
               driverId: id,
               dataRows: requests.length,

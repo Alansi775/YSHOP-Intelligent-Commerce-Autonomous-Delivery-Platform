@@ -49,6 +49,9 @@ router.put('/admin/:id/reject', verifyAdminToken, verifyAdminRole, StoreControll
 router.put('/admin/:id/suspend', verifyAdminToken, verifyAdminRole, StoreController.suspendStore);
 router.delete('/admin/:id/delete', verifyAdminToken, verifyAdminRole, StoreController.deleteStoreWithProducts);
 
+// Real-time updates endpoint - lightweight, for smart polling
+router.get('/updates-since/:timestamp', StoreController.getUpdatedStores);
+
 // Generic Routes
 router.get('/', StoreController.getAll);
 router.post('/', verifyFirebaseToken, upload.single('icon'), validateStore, StoreController.create);

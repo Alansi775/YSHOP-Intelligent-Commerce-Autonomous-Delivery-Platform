@@ -19,7 +19,7 @@ class LuxuryTheme {
       Theme.of(context).brightness == Brightness.dark;
 }
 
-/// ✨ REINVENTED UI COMPONENTS
+///  REINVENTED UI COMPONENTS
 /// These are not widgets; they are architectural elements.
 class SignInUIComponents {
 
@@ -455,8 +455,8 @@ class SignInUIComponents {
         onPressed: onToggle,
         child: Text(
           isStoreOwner ? "← Return to Customer Entrance" : "Are you a Merchant? Enter Here →",
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+          textAlign: TextAlign.center,
           style: TextStyle(
             color: isDark ? Colors.white54 : Colors.black54,
             fontSize: 13,

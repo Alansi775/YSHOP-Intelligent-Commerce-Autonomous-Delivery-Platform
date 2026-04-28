@@ -214,7 +214,7 @@ class _StoreProductsViewState extends State<StoreProductsView> {
         
         //  Only update if product IDs actually changed
         if (existingIds != newIds) {
-          debugPrint('✨ CHANGE DETECTED: Had ${existingIds.length}, now ${newIds.length}');
+          debugPrint(' CHANGE DETECTED: Had ${existingIds.length}, now ${newIds.length}');
           debugPrint('   Added IDs: ${newIds.difference(existingIds)}');
           debugPrint('   Removed IDs: ${existingIds.difference(newIds)}');
           

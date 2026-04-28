@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 /// ═══════════════════════════════════════════════════════════════
-/// ✨ LIQUID AI ICON — Organic Aurora Orb
+///  LIQUID AI ICON — Organic Aurora Orb
 /// A mesmerizing, alive-feeling icon that breathes and shifts
 /// like a living organism. Inspired by Apple's Siri orb but
 /// with a unique identity for YSHOP.

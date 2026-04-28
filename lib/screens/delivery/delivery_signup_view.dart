@@ -93,8 +93,6 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
         password: _passwordController.text,
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
-        nationalID: _nationalIDController.text.trim(),
-        address: _addressController.text.trim(),
       );
 
       if (mounted) { 

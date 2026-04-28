@@ -6,6 +6,7 @@ import 'dart:io' show Platform, File;
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:yshop/config/api_config.dart';
 
 /// High-performance API Service optimized for millions of users
 /// Features: Connection pooling, smart caching, request deduplication, retry logic
@@ -15,17 +16,11 @@ class ApiService {
   /// Singleton HTTP client for connection reuse (critical for performance)
   static final http.Client _httpClient = http.Client();
 
-  /// Base API URL with platform detection
-  static String get _baseUrl {
-    if (kIsWeb) return 'http://localhost:3000/api/v1';
-    try {
-      if (Platform.isAndroid) return 'http://10.0.2.2:3000/api/v1';
-    } catch (_) {}
-    return 'http://localhost:3000/api/v1';
-  }
+  /// Base API URL - using centralized configuration
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   static String get baseUrl => _baseUrl;
-  static String get baseHost => _baseUrl.replaceFirst(RegExp(r'/api/v1/?$'), '');
+  static String get baseHost => ApiConfig.baseHost;
 
   /// Timeout configuration
   static const Duration _timeout = Duration(seconds: 30);
@@ -317,11 +312,11 @@ class ApiService {
   static Future<dynamic> adminLogin(String email, String password, {String role = 'auto'}) async {
     final List<String> endpoints;
     if (role == 'admin') {
-      endpoints = ['/admin/login'];
+      endpoints = [ApiConfig.adminLoginEndpoint];
     } else if (role == 'employee' || role == 'staff') {
       endpoints = ['/staff/login'];
     } else {
-      endpoints = ['/admin/login', '/staff/login'];
+      endpoints = [ApiConfig.adminLoginEndpoint, '/staff/login'];
     }
 
     ApiException? lastApiEx;
@@ -1219,19 +1214,15 @@ class ApiService {
     required String password,
     required String name,
     required String phone,
-    String? nationalID,
-    String? address,
   }) async {
     final response = await _request(
       'POST',
-      '/auth/delivery-signup',
+      ApiConfig.deliverySignupEndpoint,
       body: {
         'email': email,
         'password': password,
         'name': name,
         'phone': phone,
-        if (nationalID != null && nationalID.isNotEmpty) 'nationalID': nationalID,
-        if (address != null && address.isNotEmpty) 'address': address,
       },
       requiresAuth: false,
     );
@@ -1541,7 +1532,7 @@ class ApiService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final response = await _request(
       'GET',
-      '/stores/admin/dashboard-stats?t=$timestamp',
+      '${ApiConfig.adminDashboardStatsEndpoint}?t=$timestamp',
       requiresAuth: true,
       useCache: false,
     );
@@ -1549,12 +1540,12 @@ class ApiService {
   }
 
   static Future<List<dynamic>> getPendingStores() async {
-    final response = await _request('GET', '/admins/stores/pending', requiresAuth: true, skipDedup: true);
+    final response = await _request('GET', ApiConfig.adminGetPendingStoresEndpoint, requiresAuth: true, skipDedup: true);
     return List<dynamic>.from(response['data'] ?? []);
   }
 
   static Future<List<dynamic>> getApprovedStores() async {
-    final response = await _request('GET', '/admins/stores/approved', requiresAuth: true, skipDedup: true);
+    final response = await _request('GET', ApiConfig.adminGetApprovedStoresEndpoint, requiresAuth: true, skipDedup: true);
     return List<dynamic>.from(response['data'] ?? []);
   }
 
@@ -1567,7 +1558,7 @@ class ApiService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final response = await _request(
       'GET',
-      '/admins/stores/all?t=$timestamp',
+      '${ApiConfig.adminGetAllStoresEndpoint}?t=$timestamp',
       requiresAuth: true,
       useCache: false,
       skipDedup: true,
@@ -1581,7 +1572,8 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> approveStoreWithData(String storeId) async {
-    final response = await _request('POST', '/admins/stores/$storeId/approve', requiresAuth: true);
+    final endpoint = ApiConfig.replacePath(ApiConfig.adminApproveStoreEndpoint, {'storeId': storeId});
+    final response = await _request('POST', endpoint, requiresAuth: true);
     return {
       'success': true,
       'owner_uid': response['data']?['owner_uid'],
@@ -1590,7 +1582,8 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> rejectStoreWithData(String storeId) async {
-    final response = await _request('POST', '/admins/stores/$storeId/reject', requiresAuth: true);
+    final endpoint = ApiConfig.replacePath(ApiConfig.adminRejectStoreEndpoint, {'storeId': storeId});
+    final response = await _request('POST', endpoint, requiresAuth: true);
     return {
       'success': true,
       'owner_uid': response['data']?['owner_uid'],
@@ -1599,20 +1592,23 @@ class ApiService {
 
   static Future<bool> approveStore(String storeId) async {
     debugPrint('🟢 [approveStore] Sending approval request for store: $storeId');
-    final response = await _request('POST', '/admins/stores/$storeId/approve', requiresAuth: true);
+    final endpoint = ApiConfig.replacePath(ApiConfig.adminApproveStoreEndpoint, {'storeId': storeId});
+    final response = await _request('POST', endpoint, requiresAuth: true);
     debugPrint('🟢 [approveStore] Response: $response');
     return true;
   }
 
   static Future<bool> rejectStore(String storeId) async {
     debugPrint(' [rejectStore] Sending rejection request for store: $storeId');
-    final response = await _request('POST', '/admins/stores/$storeId/reject', requiresAuth: true);
+    final endpoint = ApiConfig.replacePath(ApiConfig.adminRejectStoreEndpoint, {'storeId': storeId});
+    final response = await _request('POST', endpoint, requiresAuth: true);
     debugPrint(' [rejectStore] Response: $response');
     return true;
   }
 
   static Future<bool> banStore(String storeId) async {
-    await _request('POST', '/admins/stores/$storeId/ban', requiresAuth: true);
+    final endpoint = ApiConfig.replacePath(ApiConfig.adminBanStoreEndpoint, {'storeId': storeId});
+    await _request('POST', endpoint, requiresAuth: true);
     return true;
   }
 

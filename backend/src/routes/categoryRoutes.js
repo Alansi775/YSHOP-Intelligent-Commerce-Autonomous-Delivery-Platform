@@ -2,6 +2,55 @@ import express from 'express';
 import pool from '../config/database.js';
 
 const router = express.Router();
+let categorySchemaReadyPromise = null;
+
+async function ensureCategorySchema() {
+  if (categorySchemaReadyPromise) return categorySchemaReadyPromise;
+
+  categorySchemaReadyPromise = (async () => {
+    const [columnRows] = await pool.query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'categories'`
+    );
+
+    const columns = new Set(columnRows.map((r) => r.COLUMN_NAME));
+    const alterStatements = [];
+
+    if (!columns.has('store_id')) {
+      alterStatements.push('ALTER TABLE categories ADD COLUMN store_id INT NULL');
+      alterStatements.push('ALTER TABLE categories ADD INDEX idx_store_id (store_id)');
+    }
+    if (!columns.has('display_name')) {
+      alterStatements.push('ALTER TABLE categories ADD COLUMN display_name VARCHAR(255) NULL');
+    }
+    if (!columns.has('icon')) {
+      alterStatements.push('ALTER TABLE categories ADD COLUMN icon VARCHAR(255) NULL');
+    }
+    if (!columns.has('display_order')) {
+      alterStatements.push('ALTER TABLE categories ADD COLUMN display_order INT NOT NULL DEFAULT 0');
+    }
+    if (!columns.has('updated_at')) {
+      alterStatements.push(
+        'ALTER TABLE categories ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+      );
+    }
+
+    for (const sql of alterStatements) {
+      await pool.query(sql);
+    }
+
+    await pool.query(
+      'UPDATE categories SET display_name = name WHERE display_name IS NULL OR display_name = ""'
+    );
+  })().catch((error) => {
+    categorySchemaReadyPromise = null;
+    throw error;
+  });
+
+  return categorySchemaReadyPromise;
+}
 
 /**
  * Helper function to get display name from category name
@@ -33,6 +82,8 @@ router.get('/:storeId/categories', async (req, res) => {
   const { storeId } = req.params;
 
   try {
+    await ensureCategorySchema();
+
     const query = `
       SELECT 
         id,
@@ -88,6 +139,8 @@ router.post('/:storeId/categories', async (req, res) => {
   const connection = await pool.getConnection();
   
   try {
+    await ensureCategorySchema();
+
     const displayName = getDisplayName(name);
 
     // احصل على أعلى display_order للمتجر
@@ -136,6 +189,7 @@ router.delete('/:storeId/categories/:categoryId', async (req, res) => {
 
   const connection = await pool.getConnection();
   try {
+    await ensureCategorySchema();
     await connection.beginTransaction();
 
     // Remove category_id from all products
@@ -240,6 +294,7 @@ router.put('/:storeId/categories/reorder', async (req, res) => {
   const connection = await pool.getConnection();
   
   try {
+    await ensureCategorySchema();
     await connection.beginTransaction();
 
     // تحديث ترتيب كل فئة

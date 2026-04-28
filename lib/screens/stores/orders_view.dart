@@ -106,7 +106,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
         if (channel == 'returns:$_storeId') {
           // 📦 RETURNS UPDATE
           debugPrint(
-              '✨ REACTIVE RETURNS UPDATE: ${update['count']} items');
+              ' REACTIVE RETURNS UPDATE: ${update['count']} items');
           
           if (mounted) {
             setState(() {
@@ -141,7 +141,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
         if (channel == 'orders:$_storeId') {
           // 📦 ORDERS UPDATE
           debugPrint(
-              '✨ REACTIVE ORDERS UPDATE: ${update['count']} items');
+              ' REACTIVE ORDERS UPDATE: ${update['count']} items');
           
           if (mounted) {
             setState(() {

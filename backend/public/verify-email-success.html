@@ -1,195 +1,264 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Email Verified - YSHOP</title>
   <style>
-    * { 
-      margin: 0; 
-      padding: 0; 
-      box-sizing: border-box; 
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    
-    html, body { 
-      width: 100%; 
-      height: 100%; 
-    }
-    
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+      background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
       padding: 20px;
     }
-    
+
     .container {
       background: white;
-      border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      max-width: 500px;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      max-width: 480px;
       width: 100%;
       padding: 50px 40px;
       text-align: center;
-      animation: slideUp 0.6s ease-out;
+      animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    
+
     @keyframes slideUp {
       from {
         opacity: 0;
-        transform: translateY(30px);
+        transform: translateY(40px);
       }
       to {
         opacity: 1;
         transform: translateY(0);
       }
     }
-    
-    .icon {
+
+    @keyframes checkPulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.08);
+      }
+    }
+
+    .header {
+      background: #1a1a1a;
+      color: #42A5F5;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 40px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .checkmark-wrapper {
       width: 80px;
       height: 80px;
-      background: linear-gradient(135deg, #4CAF50, #45a049);
+      margin: 0 auto 30px;
+      background: #4CAF50;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 30px;
-      font-size: 40px;
-      animation: scaleIn 0.5s ease-out;
-      box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+      animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), checkPulse 2s ease-in-out 0.7s;
+      box-shadow: 0 8px 20px rgba(76, 175, 80, 0.2);
     }
-    
-    @keyframes scaleIn {
-      from {
-        transform: scale(0);
-        opacity: 0;
-      }
-      to {
-        transform: scale(1);
-        opacity: 1;
-      }
+
+    .checkmark {
+      color: white;
+      font-size: 50px;
+      font-weight: bold;
+      line-height: 1;
     }
-    
+
     h1 {
       font-size: 32px;
-      color: #333;
-      margin-bottom: 15px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-    }
-    
-    .message {
-      font-size: 16px;
-      color: #666;
-      line-height: 1.8;
-      margin-bottom: 30px;
-    }
-    
-    .status-badge {
-      display: inline-block;
-      background: #e8f5e9;
-      color: #2e7d32;
-      padding: 10px 20px;
-      border-radius: 20px;
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 25px;
-      letter-spacing: 0.3px;
-    }
-    
-    .next-steps {
-      background: #f5f5f5;
-      padding: 20px;
-      border-radius: 12px;
-      text-align: left;
-      margin: 25px 0;
-    }
-    
-    .next-steps h3 {
-      font-size: 14px;
-      color: #333;
+      color: #1a1a1a;
       margin-bottom: 12px;
-      font-weight: 600;
+      font-weight: 700;
     }
-    
-    .next-steps p {
-      font-size: 13px;
+
+    .subtitle {
+      font-size: 15px;
       color: #666;
+      margin-bottom: 32px;
       line-height: 1.6;
-      margin-bottom: 8px;
     }
-    
-    .next-steps p:last-child {
+
+    .info-box {
+      background: #f5f5f5;
+      border-left: 4px solid #42A5F5;
+      padding: 18px;
+      border-radius: 6px;
+      margin-bottom: 32px;
+      text-align: left;
+    }
+
+    .info-box p {
+      font-size: 14px;
+      color: #333;
+      margin-bottom: 8px;
+      line-height: 1.6;
+    }
+
+    .info-box p:last-child {
       margin-bottom: 0;
     }
-    
-    .button {
+
+    .info-box strong {
+      color: #42A5F5;
+      font-weight: 600;
+    }
+
+    .cta-button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 14px 45px;
+      background: #42A5F5;
       color: white;
-      padding: 14px 40px;
-      border-radius: 8px;
       text-decoration: none;
+      border-radius: 6px;
       font-weight: 600;
       font-size: 15px;
       transition: all 0.3s ease;
-      margin-top: 20px;
-      cursor: pointer;
       border: none;
-      letter-spacing: 0.3px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(66, 165, 245, 0.2);
     }
-    
-    .button:hover {
+
+    .cta-button:hover {
+      background: #2196F3;
       transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+      box-shadow: 0 6px 16px rgba(66, 165, 245, 0.3);
     }
-    
+
+    .cta-button:active {
+      transform: translateY(0);
+    }
+
     .footer {
       margin-top: 30px;
-      padding-top: 20px;
+      padding-top: 18px;
       border-top: 1px solid #eee;
       font-size: 12px;
       color: #999;
     }
-    
+
     .logo {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 900;
+      letter-spacing: 3px;
+      color: #1a1a1a;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+
+    .success-badge {
+      display: inline-block;
+      background: #e8f5e9;
+      color: #2e7d32;
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 18px;
       letter-spacing: 1px;
-      color: #667eea;
-      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 35px 24px;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+
+      .subtitle {
+        font-size: 14px;
+      }
+
+      .checkmark-wrapper {
+        width: 70px;
+        height: 70px;
+      }
+
+      .checkmark {
+        font-size: 42px;
+      }
+
+      .cta-button {
+        padding: 12px 35px;
+        font-size: 14px;
+      }
+
+      .header {
+        font-size: 11px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
+    <div class="header">SECURITY PORTAL</div>
+
     <div class="logo">YSHOP</div>
-    
-    <div class="icon">✓</div>
-    
-    <h1>Email Verified!</h1>
-    
-    <div class="status-badge">SUCCESS</div>
-    
-    <p class="message">
-      Your email has been successfully verified.
-    </p>
-    
-    <div class="next-steps">
-      <h3>What Happens Next:</h3>
-      <p>✓ Your store account is created</p>
-      <p>✓ Waiting for admin approval</p>
-      <p>Once approved, you can log in to your dashboard</p>
+
+    <div class="success-badge">✓ SUCCESS</div>
+
+    <div class="checkmark-wrapper">
+      <span class="checkmark">✓</span>
     </div>
-    
-    <a href="/" class="button">Return to YSHOP</a>
-    
+
+    <h1>Email Verified!</h1>
+
+    <p class="subtitle">
+      Your email address has been successfully verified. You're all set!
+    </p>
+
+    <div class="info-box">
+      <p><strong>Great news:</strong> Your account is now active and ready to use.</p>
+      <p>You can return to the YSHOP app and log in with your email and password.</p>
+    </div>
+
+    <button class="cta-button" onclick="closeOrRedirect()">
+      Return to App
+    </button>
+
     <div class="footer">
-      Thank you for joining YSHOP!
+      <p>If you need any help, contact our support team.</p>
     </div>
   </div>
+
+  <script>
+    function closeOrRedirect() {
+      // Try to open the app
+      window.location.href = 'yshop://verified';
+      setTimeout(() => {
+        // Fallback: just close or show message
+        alert('You can now return to the YSHOP app and log in!');
+      }, 900);
+    }
+
+    // Auto-attempt to open app after page loads
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        window.location.href = 'yshop://verified';
+      }, 1500);
+    });
+  </script>
 </body>
 </html>

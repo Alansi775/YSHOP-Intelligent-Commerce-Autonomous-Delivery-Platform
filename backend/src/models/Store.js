@@ -6,7 +6,7 @@ import logger from '../config/logger.js';
  */
 export class Store {
   /**
-   * جلب المتاجر حسب النوع (store_type) و status = 'Approved'
+   * جلب المتاجر حسب النوع (store_type) و status = 'approved'
    */
   static async findByType(type, page = 1, limit = 20) {
     try {
@@ -20,7 +20,7 @@ export class Store {
           COALESCE(NULLIF(u.email, ''), s.email) as email
         FROM stores s
         LEFT JOIN users u ON s.owner_uid = u.uid
-        WHERE s.status = 'Approved' AND LOWER(s.store_type) = LOWER(?)
+        WHERE s.status = 'approved' AND LOWER(s.store_type) = LOWER(?)
         ORDER BY s.created_at DESC 
         LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`,
         [type]
@@ -44,7 +44,7 @@ export class Store {
           COALESCE(NULLIF(u.email, ''), s.email) as email
         FROM stores s
         LEFT JOIN users u ON s.owner_uid = u.uid
-        WHERE s.status = 'Approved' 
+        WHERE s.status = 'approved' 
         ORDER BY s.created_at DESC 
         LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`
       );
@@ -166,11 +166,11 @@ export class Store {
       );
       logger.info(` User synced: ${ownerUid}`);
 
-      //  أنشئ المتجر (status = 'Pending')
+      //  أنشئ المتجر (status = 'pending')
       const [result] = await connection.execute(
         `INSERT INTO stores 
         (name, description, phone, address, latitude, longitude, icon_url, owner_uid, store_type, email, created_at, status) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending')`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'pending')`,
         [name || null, description || null, phone || null, address || null, latitude || 0, longitude || 0, iconUrl || null, ownerUid, storeType || null, email || null]
       );
       
@@ -219,7 +219,7 @@ export class Store {
       const connection = await pool.getConnection();
       await connection.execute(
         'UPDATE stores SET status = ? WHERE id = ?',
-        ['Suspended', id]
+        ['suspended', id]
       );
       connection.release();
       return true;
@@ -229,7 +229,7 @@ export class Store {
     }
   }
 
-  // جلب المتاجر المعلقة (Pending/Suspended) - كل اللي ليست Approved
+  // جلب المتاجر المعلقة (pending/suspended) - كل اللي ليست approved
   static async findPending() {
     try {
       const connection = await pool.getConnection();
@@ -239,7 +239,7 @@ export class Store {
           COALESCE(NULLIF(u.email, ''), s.email) as email
         FROM stores s
         LEFT JOIN users u ON s.owner_uid = u.uid
-        WHERE s.status != 'Approved' 
+        WHERE s.status != 'approved' AND s.email_verified = 1
         ORDER BY s.created_at DESC`
       );
       connection.release();
@@ -250,7 +250,7 @@ export class Store {
     }
   }
 
-  // جلب المتاجر المعتمدة (Approved) - status = 'Approved'
+  // جلب المتاجر المعتمدة (approved) - status = 'approved'
   static async findApproved() {
     try {
       const connection = await pool.getConnection();
@@ -260,7 +260,7 @@ export class Store {
           COALESCE(NULLIF(u.email, ''), s.email) as email
         FROM stores s
         LEFT JOIN users u ON s.owner_uid = u.uid
-        WHERE s.status = 'Approved' 
+        WHERE s.status = 'approved' AND s.email_verified = 1
         ORDER BY s.created_at DESC`
       );
       connection.release();

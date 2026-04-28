@@ -190,15 +190,6 @@ class AuthManager with ChangeNotifier {
     required String password,
     required String displayName,
     String? phone,
-    String? name,
-    String? surname,
-    String? nationalId,
-    String? address,
-    double? latitude,
-    double? longitude,
-    String? buildingInfo,
-    String? apartmentNumber,
-    String? deliveryInstructions,
   }) async {
     try {
       _isLoading = true;
@@ -210,15 +201,6 @@ class AuthManager with ChangeNotifier {
         'password': password,
         'display_name': displayName,
         'phone': phone,
-        'name': name,
-        'surname': surname,
-        'national_id': nationalId,
-        'address': address,
-        'latitude': latitude,
-        'longitude': longitude,
-        'building_info': buildingInfo,
-        'apartment_number': apartmentNumber,
-        'delivery_instructions': deliveryInstructions,
       });
 
       if (response != null && response['success'] == true) {

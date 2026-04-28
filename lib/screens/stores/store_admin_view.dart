@@ -917,6 +917,25 @@ class _StoreAdminViewState extends State<StoreAdminView> {
                       color: Colors.white.withOpacity(0.9),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _assignProductToCategory(product),
+                      icon: const Icon(Icons.category_outlined, size: 16),
+                      label: const Text('Add to Category'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white.withOpacity(0.9),
+                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        textStyle: const TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

@@ -5,6 +5,49 @@ import admin from '../config/firebase.js';
 
 export class StoreController {
   /**
+   * جلب التحديثات منذ timestamp معين - خفيف جداً للـ polling
+   */
+  static async getUpdatedStores(req, res, next) {
+    try {
+      const { timestamp } = req.params;
+      const { type } = req.query;
+      
+      const connection = await pool.getConnection();
+      
+      let query = `
+        SELECT id, name, status, updated_at, store_type
+        FROM stores
+        WHERE updated_at > ?
+        AND status = 'Approved'
+      `;
+      const params = [new Date(timestamp)];
+      
+      if (type) {
+        query += ` AND LOWER(store_type) = LOWER(?)`;
+        params.push(type);
+      }
+      
+      query += ` ORDER BY updated_at DESC LIMIT 100`;
+      
+      const [rows] = await connection.execute(query, params);
+      connection.release();
+      
+      res.json({
+        success: true,
+        data: rows,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error('Error in getUpdatedStores:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch store updates',
+        error: error.message,
+      });
+    }
+  }
+
+  /**
    * جلب المتاجر العامة للمستخدمين العاديين حسب النوع
    */
   static async getPublicStores(req, res, next) {

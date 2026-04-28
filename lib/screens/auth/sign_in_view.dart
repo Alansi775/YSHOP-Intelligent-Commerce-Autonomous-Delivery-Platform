@@ -320,17 +320,8 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
       await authManager.register(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        displayName: '${_nameController.text} ${_surnameController.text}',
+        displayName: '${_nameController.text.trim()} ${_surnameController.text.trim()}',
         phone: _contactNumberController.text.trim(),
-        name: _nameController.text.trim(),
-        surname: _surnameController.text.trim(),
-        nationalId: _nationalIDController.text.trim(),
-        address: _customerAddressController.text.trim(),
-        latitude: _latitude,
-        longitude: _longitude,
-        buildingInfo: _buildingInfoController.text.trim(),
-        apartmentNumber: _apartmentNumberController.text.trim(),
-        deliveryInstructions: _deliveryInstructionsController.text.trim(),
       );
 
       if (mounted) {
