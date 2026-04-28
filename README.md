@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/images/yshop.png" alt="YShop Logo" width="120"/>
+  <img src="assets/images/yshop_logo.png" alt="YShop Logo" width="120"/>
 </p>
 
 <h1 align="center">YShop — Intelligent Commerce & Autonomous Delivery Platform</h1>
