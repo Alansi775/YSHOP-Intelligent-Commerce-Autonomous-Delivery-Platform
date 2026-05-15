@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import OrderController from '../controllers/OrderController.js';
 import { verifyFirebaseToken, verifyAdminToken, verifyToken } from '../middleware/auth.js';
+import multer from 'multer';
+
+const upload = multer();
 
 const router = Router();
 
@@ -12,6 +15,7 @@ router.use(verifyFirebaseToken);
 
 // Specific routes BEFORE generic routes to prevent /:id from matching /user
 router.post('/', OrderController.create);
+router.post('/:id/receipt', upload.single('file'), OrderController.sendReceipt);
 router.get('/user', OrderController.getUserOrders);
 router.get('/store/:storeId', OrderController.getStoreOrders);
 

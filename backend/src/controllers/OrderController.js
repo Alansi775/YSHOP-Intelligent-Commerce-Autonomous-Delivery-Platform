@@ -1,5 +1,7 @@
 import Order from '../models/Order.js';
 import logger from '../config/logger.js';
+import { getEmailService, renderReceiptCustomerHTML, renderReceiptStoreHTML } from '../utils/emailService.js';
+import { Store } from '../models/Store.js';
 
 export class OrderController {
   static async getAdminOrders(req, res, next) {
@@ -256,6 +258,78 @@ export class OrderController {
       res.json({ success: true });
     } catch (error) {
       logger.error('Error in markDelivered:', error);
+      next(error);
+    }
+  }
+
+  // POST /api/v1/orders/:id/receipt
+  static async sendReceipt(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      // multer file parser should populate req.file
+      const file = req.file;
+      const { recipientEmail, recipientType } = req.body || {};
+
+      if (!file) {
+        return res.status(400).json({ success: false, message: 'Missing receipt file (multipart field: file)' });
+      }
+
+      const order = await Order.findById(id);
+      if (!order) {
+        return res.status(404).json({ success: false, message: 'Order not found' });
+      }
+
+      // Authorization: only order owner or admin can upload/send receipts
+      if (!req.admin) {
+        if (!req.user || (order.user_id !== req.user.id)) {
+          return res.status(403).json({ success: false, message: 'Forbidden' });
+        }
+      }
+
+      const emailService = await getEmailService();
+
+      // Compose customer email
+      const customerEmail = recipientEmail || (order.customer && order.customer.email) || null;
+      const store = await Store.findById(order.store_id);
+      const storeEmail = store && (store.email || null);
+
+      // Compute simple splits (configurable via env vars)
+      const total = parseFloat(order.total_price || order.total || 0) || 0;
+      // Default splits: platform 25% (APP_COMMISSION_RATE in Flutter), driver 10%, store gets remaining 65%
+      const platformPercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || '0.25');
+      const driverPercent = parseFloat(process.env.DRIVER_FEE_PERCENT || '0.10');
+      const platformAmount = +(total * platformPercent).toFixed(2);
+      const driverAmount = +(total * driverPercent).toFixed(2);
+      const storeAmount = +(total - platformAmount - driverAmount).toFixed(2);
+
+      const attachments = [
+        { filename: file.originalname || `receipt_${id}.pdf`, content: file.buffer }
+      ];
+
+      // Build splits object for templates
+      const splits = {
+        platform: `${platformAmount.toFixed(2)} ${order.currency || ''}`,
+        driver: `${driverAmount.toFixed(2)} ${order.currency || ''}`,
+        store: `${storeAmount.toFixed(2)} ${order.currency || ''}`,
+      };
+
+      // Customer email (English template)
+      if (customerEmail) {
+        const frontendOrderUrl = (process.env.FRONTEND_URL || 'http://localhost:3000') + `/orders/${order.id}`;
+        const html = renderReceiptCustomerHTML({ order, frontendOrderUrl });
+        await emailService.sendOrderReceiptEmail(customerEmail, `YSHOP - Receipt for Order ${order.id}`, html, attachments);
+      }
+
+      // Store owner email
+      if (storeEmail) {
+        const html = renderReceiptStoreHTML({ order, store, splits });
+        await emailService.sendOrderReceiptEmail(storeEmail, `YSHOP - New Order ${order.id}`, html, attachments);
+      }
+
+      return res.json({ success: true, message: 'Receipt uploaded and emails queued/sent' });
+    } catch (error) {
+      logger.error('Error in sendReceipt:', error);
       next(error);
     }
   }

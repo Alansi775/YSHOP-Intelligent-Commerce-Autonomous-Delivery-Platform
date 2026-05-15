@@ -561,6 +561,39 @@ ${resetLink}
       return false;
     }
     }
+
+  /**
+   * Send an order receipt email with attachment (PDF).
+   * @param {string} email
+   * @param {string} subject
+   * @param {string} html
+   * @param {Array} attachments - nodemailer attachments array
+   */
+  async sendOrderReceiptEmail(email, subject, html, attachments = []) {
+    if (!this.isInitialized) {
+      throw new Error('Email service not initialized');
+    }
+
+    try {
+      const mailOptions = {
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@yshop.com',
+        to: email,
+        subject,
+        html,
+        attachments,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      logger.info(`✓ Receipt email sent to ${email}`);
+      if (process.env.NODE_ENV !== 'production') {
+        logger.debug(`Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+      }
+      return true;
+    } catch (error) {
+      logger.error(`✗ Failed to send receipt email to ${email}:`, error.message);
+      throw error;
+    }
+  }
 }
 // Create singleton instance
 let emailServiceInstance = null;
@@ -583,3 +616,124 @@ export async function getEmailService() {
 }
 
 export default getEmailService;
+
+/**
+ * Render an English receipt email for customers matching verification email style.
+ * Keeps colors neutral and supports light/dark via `color-scheme`.
+ */
+export function renderReceiptCustomerHTML({ order, logoUrl, frontendOrderUrl }) {
+  const orderId = order.id || '';
+  const date = order.created_at || new Date().toISOString();
+  const customerName = (order.customer && order.customer.name) || '';
+  const total = order.total_price || order.total || 0;
+
+  return `
+  <!doctype html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:0; }
+      .wrapper { padding: 30px; background: #FAFAFA; }
+      @media (prefers-color-scheme: dark) { .wrapper { background:#0B0B0B } }
+      .container { max-width:600px; margin:0 auto; background:#fff; border-radius:6px; overflow:hidden; border:1px solid #EEE }
+      @media (prefers-color-scheme: dark) { .container { background:#111; border-color:#222 } }
+      .header { padding:28px; text-align:center; background:#111; }
+      .wordmark { font-size:28px; font-weight:800; letter-spacing:6px; color:#fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+      @media (prefers-color-scheme: dark) { .header { background:#fff; } .wordmark { color:#000; } }
+      .content { padding:28px; color:#222 }
+      @media (prefers-color-scheme: dark) { .content { color:#DDD } }
+      .muted { color:#6B7280 }
+      .button { display:inline-block; padding:12px 20px; background:#111; color:#fff; border-radius:8px; text-decoration:none }
+      @media (prefers-color-scheme: dark) { .button { background:#fff; color:#000 } }
+      .small { font-size:13px }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="container">
+        <div class="header">
+          <div class="wordmark">YSHOP</div>
+        </div>
+        <div class="content">
+          <p class="small">Hello ${customerName || 'Customer'},</p>
+          <h2 style="margin-top:6px">We've received your order</h2>
+          <p class="muted small">Order <strong>#${orderId}</strong> • ${date}</p>
+
+          <p style="margin-top:18px">Thank you for your purchase. Attached is a formal receipt (PDF) you can download and keep as proof of payment.</p>
+
+          <!-- View Order button removed for customer emails; PDF is attached -->
+
+          <hr style="margin:24px 0; border:none; border-top:1px solid #EEE" />
+
+          <p class="small muted">If you didn't place this order, contact support immediately.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+export function renderReceiptStoreHTML({ order, store, splits = {}, logoUrl }) {
+  const orderId = order.id || '';
+  const date = order.created_at || new Date().toISOString();
+  const storeName = (store && store.name) || 'Store Owner';
+
+  const platform = splits.platform ?? '—';
+  const driver = splits.driver ?? '—';
+  const storeAmount = splits.store ?? '—';
+
+  return `
+  <!doctype html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:0; }
+      .wrapper { padding: 30px; background: #FAFAFA; }
+      @media (prefers-color-scheme: dark) { .wrapper { background:#0B0B0B } }
+      .container { max-width:600px; margin:0 auto; background:#fff; border-radius:6px; overflow:hidden; border:1px solid #EEE }
+      @media (prefers-color-scheme: dark) { .container { background:#111; border-color:#222 } }
+      .header { padding:28px; text-align:center; background:#111; }
+      .wordmark { font-size:28px; font-weight:800; letter-spacing:6px; color:#fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+      @media (prefers-color-scheme: dark) { .header { background:#fff; } .wordmark { color:#000; } }
+      .content { padding:28px; color:#222 }
+      @media (prefers-color-scheme: dark) { .content { color:#DDD } }
+      table { width:100%; border-collapse:collapse; margin-top:12px }
+      td, th { padding:8px; border-bottom:1px solid #F0F0F0; text-align:right }
+      @media (prefers-color-scheme: dark) { td, th { border-bottom:1px solid #222 } }
+      .muted { color:#6B7280 }
+      .small { font-size:13px }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="container">
+        <div class="header">
+          <div class="wordmark">YSHOP</div>
+        </div>
+        <div class="content">
+          <h2 style="margin:0 0 6px 0">New Order Received</h2>
+          <p class="muted small">Order <strong>#${orderId}</strong> • ${date}</p>
+
+          <p style="margin-top:12px">A new order has been placed. Below is the quick payout breakdown:</p>
+
+          <table>
+            <tr><td style="text-align:right">Platform (fee)</td><td style="text-align:left">${platform}</td></tr>
+            <tr><td style="text-align:right">Driver</td><td style="text-align:left">${driver}</td></tr>
+            <tr><td style="text-align:right">Store Net</td><td style="text-align:left">${storeAmount}</td></tr>
+          </table>
+
+          <p class="small muted" style="margin-top:12px">Attached is the full receipt (PDF) with order items and product images.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
