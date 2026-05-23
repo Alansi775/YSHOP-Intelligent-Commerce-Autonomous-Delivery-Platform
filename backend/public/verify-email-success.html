@@ -3,262 +3,159 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Email Verified - YSHOP</title>
+  <title>YSHOP - Email Verified</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-      background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #FAFAFA;
+      line-height: 1.6;
+      color: #1A1A1A;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 20px;
     }
-
     .container {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      max-width: 480px;
+      max-width: 580px;
       width: 100%;
-      padding: 50px 40px;
-      text-align: center;
-      animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      background: white;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #EEEEEE;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.03);
     }
-
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(40px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes checkPulse {
-      0%, 100% {
-        transform: scale(1);
-      }
-      50% {
-        transform: scale(1.08);
-      }
-    }
-
     .header {
-      background: #1a1a1a;
+      background: #1A1A1A;
+      padding: 50px 30px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 26px;
+      font-weight: 900;
+      color: white;
+      margin: 0;
+      letter-spacing: 8px;
+    }
+    .badge {
+      display: inline-block;
       color: #42A5F5;
-      padding: 16px;
-      border-radius: 8px;
-      margin-bottom: 40px;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 2px;
+      padding: 6px 12px;
+      font-size: 10px;
+      font-weight: bold;
+      margin-top: 10px;
+      letter-spacing: 3px;
       text-transform: uppercase;
     }
-
-    .checkmark-wrapper {
+    .content {
+      padding: 50px 30px;
+      text-align: center;
+    }
+    .icon-wrapper {
       width: 80px;
       height: 80px;
       margin: 0 auto 30px;
-      background: #4CAF50;
+      background: #1A1A1A;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), checkPulse 2s ease-in-out 0.7s;
-      box-shadow: 0 8px 20px rgba(76, 175, 80, 0.2);
     }
-
     .checkmark {
-      color: white;
-      font-size: 50px;
-      font-weight: bold;
-      line-height: 1;
+      width: 40px;
+      height: 40px;
+      stroke: #42A5F5;
+      stroke-width: 3;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
-
-    h1 {
-      font-size: 32px;
-      color: #1a1a1a;
-      margin-bottom: 12px;
-      font-weight: 700;
-    }
-
-    .subtitle {
-      font-size: 15px;
-      color: #666;
-      margin-bottom: 32px;
-      line-height: 1.6;
-    }
-
-    .info-box {
-      background: #f5f5f5;
-      border-left: 4px solid #42A5F5;
-      padding: 18px;
-      border-radius: 6px;
-      margin-bottom: 32px;
-      text-align: left;
-    }
-
-    .info-box p {
-      font-size: 14px;
-      color: #333;
-      margin-bottom: 8px;
-      line-height: 1.6;
-    }
-
-    .info-box p:last-child {
-      margin-bottom: 0;
-    }
-
-    .info-box strong {
-      color: #42A5F5;
-      font-weight: 600;
-    }
-
-    .cta-button {
-      display: inline-block;
-      padding: 14px 45px;
-      background: #42A5F5;
-      color: white;
-      text-decoration: none;
-      border-radius: 6px;
-      font-weight: 600;
-      font-size: 15px;
-      transition: all 0.3s ease;
-      border: none;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(66, 165, 245, 0.2);
-    }
-
-    .cta-button:hover {
-      background: #2196F3;
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(66, 165, 245, 0.3);
-    }
-
-    .cta-button:active {
-      transform: translateY(0);
-    }
-
-    .footer {
-      margin-top: 30px;
-      padding-top: 18px;
-      border-top: 1px solid #eee;
-      font-size: 12px;
-      color: #999;
-    }
-
-    .logo {
-      font-size: 18px;
-      font-weight: 900;
-      letter-spacing: 3px;
-      color: #1a1a1a;
-      margin-bottom: 20px;
-      text-transform: uppercase;
-    }
-
-    .success-badge {
-      display: inline-block;
-      background: #e8f5e9;
-      color: #2e7d32;
-      padding: 6px 14px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 700;
-      margin-bottom: 18px;
+    .title {
+      font-size: 24px;
+      font-weight: 300;
+      color: #1A1A1A;
+      margin-bottom: 15px;
       letter-spacing: 1px;
+    }
+    .title strong {
+      font-weight: 900;
+    }
+    .message {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.8;
+      margin-bottom: 30px;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .divider {
+      height: 1px;
+      background: #F0F0F0;
+      margin: 30px 0;
+    }
+    .info-box {
+      background: #F9F9F9;
+      padding: 20px;
+      border-radius: 4px;
+      border-left: 4px solid #42A5F5;
+      text-align: left;
+      font-size: 13px;
+      color: #666;
+    }
+    .info-box strong {
+      color: #1A1A1A;
+      display: block;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+      font-size: 11px;
       text-transform: uppercase;
     }
-
-    @media (max-width: 480px) {
-      .container {
-        padding: 35px 24px;
-      }
-
-      h1 {
-        font-size: 26px;
-      }
-
-      .subtitle {
-        font-size: 14px;
-      }
-
-      .checkmark-wrapper {
-        width: 70px;
-        height: 70px;
-      }
-
-      .checkmark {
-        font-size: 42px;
-      }
-
-      .cta-button {
-        padding: 12px 35px;
-        font-size: 14px;
-      }
-
-      .header {
-        font-size: 11px;
-      }
+    .footer {
+      background: #FFFFFF;
+      padding: 30px;
+      border-top: 1px solid #F5F5F5;
+      text-align: center;
+      font-size: 11px;
+      color: #AAA;
+      letter-spacing: 1px;
     }
+    .footer a { color: #42A5F5; text-decoration: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">SECURITY PORTAL</div>
-
-    <div class="logo">YSHOP</div>
-
-    <div class="success-badge">✓ SUCCESS</div>
-
-    <div class="checkmark-wrapper">
-      <span class="checkmark">✓</span>
+    <div class="header">
+      <h1>YSHOP</h1>
+      <span class="badge">Security Portal</span>
     </div>
 
-    <h1>Email Verified!</h1>
+    <div class="content">
+      <div class="icon-wrapper">
+        <svg class="checkmark" viewBox="0 0 24 24">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
 
-    <p class="subtitle">
-      Your email address has been successfully verified. You're all set!
-    </p>
+      <h2 class="title"><strong>Identity Authenticated</strong></h2>
 
-    <div class="info-box">
-      <p><strong>Great news:</strong> Your account is now active and ready to use.</p>
-      <p>You can return to the YSHOP app and log in with your email and password.</p>
+      <p class="message">
+        Your email has been successfully verified. You may now return to the YSHOP application and sign in to access your account.
+      </p>
+
+      <div class="divider"></div>
+
+      <div class="info-box">
+        <strong>Next Step</strong>
+        Open the YSHOP app on your device and log in with your credentials to continue your premium experience.
+      </div>
     </div>
-
-    <button class="cta-button" onclick="closeOrRedirect()">
-      Return to App
-    </button>
 
     <div class="footer">
-      <p>If you need any help, contact our support team.</p>
+      <p style="margin-bottom: 10px;">© 2026 <strong>YSHOP</strong>. ALL RIGHTS RESERVED.</p>
+      <p>CONCIERGE: <a href="mailto:support@yshop.com">SUPPORT@YSHOP.COM</a></p>
     </div>
   </div>
-
-  <script>
-    function closeOrRedirect() {
-      // Try to open the app
-      window.location.href = 'yshop://verified';
-      setTimeout(() => {
-        // Fallback: just close or show message
-        alert('You can now return to the YSHOP app and log in!');
-      }, 900);
-    }
-
-    // Auto-attempt to open app after page loads
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        window.location.href = 'yshop://verified';
-      }, 1500);
-    });
-  </script>
 </body>
 </html>

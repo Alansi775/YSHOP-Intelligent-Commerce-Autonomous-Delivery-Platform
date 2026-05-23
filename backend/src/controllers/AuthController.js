@@ -23,44 +23,38 @@ class AuthController {
 
       const connection = await pool.getConnection();
 
-      // Check if user already exists
       const [existingUsers] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
       if (existingUsers.length > 0) {
         connection.release();
         return res.status(409).json({ success: false, message: 'Email already registered' });
       }
 
-      // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
-
-      // Generate unique UID for this user
       const uid = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Split display_name into first name (name) and last name (surname)
       const nameParts = display_name.trim().split(/\s+/);
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      // Generate verification token for email only (store in env cache, not DB)
+      // Generate token + expiry (24 hours)
       const verificationToken = generateVerificationToken();
+      const tokenExpires = generateTokenExpiry(24);
 
-      // Insert user into database (token not stored in DB - email access proves ownership)
+      // ✅ احفظ التوكين في DB
       await connection.execute(
-        `INSERT INTO users (uid, email, password_hash, display_name, name, surname, phone, national_id, address, latitude, longitude, building_info, apartment_number, delivery_instructions, email_verified) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)`,
-        [uid, email, passwordHash, display_name, firstName, lastName, phone || null, national_id || null, address || null, latitude || null, longitude || null, building_info || null, apartment_number || null, delivery_instructions || null]
+        `INSERT INTO users (uid, email, password_hash, display_name, name, surname, phone, national_id, address, latitude, longitude, building_info, apartment_number, delivery_instructions, email_verified, verification_token, verification_token_expires) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?, ?)`,
+        [uid, email, passwordHash, display_name, firstName, lastName, phone || null, national_id || null, address || null, latitude || null, longitude || null, building_info || null, apartment_number || null, delivery_instructions || null, verificationToken, tokenExpires]
       );
 
       connection.release();
 
-      // Send verification email with token (token won't be validated, just proof of email access)
       try {
         const emailService = await getEmailService();
         await emailService.sendVerificationEmail(email, verificationToken, display_name, 'en');
         logger.info(`Verification email sent to ${email}`);
       } catch (emailError) {
         logger.warn(`Failed to send verification email to ${email}:`, emailError.message);
-        // Don't fail the signup if email fails
       }
 
       return res.status(201).json({
@@ -79,7 +73,7 @@ class AuthController {
   static async deliverySignup(req, res, next) {
     try {
       const { 
-        email, password, name, phone, national_id, address, latitude, longitude, building_info, apartment_number, delivery_instructions
+        email, password, name, phone, national_id, address, latitude, longitude
       } = req.body;
 
       if (!email || !password || !name || !phone) {
@@ -91,51 +85,58 @@ class AuthController {
 
       const connection = await pool.getConnection();
 
-      // Check if user already exists
+      // ✅ شيك في الجدولين عشان ما يكرر الإيميل
       const [existingUsers] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
-      if (existingUsers.length > 0) {
+      const [existingDrivers] = await connection.execute('SELECT id FROM delivery_requests WHERE email = ?', [email]);
+      
+      if (existingUsers.length > 0 || existingDrivers.length > 0) {
         connection.release();
         return res.status(409).json({ success: false, message: 'Email already registered' });
       }
 
-      // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
-
-      // Generate unique UID for driver
       const uid = `driver_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Split name into first name (name) and last name (surname)
-      const nameParts = name.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
-      // Generate verification token for email only (store in env cache, not DB)
       const verificationToken = generateVerificationToken();
+      const tokenExpires = generateTokenExpiry(24);
 
-      // Insert driver into users table (token not stored in DB - email access proves ownership)
+      // ✅ احفظ في delivery_requests (مش users)
       await connection.execute(
-        `INSERT INTO users (uid, email, password_hash, display_name, name, surname, phone, national_id, address, latitude, longitude, building_info, apartment_number, delivery_instructions, email_verified) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)`,
-        [uid, email, passwordHash, name, firstName, lastName, phone || null, national_id || null, address || null, latitude || null, longitude || null, building_info || null, apartment_number || null, delivery_instructions || null]
+        `INSERT INTO delivery_requests 
+          (uid, email, password_hash, name, phone, national_id, address, latitude, longitude, status, email_verified, verification_token, verification_token_expires) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          uid, 
+          email, 
+          passwordHash, 
+          name, 
+          phone, 
+          national_id || null, 
+          address || null, 
+          latitude || null, 
+          longitude || null,
+          'Pending',
+          0,
+          verificationToken,
+          tokenExpires
+        ]
       );
 
       connection.release();
 
-      // Send verification email with token (token won't be validated, just proof of email access)
       try {
         const emailService = await getEmailService();
         await emailService.sendVerificationEmail(email, verificationToken, name, 'en');
         logger.info(`Verification email sent to ${email}`);
       } catch (emailError) {
         logger.warn(`Failed to send verification email to ${email}:`, emailError.message);
-        // Don't fail the signup if email fails
       }
 
       logger.info(`New delivery driver signup: ${email}`);
 
       return res.status(201).json({
         success: true,
-        message: 'Account created! Check your email for next steps.',
+        message: 'Account created! Please verify your email, then wait for admin approval.',
         email,
         uid,
       });
@@ -190,117 +191,86 @@ class AuthController {
     }
   }
 
-  // GET /api/v1/auth/verify-email?token=xxx (from email link)
+  // GET /api/v1/auth/verify-email?token=xxx
   static async verifyEmailFromLink(req, res, next) {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const successPath = join(__dirname, '../../public/verify-email-success.html');
+    const errorPath = join(__dirname, '../../public/verify-email-error.html');
+
     try {
       const { token } = req.query;
 
       if (!token) {
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = dirname(__filename);
-        const errorPath = join(__dirname, '../../public/verify-email-error.html');
         return res.status(400).sendFile(errorPath);
       }
 
-      // Extract email from token (format: email@domain.com_TIMESTAMP_RANDOM)
-      // Since we generate token but don't store it, we'll find the most recent unverified user
-      // Or we can decode the token - for now, just look for unverified users
-      // Actually - simpler: mark ALL unverified users as verified if they have valid link
-      // Security: Clicking the verification link proves email access
-      
       const connection = await pool.getConnection();
 
-      // Try to find and verify unverified STORES first (check token validity)
+      // 1) شيك في stores
       const [storesWithToken] = await connection.execute(
-        `SELECT id, email FROM stores WHERE email_verified = 0 AND verification_token = ? LIMIT 1`,
+        `SELECT id, email FROM stores 
+         WHERE email_verified = 0 AND verification_token = ? 
+         AND (verification_token_expires IS NULL OR verification_token_expires > NOW()) 
+         LIMIT 1`,
         [token]
       );
 
       if (storesWithToken.length > 0) {
-        const storeId = storesWithToken[0].id;
-        const storeEmail = storesWithToken[0].email;
         await connection.execute(
           `UPDATE stores SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?`,
-          [storeId]
+          [storesWithToken[0].id]
         );
-        logger.info(`✅ Store email verified: ${storeEmail}`);
+        logger.info(`✅ Store email verified: ${storesWithToken[0].email}`);
         connection.release();
-        
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = dirname(__filename);
-        const successPath = join(__dirname, '../../public/verify-email-success.html');
-        try {
-          return res.status(200).sendFile(successPath);
-        } catch (err) {
-          logger.info('Success page not found, sending JSON response');
-          return res.json({
-            success: true,
-            message: 'Email verified successfully! Your store is now active.'
-          });
-        }
+        return res.status(200).sendFile(successPath);
       }
 
-      // Otherwise, try to find and verify unverified USERS
+      // 2) شيك في users (الزبائن)
       const [usersWithToken] = await connection.execute(
-        `SELECT id, email FROM users WHERE email_verified = 0 AND verification_token = ? LIMIT 1`,
+        `SELECT id, email FROM users 
+         WHERE email_verified = 0 AND verification_token = ? 
+         AND (verification_token_expires IS NULL OR verification_token_expires > NOW()) 
+         LIMIT 1`,
         [token]
       );
 
       if (usersWithToken.length > 0) {
-        const userId = usersWithToken[0].id;
-        const userEmail = usersWithToken[0].email;
         await connection.execute(
           `UPDATE users SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?`,
-          [userId]
+          [usersWithToken[0].id]
         );
-        logger.info(`✅ User email verified: ${userEmail}`);
+        logger.info(`✅ User email verified: ${usersWithToken[0].email}`);
         connection.release();
-        
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = dirname(__filename);
-        const successPath = join(__dirname, '../../public/verify-email-success.html');
-        try {
-          return res.status(200).sendFile(successPath);
-        } catch (err) {
-          logger.info('Success page not found, sending JSON response');
-          return res.json({
-            success: true,
-            message: 'Email verified successfully! You can now log in.'
-          });
-        }
+        return res.status(200).sendFile(successPath);
+      }
+
+      // 3) ✅ شيك في delivery_requests (الموصلين)
+      const [driversWithToken] = await connection.execute(
+        `SELECT id, email FROM delivery_requests 
+         WHERE email_verified = 0 AND verification_token = ? 
+         AND (verification_token_expires IS NULL OR verification_token_expires > NOW()) 
+         LIMIT 1`,
+        [token]
+      );
+
+      if (driversWithToken.length > 0) {
+        await connection.execute(
+          `UPDATE delivery_requests SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?`,
+          [driversWithToken[0].id]
+        );
+        logger.info(`✅ Driver email verified: ${driversWithToken[0].email}`);
+        connection.release();
+        return res.status(200).sendFile(successPath);
       }
 
       connection.release();
+      // ما لقى التوكين في أي جدول
+      return res.status(400).sendFile(errorPath);
 
-      // Send success page
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const successPath = join(__dirname, '../../public/verify-email-success.html');
-      
-      // If file doesn't exist, return JSON success
-      try {
-        return res.status(200).sendFile(successPath);
-      } catch (err) {
-        logger.info('Success page not found, sending JSON response');
-        return res.json({
-          success: true,
-          message: 'Email verified successfully! You can now log in.'
-        });
-      }
     } catch (error) {
       logger.error('Error in verifyEmailFromLink:', error);
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const errorPath = join(__dirname, '../../public/verify-email-error.html');
-      
-      try {
-        return res.status(500).sendFile(errorPath);
-      } catch (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Email verification failed. Please try again.'
-        });
-      }
+      return res.status(500).sendFile(errorPath);
     }
   }
 
@@ -439,7 +409,7 @@ class AuthController {
       }
 
       // Check if driver is approved by admin
-      if (driver.status !== 'Approved') {
+      if (driver.status !== 'Approved' && driver.status !== 'approved') {
         connection.release();
         
         if (driver.status === 'Rejected') {

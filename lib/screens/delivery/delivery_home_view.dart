@@ -59,6 +59,7 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
   StreamSubscription<Position>? _positionSub;
   Timer? _locationUpdateTimer;
   Timer? _orderCheckTimer;
+  Timer? _activeOrderRefreshTimer;
   ds.Order? _activeOrder;
   bool _isOfferDialogShowing = false;
   bool _isOpenNavLoading = false;
@@ -84,6 +85,7 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
     _positionSub?.cancel();
     _locationUpdateTimer?.cancel();
     _orderCheckTimer?.cancel();
+    _activeOrderRefreshTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -115,6 +117,7 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
         if (_isWorking) {
           _startLocationTracking();
           _startOrderChecking();
+          _startActiveOrderRefresh();
         }
       } else {
         debugPrint('❌ [_loadDriverStatus] No driver profile found for UID: $uid');
@@ -178,6 +181,7 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
       if (newStatus) {
         _startLocationTracking();
         _startOrderChecking();
+        _startActiveOrderRefresh();
         _showSnackBar('You are now online!', isError: false);
       } else {
         _stopAllTracking();
@@ -239,6 +243,15 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
     _positionSub?.cancel();
     _locationUpdateTimer?.cancel();
     _orderCheckTimer?.cancel();
+    _activeOrderRefreshTimer?.cancel();
+  }
+
+  void _startActiveOrderRefresh() {
+    _activeOrderRefreshTimer?.cancel();
+    _activeOrderRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      if (!_isWorking) return;
+      await _checkForActiveOrder();
+    });
   }
 
   Future<void> _checkForNewOrders() async {

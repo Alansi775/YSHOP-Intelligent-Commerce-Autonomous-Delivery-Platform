@@ -19,6 +19,7 @@ import '../../widgets/store_admin_widgets.dart';
 import '../../models/store.dart';
 import '../../models/category.dart';
 import '../../services/api_service.dart';
+import '../../services/reactive_sync_service.dart';
 import '../../state_management/auth_manager.dart';
 
 class StoreAdminView extends StatefulWidget {
@@ -30,7 +31,7 @@ class StoreAdminView extends StatefulWidget {
   State<StoreAdminView> createState() => _StoreAdminViewState();
 }
 
-class _StoreAdminViewState extends State<StoreAdminView> {
+class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStateMixin {
   String _storeName = "";
   String _storeIconUrl = "";
   String _storeType = "";
@@ -43,16 +44,37 @@ class _StoreAdminViewState extends State<StoreAdminView> {
   bool _isLoading = false;
   String _searchQuery = "";
   final ScrollController _scrollController = ScrollController();
+  final Set<String> _subscribedOrderChannels = {};
+  StreamSubscription<Map<String, dynamic>>? _orderSyncSubscription;
+  Timer? _orderRefreshTimer;
+  late final AnimationController _orderPulseController;
+  late final Animation<double> _orderPulseAnimation;
+  int _activeOrdersCount = 0;
+  String? _liveOrdersStoreId;
 
   @override
   void initState() {
     super.initState();
+    _orderPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _orderPulseAnimation = CurvedAnimation(
+      parent: _orderPulseController,
+      curve: Curves.easeInOut,
+    );
     ApiService.clearCache();
     _fetchStoreNameAndProducts();
   }
   
   @override
   void dispose() {
+    _orderRefreshTimer?.cancel();
+    _orderSyncSubscription?.cancel();
+    for (final channel in _subscribedOrderChannels) {
+      reactiveSyncService.unsubscribe(channel);
+    }
+    _orderPulseController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -131,6 +153,10 @@ class _StoreAdminViewState extends State<StoreAdminView> {
           _storeType = storeType;
         });
         
+        if (storeId > 0) {
+          _startLiveOrderAlerts(storeId.toString());
+        }
+
         if (ownerUid.isNotEmpty) await _fetchProducts(ownerUid);
         if (storeId > 0) await _fetchCategories(storeId);
       }
@@ -138,6 +164,80 @@ class _StoreAdminViewState extends State<StoreAdminView> {
       debugPrint("Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _startLiveOrderAlerts(String storeId) async {
+    if (_liveOrdersStoreId == storeId) return;
+
+    _liveOrdersStoreId = storeId;
+    _orderRefreshTimer?.cancel();
+    _orderSyncSubscription?.cancel();
+    _subscribedOrderChannels.removeWhere((channel) => channel.startsWith('orders:'));
+
+    await _refreshActiveOrdersCount(storeId);
+
+    if (!reactiveSyncService.isConnected) {
+      reactiveSyncService.initialize(serverUrl: 'http://localhost:3000');
+      await Future.delayed(const Duration(milliseconds: 400));
+    }
+
+    final channel = 'orders:$storeId';
+    reactiveSyncService.subscribe(channel);
+    _subscribedOrderChannels.add(channel);
+
+    _orderSyncSubscription = reactiveSyncService.dataStream.listen((update) {
+      if (!mounted) return;
+      if (update['channel'] != channel) return;
+      _refreshActiveOrdersCount(storeId);
+    });
+
+    _orderRefreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      _refreshActiveOrdersCount(storeId);
+    });
+  }
+
+  Future<void> _refreshActiveOrdersCount(String storeId) async {
+    try {
+      final orders = await ApiService.getStoreOrders(storeId: storeId);
+      if (!mounted) return;
+      _updateLiveOrdersCount(_countActiveOrders(orders));
+    } catch (e) {
+      debugPrint('Error refreshing active orders count: $e');
+    }
+  }
+
+  int _countActiveOrders(List<dynamic> orders) {
+    return orders.where((order) {
+      final status = (order is Map ? order['status'] : null).toString().toLowerCase();
+      return !_isTerminalOrderStatus(status);
+    }).length;
+  }
+
+  bool _isTerminalOrderStatus(String status) {
+    return status == 'delivered' || status == 'cancelled' || status == 'canceled' || status == 'failed';
+  }
+
+  void _updateLiveOrdersCount(int newCount) {
+    final previousCount = _activeOrdersCount;
+    if (!mounted) return;
+
+    setState(() {
+      _activeOrdersCount = newCount;
+    });
+
+    if (newCount > 0) {
+      if (!_orderPulseController.isAnimating) {
+        _orderPulseController.repeat(reverse: true);
+      }
+      if (newCount > previousCount) {
+        _orderPulseController
+          ..reset()
+          ..repeat(reverse: true);
+      }
+    } else {
+      _orderPulseController.stop();
+      _orderPulseController.value = 0.0;
     }
   }
 
@@ -474,6 +574,8 @@ class _StoreAdminViewState extends State<StoreAdminView> {
                               }
                             },
                             isPrimary: false,
+                            badgeCount: _activeOrdersCount,
+                            alerting: _activeOrdersCount > 0,
                           ),
                         ],
                       ),
@@ -560,28 +662,91 @@ class _StoreAdminViewState extends State<StoreAdminView> {
     );
   }
 
-  Widget _buildHeroButton(String text, VoidCallback onTap, {required bool isPrimary}) {
+  Widget _buildHeroButton(
+    String text,
+    VoidCallback onTap, {
+    required bool isPrimary,
+    int badgeCount = 0,
+    bool alerting = false,
+  }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        decoration: BoxDecoration(
-          color: isPrimary ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(
-            color: isPrimary ? Colors.transparent : Colors.white.withOpacity(0.3),
-            width: 1,
-          ),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontFamily: 'TenorSans',
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            color: isPrimary ? Colors.black : Colors.white,
-            letterSpacing: 0.3,
-          ),
+      child: AnimatedBuilder(
+        animation: _orderPulseAnimation,
+        builder: (context, child) {
+          final pulseScale = alerting ? 1.0 + (_orderPulseAnimation.value * 0.035) : 1.0;
+          return Transform.scale(
+            scale: pulseScale,
+            child: child,
+          );
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              decoration: BoxDecoration(
+                color: isPrimary ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: isPrimary
+                      ? Colors.transparent
+                      : alerting
+                          ? Colors.white.withOpacity(0.55)
+                          : Colors.white.withOpacity(0.3),
+                  width: 1,
+                ),
+                boxShadow: alerting
+                    ? [
+                        BoxShadow(
+                          color: Colors.white.withOpacity(0.08 + (_orderPulseAnimation.value * 0.12)),
+                          blurRadius: 18,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : const [],
+              ),
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontFamily: 'TenorSans',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: isPrimary ? Colors.black : Colors.white,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+            if (badgeCount > 0)
+              Positioned(
+                top: -12,
+                right: -10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    badgeCount > 99 ? '99+' : '$badgeCount',
+                    style: const TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

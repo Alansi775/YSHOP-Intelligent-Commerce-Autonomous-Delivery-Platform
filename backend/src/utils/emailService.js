@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import os from 'os';
 import logger from '../config/logger.js';
 
 /**
@@ -11,6 +12,40 @@ class EmailService {
   constructor() {
     this.transporter = null;
     this.isInitialized = false;
+  }
+
+  getPublicBackendUrl() {
+    const configuredUrl = process.env.PUBLIC_BACKEND_URL || process.env.BACKEND_URL || process.env.API_BASE_URL;
+    if (configuredUrl && configuredUrl.trim()) {
+      return configuredUrl.replace(/\/$/, '').replace(/\/api\/v1$/, '');
+    }
+
+    const hostFromEnv = process.env.BACKEND_HOST || process.env.SERVER_HOST;
+    if (hostFromEnv && hostFromEnv.trim()) {
+      return `http://${hostFromEnv.replace(/^https?:\/\//, '').replace(/:\d+$/, '')}:3000`;
+    }
+
+    const interfaces = os.networkInterfaces();
+    const preferredNames = ['en0', 'en1', 'en2', 'wifi', 'Wi-Fi'];
+
+    for (const interfaceName of preferredNames) {
+      const addresses = interfaces[interfaceName] || [];
+      for (const address of addresses) {
+        if (address.family === 'IPv4' && !address.internal && address.address) {
+          return `http://${address.address}:3000`;
+        }
+      }
+    }
+
+    for (const addresses of Object.values(interfaces)) {
+      for (const address of addresses || []) {
+        if (address.family === 'IPv4' && !address.internal && address.address) {
+          return `http://${address.address}:3000`;
+        }
+      }
+    }
+
+    return 'http://mackbook.local:3000';
   }
 
   /**
@@ -77,8 +112,7 @@ class EmailService {
       throw new Error('Email service not initialized');
     }
 
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = this.getPublicBackendUrl();
     const verifyLink = `${backendUrl}/api/v1/auth/verify-email?token=${token}`;
 
     const templates = {
@@ -130,15 +164,6 @@ class EmailService {
         
         <div class="button-wrapper">
           <a href="${verifyLink}" class="button">AUTHENTICATE NOW</a>
-        </div>
-        
-        <p class="message" style="text-align: center; font-size: 12px; color: #999;">
-          Or utilize the direct access link:
-        </p>
-        
-        <div class="code-section">
-          <div class="code-label">Secure Token Link</div>
-          <div class="code">${verifyLink}</div>
         </div>
         
         <p class="warning">

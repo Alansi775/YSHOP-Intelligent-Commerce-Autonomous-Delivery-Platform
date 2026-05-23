@@ -610,6 +610,7 @@ export class Order {
       const [rows] = await connection.execute(
         `SELECT o.*, s.name as store_name,
            s.latitude as store_latitude, s.longitude as store_longitude,
+          s.icon_url as store_icon_url, s.email as store_email,
            s.phone as store_phone,
            u.display_name as customer_name, u.phone as customer_phone,
            u.latitude as customer_latitude, u.longitude as customer_longitude,
@@ -631,6 +632,29 @@ export class Order {
       if (rows.length === 0) return null;
 
       const r = rows[0];
+      // Fetch order items
+      const conn2 = await pool.getConnection();
+      const [itemRows] = await conn2.execute(
+        `SELECT oi.*, p.name as product_name, p.image_url
+         FROM order_items oi
+         LEFT JOIN products p ON oi.product_id = p.id
+         WHERE oi.order_id = ?`,
+        [r.id]
+      );
+      conn2.release();
+
+      const items = (itemRows || []).map(item => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        price: item.price,
+        name: item.product_name || item.name,
+        description: item.description || item.product_description || null,
+        // Provide both snake_case and camelCase image keys for different clients
+        image_url: item.image_url || item.imageUrl || null,
+        imageUrl: item.image_url || item.imageUrl || null,
+      }));
+
       return {
         id: r.id,
         user_id: r.user_id,
@@ -650,6 +674,9 @@ export class Order {
         storeLongitude: r.store_longitude,
         store_phone: r.store_phone,
         storePhone: r.store_phone,
+        store_icon_url: r.store_icon_url,
+        storeIconUrl: r.store_icon_url,
+        store_email: r.store_email,
         customer: {
           name: r.customer_name,
           phone: r.customer_phone,
@@ -666,6 +693,7 @@ export class Order {
         location_Longitude: r.customer_longitude,
         addressFull: r.customer_address,
         address_Full: r.customer_address,
+        items,
       };
     } catch (error) {
       connection.release();

@@ -66,6 +66,7 @@ class DeliveryMapView extends StatefulWidget {
 
 class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingObserver {
   final MapController _mapController = MapController();
+  late ds.Order _liveOrder;
   
   LatLng? _driverLocation;
   late LatLng _storeLocation;
@@ -86,12 +87,14 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
   StreamSubscription<Position>? _positionSub;
   Timer? _locationUpdateTimer;
   Timer? _routeRefreshTimer;
+  Timer? _orderRefreshTimer;
   DateTime _lastRouteFetch = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _liveOrder = widget.order;
     _initLocations();
     // If caller provided initial driver location or route points (from offer dialog), use them
     if (widget.initialDriverLocation != null) {
@@ -129,6 +132,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
       }
     }
     _startTracking();
+    _startOrderRefresh();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 1500), () {
         if (!_hasShownDrivingTip && mounted) _showDrivingTipDialog();
@@ -138,16 +142,16 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
 
   void _initLocations() {
     _storeLocation = LatLng(
-      widget.order.storeLatitude ?? 0,
-      widget.order.storeLongitude ?? 0,
+      _liveOrder.storeLatitude ?? 0,
+      _liveOrder.storeLongitude ?? 0,
     );
     
     _customerLocation = LatLng(
-      widget.order.locationLatitude,
-      widget.order.locationLongitude,
+      _liveOrder.locationLatitude,
+      _liveOrder.locationLongitude,
     );
     
-    if (widget.order.isOutForDelivery) {
+    if (_liveOrder.isOutForDelivery) {
       _phase = DeliveryPhase.goingToCustomer;
     }
   }
@@ -158,6 +162,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
     _positionSub?.cancel();
     _locationUpdateTimer?.cancel();
     _routeRefreshTimer?.cancel();
+    _orderRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -177,11 +182,50 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
     _startTracking();
   }
 
+  void _startOrderRefresh() {
+    _orderRefreshTimer?.cancel();
+    _orderRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _refreshOrderSnapshot();
+    });
+  }
+
+  Future<void> _refreshOrderSnapshot() async {
+    try {
+      final response = await ApiService.getRequest('/orders/${widget.order.id}');
+      final data = response is Map<String, dynamic> ? response['data'] : null;
+      if (data is! Map<String, dynamic> || !mounted) return;
+
+      final refreshedOrder = ds.Order.fromJson(data);
+      final phaseChanged = refreshedOrder.status != _liveOrder.status ||
+          refreshedOrder.pickedUpAt != _liveOrder.pickedUpAt ||
+          refreshedOrder.deliveredAt != _liveOrder.deliveredAt;
+
+      if (!phaseChanged) return;
+
+      setState(() {
+        _liveOrder = refreshedOrder;
+        _phase = refreshedOrder.isOutForDelivery ? DeliveryPhase.goingToCustomer : DeliveryPhase.goingToStore;
+        _hasShownArrivalDialog = false;
+        _routePoints = [];
+      });
+
+      await _fetchRoute();
+    } catch (e) {
+      debugPrint('Failed to refresh delivery order snapshot: $e');
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // 📍 LOCATION TRACKING
   // ─────────────────────────────────────────────────────────────────────────
 
   void _startTracking() async {
+    final hasLocationPermission = await _ensureLocationPermission();
+    if (!hasLocationPermission) {
+      if (mounted) setState(() => _isMapReady = true);
+      return;
+    }
+
     // On web, getLastKnownPosition is not supported — skip it and try immediate fetch
     if (!kIsWeb) {
       try {
@@ -245,6 +289,31 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
     _routeRefreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       _fetchRoute();
     });
+  }
+
+  Future<bool> _ensureLocationPermission() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showSnackBar('Turn on location services to show your position.', isError: true);
+        return false;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        _showSnackBar('Location permission is required to track your position.', isError: true);
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Failed to verify location permission: $e');
+      return false;
+    }
   }
 
   void _onPositionUpdate(Position pos) {
@@ -361,7 +430,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
       
       if (_phase == DeliveryPhase.goingToCustomer) {
         await ApiService.updateOrderDriverLocation(
-          widget.order.id,
+          _liveOrder.id,
           _driverLocation!.latitude,
           _driverLocation!.longitude,
         );
@@ -536,7 +605,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
           ],
         ),
         content: Text(
-          "Hand the order to ${widget.order.userName} and mark as delivered.",
+          "Hand the order to ${_liveOrder.userName} and mark as delivered.",
           style: TextStyle(color: widget.kSecondaryTextColor),
         ),
         actions: [
@@ -574,7 +643,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => QRScannerView(
-          orderId: widget.order.id,
+          orderId: _liveOrder.id,
           kDarkBackground: widget.kDarkBackground,
           kCardBackground: widget.kCardBackground,
           kAppBarBackground: widget.kAppBarBackground,
@@ -589,7 +658,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
 
   void _onOrderPickedUp() async {
     try {
-      await ApiService.postOrderPickedUp(widget.order.id);
+      await ApiService.postOrderPickedUp(_liveOrder.id);
       
       if (mounted) {
         Navigator.pop(context); // Close scanner
@@ -612,7 +681,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
     HapticFeedback.heavyImpact();
     
     try {
-      final result = await ApiService.postMarkDelivered(widget.order.id);
+      final result = await ApiService.postMarkDelivered(_liveOrder.id);
       
       if (result && mounted) {
         _showDeliveryCompleteDialog();
@@ -722,10 +791,10 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     final destination = _phase == DeliveryPhase.goingToStore
-        ? (widget.order.storeName.isNotEmpty 
-            ? widget.order.storeName 
-            : (widget.order.items.isNotEmpty ? widget.order.items.first.storeName : 'Store'))
-        : widget.order.userName;
+      ? (_liveOrder.storeName.isNotEmpty 
+        ? _liveOrder.storeName 
+        : (_liveOrder.items.isNotEmpty ? _liveOrder.items.first.storeName : 'Store'))
+      : _liveOrder.userName;
 
     final phaseLabel = _phase == DeliveryPhase.goingToStore ? "Pick up from" : "Deliver to";
 
@@ -785,9 +854,7 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
       ),
       children: [
         TileLayer(
-          urlTemplate: _mapStyle == 'dark'
-              ? 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=$MAPBOX_ACCESS_TOKEN'
-              : 'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=$MAPBOX_ACCESS_TOKEN',
+          urlTemplate: _tileUrlTemplate(),
           userAgentPackageName: 'com.yshop.delivery',
         ),
 
@@ -864,6 +931,19 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
         ),
       ],
     );
+  }
+
+  String _tileUrlTemplate() {
+    final token = MAPBOX_ACCESS_TOKEN.trim();
+    if (token.isNotEmpty && token != 'MAPBOX_TOKEN_PLACEHOLDER' && !kIsWeb) {
+      return _mapStyle == 'dark'
+          ? 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=$token'
+          : 'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=$token';
+    }
+
+    return _mapStyle == 'dark'
+        ? 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   }
 
   Widget _buildHeader(String phaseLabel, String destination) {
@@ -958,8 +1038,8 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
             GestureDetector(
               onTap: () => _callPhone(
                 _phase == DeliveryPhase.goingToStore
-                    ? widget.order.storePhone
-                    : widget.order.customerPhone ?? widget.order.userPhone,
+                  ? _liveOrder.storePhone
+                  : _liveOrder.customerPhone ?? _liveOrder.userPhone,
               ),
               child: Container(
                 padding: const EdgeInsets.all(10),
@@ -1028,9 +1108,9 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
                 child: Column(
                   children: [
                     Text(
-                      widget.order.locationLatitude == 0 && widget.order.locationLongitude == 0
+                      _liveOrder.locationLatitude == 0 && _liveOrder.locationLongitude == 0
                           ? ''
-                          : widget.order.userName + ' — ' + (widget.order.addressFull ?? ''),
+                          : _liveOrder.userName + ' — ' + _liveOrder.addressFull,
                       style: TextStyle(color: widget.kPrimaryTextColor, fontSize: 13, fontWeight: FontWeight.w600),
                       textAlign: TextAlign.center,
                     ),
@@ -1039,14 +1119,14 @@ class _DeliveryMapViewState extends State<DeliveryMapView> with WidgetsBindingOb
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () => _callPhone(widget.order.storePhone),
+                          onPressed: () => _callPhone(_liveOrder.storePhone),
                           style: ElevatedButton.styleFrom(backgroundColor: widget.kAccentBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                           icon: const Icon(Icons.store, size: 16, color: Colors.white),
                           label: const Text('Call Store', style: TextStyle(color: Colors.white)),
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
-                          onPressed: () => _callPhone(widget.order.customerPhone ?? widget.order.userPhone),
+                          onPressed: () => _callPhone(_liveOrder.customerPhone ?? _liveOrder.userPhone),
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                           icon: const Icon(Icons.person, size: 16, color: Colors.white),
                           label: const Text('Call Customer', style: TextStyle(color: Colors.white)),

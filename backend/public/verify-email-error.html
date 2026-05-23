@@ -3,364 +3,202 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Verification Failed - YSHOP</title>
+  <title>YSHOP - Verification Failed</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
-      background: linear-gradient(135deg, #f44336 0%, #c62828 100%);
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #FAFAFA;
+      line-height: 1.6;
+      color: #1A1A1A;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
       padding: 20px;
     }
-
     .container {
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      max-width: 500px;
+      max-width: 580px;
       width: 100%;
-      padding: 60px 40px;
+      background: white;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #EEEEEE;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+    }
+    .header {
+      background: #1A1A1A;
+      padding: 50px 30px;
       text-align: center;
-      animation: slideUp 0.6s ease-out;
     }
-
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(30px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+    .header h1 {
+      font-size: 26px;
+      font-weight: 900;
+      color: white;
+      margin: 0;
+      letter-spacing: 8px;
     }
-
-    .icon {
-      width: 100px;
-      height: 100px;
+    .badge {
+      display: inline-block;
+      color: #42A5F5;
+      padding: 6px 12px;
+      font-size: 10px;
+      font-weight: bold;
+      margin-top: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    .content {
+      padding: 50px 30px;
+      text-align: center;
+    }
+    .icon-wrapper {
+      width: 80px;
+      height: 80px;
       margin: 0 auto 30px;
-      background: linear-gradient(135deg, #f44336 0%, #c62828 100%);
+      background: #1A1A1A;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 50px;
-      animation: scaleIn 0.5s ease-out;
     }
-
-    @keyframes scaleIn {
-      from {
-        transform: scale(0);
-      }
-      to {
-        transform: scale(1);
-      }
+    .x-icon {
+      width: 40px;
+      height: 40px;
+      stroke: #42A5F5;
+      stroke-width: 3;
+      fill: none;
+      stroke-linecap: round;
     }
-
-    h1 {
-      font-size: 32px;
-      font-weight: 700;
-      color: #1a1a1a;
+    .title {
+      font-size: 24px;
+      font-weight: 300;
+      color: #1A1A1A;
       margin-bottom: 15px;
-      letter-spacing: -0.5px;
-    }
-
-    .subtitle {
-      font-size: 16px;
-      color: #f44336;
-      font-weight: 600;
-      margin-bottom: 25px;
-      text-transform: uppercase;
       letter-spacing: 1px;
     }
-
+    .title strong { font-weight: 900; }
     .message {
-      font-size: 15px;
+      font-size: 14px;
       color: #555;
       line-height: 1.8;
       margin-bottom: 30px;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
     }
-
-    .error-reason {
-      background: #fff3cd;
-      border-left: 4px solid #ff9800;
-      padding: 15px;
-      border-radius: 4px;
-      margin-bottom: 25px;
-      text-align: left;
-      font-size: 14px;
-      color: #333;
-    }
-
-    .error-reason strong {
-      color: #ff6f00;
-    }
-
     .divider {
-      height: 2px;
-      background: linear-gradient(to right, transparent, #e5e5e5, transparent);
-      margin: 35px 0;
+      height: 1px;
+      background: #F0F0F0;
+      margin: 30px 0;
     }
-
-    .support-info {
-      font-size: 14px;
-      color: #777;
-      margin-bottom: 25px;
-    }
-
-    .support-info a {
-      color: #f44336;
-      text-decoration: none;
-      font-weight: 600;
-    }
-
-    .support-info a:hover {
-      text-decoration: underline;
-    }
-
-    .actions {
-      display: flex;
-      gap: 12px;
-      flex-direction: column;
-    }
-
-    button {
-      padding: 14px 28px;
-      border: none;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      letter-spacing: 0.3px;
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #f44336 0%, #c62828 100%);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 16px rgba(244, 67, 54, 0.3);
-    }
-
-    .btn-secondary {
-      background: #f5f5f5;
-      color: #333;
-      border: 1px solid #ddd;
-    }
-
-    .btn-secondary:hover {
-      background: #e8e8e8;
-    }
-
-    .logo-text {
-      font-size: 13px;
-      color: #999;
-      margin-top: 30px;
-      padding-top: 20px;
-      border-top: 1px solid #eee;
-    }
-
-    .logo-text strong {
-      color: #f44336;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="icon">❌</div>
-    
-    <h1>Email Verification Failed</h1>
-    <p class="subtitle">Unable to Verify Your Email</p>
-    
-    <p class="message">
-      Unfortunately, we couldn't verify your email address. This could be due to one of the following reasons:
-    </p>
-
-    <div class="error-reason">
-      <strong>Possible Issues:</strong>
-      <ul style="margin: 10px 0 0 15px; font-size: 14px;">
-        <li style="margin-bottom: 8px;"><strong>Link Expired:</strong> Verification links are valid for 24 hours. If your link has expired, please request a new verification email.</li>
-        <li style="margin-bottom: 8px;"><strong>Already Verified:</strong> This email address may have already been verified. Try logging in to your account.</li>
-        <li style="margin-bottom: 8px;"><strong>Invalid Link:</strong> The verification link may be corrupted or incorrect.</li>
-      </ul>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="support-info">
-      <p>Need help? <a href="mailto:support@yshop.com">Contact our support team</a></p>
-    </div>
-
-    <div class="actions">
-      <button class="btn-primary" onclick="location.href='/'">Return to Home</button>
-      <button class="btn-secondary" onclick="location.href='/contact'">Contact Support</button>
-    </div>
-
-    <div class="logo-text">
-      <strong>YSHOP</strong> - Your Shopping Platform
-    </div>
-  </div>
-</body>
-</html>
-    }
-
-    .error-box {
-      background: #e3f2fd;
-      border-left: 4px solid #1e88e5;
-      padding: 18px 20px;
-      border-radius: 8px;
-      margin: 25px 0;
+    .reasons {
+      background: #F9F9F9;
+      padding: 25px;
+      border-radius: 4px;
+      border-left: 4px solid #42A5F5;
       text-align: left;
       font-size: 13px;
-      color: #1565c0;
+      color: #666;
     }
-
-    .error-box strong {
+    .reasons-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: #42A5F5;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .reasons ul {
+      list-style: none;
+      padding: 0;
+    }
+    .reasons li {
+      padding: 10px 0;
+      border-bottom: 1px solid #EEE;
+      padding-left: 20px;
+      position: relative;
+    }
+    .reasons li:last-child { border-bottom: none; }
+    .reasons li:before {
+      content: "•";
+      color: #42A5F5;
+      font-weight: bold;
+      position: absolute;
+      left: 0;
+      font-size: 16px;
+    }
+    .reasons li strong {
+      color: #1A1A1A;
       display: block;
-      margin-bottom: 8px;
-      font-size: 14px;
-      color: #0d47a1;
-    }
-
-    .solutions {
-      background: #f8f9fa;
-      padding: 20px;
-      border-radius: 8px;
-      margin: 25px 0;
-      text-align: left;
+      margin-bottom: 3px;
       font-size: 13px;
-      color: #555;
     }
-
-    .solutions strong {
-      display: block;
-      margin-bottom: 12px;
-      font-size: 14px;
-      color: #1a1a1a;
-    }
-
-    .solutions ol {
-      margin-left: 20px;
-      line-height: 2;
-    }
-
-    .solutions li {
-      margin-bottom: 8px;
-    }
-
-    .button-group {
-      display: flex;
-      gap: 12px;
-      margin-top: 35px;
-      flex-direction: column;
-    }
-
-    .button {
-      padding: 14px 30px;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 15px;
-      text-decoration: none;
-      transition: all 0.3s ease;
-      border: none;
-      cursor: pointer;
-      display: inline-block;
-    }
-
-    .button-primary {
-      background: linear-gradient(135deg, #1e88e5 0%, #0d47a1 100%);
-      color: white;
-    }
-
-    .button-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(30, 136, 229, 0.3);
-    }
-
-    .footer {
-      margin-top: 30px;
-      padding-top: 20px;
-      border-top: 1px solid #e5e5e5;
+    .reasons li span {
       font-size: 12px;
-      color: #999;
+      color: #888;
     }
-
-    .footer a {
-      color: #1e88e5;
-      text-decoration: none;
+    .footer {
+      background: #FFFFFF;
+      padding: 30px;
+      border-top: 1px solid #F5F5F5;
+      text-align: center;
+      font-size: 11px;
+      color: #AAA;
+      letter-spacing: 1px;
     }
-
-    .footer a:hover {
-      text-decoration: underline;
-    }
-
-    @media (max-width: 600px) {
-      .container {
-        padding: 40px 25px;
-      }
-
-      h1 {
-        font-size: 26px;
-      }
-    }
+    .footer a { color: #42A5F5; text-decoration: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="icon">⚠️</div>
-
-    <h1>Verification Failed</h1>
-    <p class="subtitle">✗ Error</p>
-
-    <p class="message">
-      We encountered an issue verifying your email address. This might be due to an expired or invalid link.
-    </p>
-
-    <div class="divider"></div>
-
-    <div class="error-box">
-      <strong>Why This Happened:</strong>
-      <ul style="margin: 8px 0 0 0; padding-left: 20px;">
-        <li>The verification link may have expired (valid for 24 hours only)</li>
-        <li>The link might be incorrect or damaged</li>
-        <li>Your account may have already been verified</li>
-      </ul>
+    <div class="header">
+      <h1>YSHOP</h1>
+      <span class="badge">Security Portal</span>
     </div>
 
-    <div class="solutions">
-      <strong>What You Can Do:</strong>
-      <ol>
-        <li>Check your email for the latest verification link</li>
-        <li>Request a new verification email from the YSHOP app</li>
-        <li>Contact our support team for assistance</li>
-      </ol>
-    </div>
+    <div class="content">
+      <div class="icon-wrapper">
+        <svg class="x-icon" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </div>
 
-    <div class="button-group">
-      <a href="yshop://resend-verification" class="button button-primary">
-        ↻ Request New Verification Email
-      </a>
+      <h2 class="title"><strong>Verification Failed</strong></h2>
+
+      <p class="message">
+        Unfortunately, we couldn't authenticate your email address. The verification link could not be validated.
+      </p>
+
+      <div class="divider"></div>
+
+      <div class="reasons">
+        <div class="reasons-title">Possible Reasons</div>
+        <ul>
+          <li>
+            <strong>Link Expired</strong>
+            <span>Verification links are valid for 24 hours only.</span>
+          </li>
+          <li>
+            <strong>Already Verified</strong>
+            <span>This email may have been verified already. Try logging in.</span>
+          </li>
+          <li>
+            <strong>Invalid Link</strong>
+            <span>The link may be corrupted or copied incorrectly.</span>
+          </li>
+        </ul>
+      </div>
+
+      <p class="message" style="margin-top: 30px; font-size: 12px; color: #888; font-style: italic;">
+        Please request a new verification email from the YSHOP app, or contact our concierge team for assistance.
+      </p>
     </div>
 
     <div class="footer">
-      <p>© 2026 YSHOP. All rights reserved.</p>
-      <p><a href="mailto:support@yshop.com">Need help? Contact Support</a></p>
+      <p style="margin-bottom: 10px;">© 2026 <strong>YSHOP</strong>. ALL RIGHTS RESERVED.</p>
+      <p>CONCIERGE: <a href="mailto:support@yshop.com">SUPPORT@YSHOP.COM</a></p>
     </div>
   </div>
 </body>

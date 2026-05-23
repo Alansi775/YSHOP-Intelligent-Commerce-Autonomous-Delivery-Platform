@@ -515,6 +515,12 @@ class DeliveryController {
       }
 
       const order = await Order.findActiveByDriverId(uid);
+      try {
+        const itemsCount = order && Array.isArray(order.items) ? order.items.length : 0;
+        logger.info(`[getActiveOrder] Returning order id=${order?.id || 'null'} itemsCount=${itemsCount}`);
+      } catch (logErr) {
+        logger.warn('[getActiveOrder] Could not log order items count', logErr.message);
+      }
       res.json({ success: true, data: order || null });
 
     } catch (error) {
