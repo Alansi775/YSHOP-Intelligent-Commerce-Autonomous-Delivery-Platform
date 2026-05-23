@@ -35,7 +35,6 @@ export class OrderController {
         currency,
         items,
       });
-
       res.status(201).json({
         success: true,
         data: order,
