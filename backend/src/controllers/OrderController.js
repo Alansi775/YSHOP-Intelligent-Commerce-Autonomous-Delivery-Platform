@@ -232,6 +232,23 @@ export class OrderController {
 
       // return updated order including customer/store info
       const updated = await Order.findById(id);
+
+      try {
+        const io = getIO();
+        if (io && updated) {
+          io.emit('data:delta', {
+            type: 'order_updated',
+            orderId: String(id),
+            id: String(id),
+            order: updated,
+            data: updated,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch (socketErr) {
+        logger.warn(`Socket emit failed after order pickup: ${socketErr.message}`);
+      }
+
       res.json({ success: true, data: updated });
     } catch (error) {
       logger.error('Error in pickedUp:', error);

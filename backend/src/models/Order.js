@@ -782,9 +782,10 @@ export class Order {
              offer_expires_at = NULL,
              updated_at = NOW() 
          WHERE id = ? 
-           AND (driver_id IS NULL OR driver_id = '') 
-           AND status = 'confirmed'`,
-        [driverUid, orderId]
+           AND driver_id IS NULL
+           AND (current_offer_driver_id IS NULL OR current_offer_driver_id = ?)
+           AND status IN ('pending', 'confirmed')`,
+        [driverUid, orderId, driverUid]
       );
       connection.release();
       return res?.affectedRows > 0;
@@ -852,7 +853,7 @@ export class Order {
 
       const sql = `
         SELECT 
-          o.id, o.store_id, o.total_price, o.status, o.shipping_address,
+          o.id, o.store_id, o.total_price, o.status, o.shipping_address, o.payment_method,
           DATE_FORMAT(o.delivered_at, '%Y-%m-%d %H:%i:%s') as delivered_at,
           DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i:%s') as created_at,
           s.name as store_name,

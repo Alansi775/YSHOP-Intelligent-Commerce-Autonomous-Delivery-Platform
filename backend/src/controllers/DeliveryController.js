@@ -6,6 +6,8 @@
 import DeliveryRequest from '../models/DeliveryRequest.js';
 import Order from '../models/Order.js';
 import logger from '../config/logger.js';
+import { getIO } from '../utils/socketInstance.js';
+import pool from '../config/database.js';
 import admin from '../config/firebase.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +94,33 @@ class DeliveryController {
       logger.info(`📍 Parsed coordinates: lat=${lat}, lng=${lng}, isNaN(lat)=${isNaN(lat)}, isNaN(lng)=${isNaN(lng)}`);
 
       await DeliveryRequest.updateLocationByUid(uid, lat, lng);
+
+      // أرسل موقع الموصل live للزبون عبر Socket
+      try {
+        const [orderRows] = await pool.execute(
+          `SELECT id FROM orders WHERE driver_id = ? AND status IN ('confirmed','processing','shipped') LIMIT 1`,
+          [uid]
+        );
+        if (orderRows.length > 0) {
+          const orderId = String(orderRows[0].id);
+          const io = getIO();
+          if (io) {
+            const locationEvent = {
+              type: 'driver_location',
+              orderId,
+              id: orderId,
+              driverLocation: { latitude: lat, longitude: lng },
+              driver_location: JSON.stringify({ latitude: lat, longitude: lng }),
+              timestamp: new Date().toISOString()
+            };
+            io.emit('data:delta', locationEvent);
+            logger.info(`📡 Emitted driver_location for order ${orderId}`);
+          }
+        }
+      } catch (socketErr) {
+        logger.warn(`⚠️ Socket emit failed: ${socketErr.message}`);
+      }
+
       res.json({ success: true });
     } catch (error) {
       logger.error('Error updating delivery request location', error);
@@ -547,14 +576,35 @@ class DeliveryController {
         return res.status(404).json({ success: false, message: 'Order not found' });
       }
 
-      if (order.driver_id !== uid) {
-        return res.status(403).json({ success: false, message: 'Not your order' });
+      if (order.driver_id && order.driver_id !== uid) {
+        return res.status(403).json({
+          success: false,
+          message: "Order not assigned to this driver"
+        });
       }
 
       await Order.updateStatus(orderId, 'shipped');
       await Order.setPickedUpAt(orderId);
 
       const updatedOrder = await Order.findById(orderId);
+
+      // Broadcast the updated order so customer/driver UIs refresh immediately
+      try {
+        const io = getIO();
+        if (io && updatedOrder) {
+          io.emit('data:delta', {
+            type: 'order_updated',
+            orderId: String(orderId),
+            id: String(orderId),
+            order: updatedOrder,
+            data: updatedOrder,
+            timestamp: new Date().toISOString(),
+          });
+          logger.info(`📡 Socket: order_updated for order ${orderId}`);
+        }
+      } catch (socketErr) {
+        logger.warn(`⚠️ Socket emit failed after pickup: ${socketErr.message}`);
+      }
 
       logger.info(`Order ${orderId} picked up by driver ${uid}`);
       res.json({ success: true, data: updatedOrder });
@@ -584,7 +634,28 @@ class DeliveryController {
         return res.status(403).json({ success: false, message: 'Not authorized' });
       }
 
-      await Order.updateDriverLocation(orderId, parseFloat(latitude), parseFloat(longitude));
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      await Order.updateDriverLocation(orderId, lat, lng);
+
+      // أرسل موقع الموصل live للزبون
+      try {
+        const io = getIO();
+        if (io) {
+          const event = {
+            type: 'driver_location',
+            orderId: String(orderId),
+            id: String(orderId),
+            driver_location: JSON.stringify({ latitude: lat, longitude: lng }),
+            timestamp: new Date().toISOString()
+          };
+          io.emit('data:delta', event);
+          logger.info(`📡 Socket: driver_location for order ${orderId} → lat=${lat}, lng=${lng}`);
+        }
+      } catch (e) {
+        logger.warn(`⚠️ Socket emit failed: ${e.message}`);
+      }
+
       res.json({ success: true });
 
     } catch (error) {

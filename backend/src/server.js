@@ -152,6 +152,8 @@ app.use(errorHandler);
 // ═══════════════════════════════════════════════════════════════════════════
 
 const httpServer = http.createServer(app);
+import { setIO } from './utils/socketInstance.js';
+
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
@@ -165,6 +167,7 @@ const io = new SocketIOServer(httpServer, {
 });
 
 // ✅ Socket.io Connection Handler
+setIO(io);
 io.on('connection', (socket) => {
   logger.info(`🔗 NEW SOCKET CONNECTION`, { socketId: socket.id });
 
