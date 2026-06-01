@@ -23,7 +23,7 @@ class StoreSettingsView extends StatefulWidget {
 }
 
 class _StoreSettingsViewState extends State<StoreSettingsView> {
-  static const String _baseUrl = 'http://localhost:3000/api/v1';
+  String get _baseUrl => ApiService.baseUrl;
 
   String? _storeIconUrl;
   File? _pickedImage;
@@ -169,9 +169,9 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
         final iconUrl = data['data']?['icon_url'] as String?;
         
         if (iconUrl != null && iconUrl.isNotEmpty) {
-          final fullUrl = iconUrl.startsWith('http') 
-              ? iconUrl 
-              : 'http://localhost:3000$iconUrl';
+          final fullUrl = iconUrl.startsWith('http')
+              ? iconUrl
+              : '${ApiService.baseHost}$iconUrl';
           return fullUrl;
         }
       }

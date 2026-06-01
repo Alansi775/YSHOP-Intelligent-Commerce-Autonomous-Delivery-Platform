@@ -6,12 +6,16 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'speech_fallback_stub.dart'
+  if (dart.library.html) 'speech_fallback_web.dart';
 import 'tts_player_stub.dart'
     if (dart.library.html) 'tts_player_web.dart'
     if (dart.library.io) 'tts_player_mobile.dart';
 
 class TTSService {
-  static final String _apiKey = dotenv.env['YSHOP_TTS_API_KEY'] ?? '';
+  static String get _apiKey => dotenv.env['YSHOP_TTS_API_KEY'] ?? '';
+  static bool get _allowBrowserFallback =>
+      (dotenv.env['YSHOP_TTS_ALLOW_BROWSER_FALLBACK'] ?? 'false').toLowerCase() == 'true';
 
   // "George" — deep, warm, professional male
   static const String _voiceId = 'JBFqnCBsd6RMkjVDRZzb';
@@ -25,6 +29,7 @@ class TTSService {
   }
 
   final TTSPlayer _player = TTSPlayer();
+  final WebSpeechFallback _webSpeech = WebSpeechFallback();
   final Map<String, Uint8List> _cache = {};
   bool _isPlaying = false;
   bool _isLoading = false;
@@ -33,6 +38,83 @@ class TTSService {
 
   bool get isPlaying => _isPlaying;
   bool get isLoading => _isLoading;
+
+  static String _normalizeVoiceMood(String? mood) {
+    switch ((mood ?? 'neutral').toLowerCase()) {
+      case 'calm':
+      case 'neutral':
+      case 'excited':
+      case 'playful':
+      case 'curious':
+      case 'caring':
+      case 'whisper':
+      case 'disappointed':
+      case 'apologetic':
+      case 'warm':
+      case 'laugh':
+      case 'laughing':
+      case 'sad':
+      case 'crazy':
+        return switch ((mood ?? 'neutral').toLowerCase()) {
+          'calm' => 'neutral',
+          'laugh' => 'playful',
+          'laughing' => 'playful',
+          'sad' => 'disappointed',
+          'crazy' => 'excited',
+          _ => (mood ?? 'neutral').toLowerCase(),
+        };
+      default:
+        return 'neutral';
+    }
+  }
+
+  static double _clamp(double value, double min, double max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+  }
+
+  static ({double stability, double similarityBoost, double style}) _voiceProfile(String mood, double intensity) {
+    final t = _clamp(intensity, 0.0, 1.0);
+    double blend(double low, double high) => low + (high - low) * t;
+
+    switch (mood) {
+      case 'neutral':
+        return (stability: blend(0.64, 0.46), similarityBoost: 0.75, style: blend(0.08, 0.18));
+      case 'warm':
+      case 'caring':
+        return (stability: blend(0.62, 0.48), similarityBoost: 0.80, style: blend(0.16, 0.42));
+      case 'excited':
+        return (stability: blend(0.42, 0.20), similarityBoost: 0.82, style: blend(0.60, 1.0));
+      case 'playful':
+        return (stability: blend(0.48, 0.30), similarityBoost: 0.80, style: blend(0.40, 0.82));
+      case 'curious':
+        return (stability: blend(0.58, 0.40), similarityBoost: 0.78, style: blend(0.20, 0.55));
+      case 'laugh':
+        return (stability: blend(0.46, 0.28), similarityBoost: 0.80, style: blend(0.42, 0.88));
+      case 'whisper':
+        return (stability: blend(0.88, 0.70), similarityBoost: 0.72, style: blend(0.02, 0.18));
+      case 'disappointed':
+      case 'sad':
+      case 'apologetic':
+        return (stability: blend(0.84, 0.66), similarityBoost: 0.74, style: blend(0.10, 0.26));
+      case 'crazy':
+        return (stability: blend(0.38, 0.18), similarityBoost: 0.82, style: blend(0.70, 1.0));
+      default:
+        return (stability: blend(0.64, 0.42), similarityBoost: 0.75, style: blend(0.10, 0.22));
+    }
+  }
+
+  static String _normalizePause(String? pause) {
+    switch ((pause ?? 'normal').toLowerCase()) {
+      case 'short':
+      case 'long':
+      case 'normal':
+        return (pause ?? 'normal').toLowerCase();
+      default:
+        return 'normal';
+    }
+  }
 
   String _hash(String t) =>
       md5.convert(utf8.encode(t.trim().toLowerCase())).toString().substring(0, 12);
@@ -53,31 +135,65 @@ class TTSService {
   /// Convert AI expression tags to natural text for ElevenLabs.
   /// ElevenLabs text-to-speech does NOT support SSML tags.
   /// We convert them to punctuation/words that ElevenLabs handles naturally.
-  static String _prepareForTTS(String text) {
+  static String _prepareForTTS(String text, {String voiceCue = '', String pause = 'normal'}) {
     var t = text;
+
+    final normalizedPause = _normalizePause(pause);
+    final cue = voiceCue.trim();
+    if (cue.isNotEmpty) {
+      final lowered = cue.toLowerCase();
+      if (lowered == 'laugh' || lowered == 'laugh_soft' || lowered == 'chuckle') {
+        t = lowered == 'laugh' ? '(laughs) $t' : '(chuckles) $t';
+      } else if (lowered == 'laugh_big') {
+        t = '(laughs) $t';
+      } else if (lowered == 'deep_breath') {
+        t = '(deep breath) $t';
+      } else if (lowered == 'pause') {
+        t = '... $t';
+      } else if (lowered == 'thinking' || lowered == 'hmm') {
+        t = '(hmm) $t';
+      } else if (lowered == 'sigh') {
+        t = '(sigh) $t';
+      } else if (lowered == 'whisper') {
+        t = '(whispers) $t';
+      } else if (lowered != 'hey' && lowered != 'hello' && lowered != 'hi' && lowered != 'يا هلا' && lowered != 'مرحبا' && lowered != 'اهلا' && lowered != 'أهلا') {
+        t = '$cue. $t';
+      }
+    } else if (normalizedPause == 'long') {
+      t = '... $t';
+    }
+
     t = t.replaceAll(RegExp(r'<break\s*time="[^"]*"\s*/?>'), '...');
     t = t.replaceAllMapped(
       RegExp(r'<prosody[^>]*>(.*?)</prosody>', dotAll: true),
       (m) => m.group(1) ?? '',
     );
-    t = t.replaceAll(RegExp(r'\(haha\)', caseSensitive: false), 'ha ha,');
-    t = t.replaceAll(RegExp(r'\(hehe\)', caseSensitive: false), 'heh,');
-    t = t.replaceAll(RegExp(r'\(hmm\)', caseSensitive: false), 'hmm...');
     t = t.replaceAll(RegExp(r'\.{4,}'), '...');
     t = t.replaceAll(RegExp(r'\s{2,}'), ' ');
     t = t.replaceAll(RegExp(r',\s*,'), ',');
     return t.trim();
   }
 
-  Future<bool> speak(String text) async {
-    debugPrint('[TTS] API Key loaded: ${_apiKey.isEmpty ? "EMPTY" : "EXISTS (${_apiKey.substring(0, 5)}...)"}');
+  Future<bool> speak(String text, {String? voiceMood, double voiceIntensity = 0.65, String voiceCue = '', Map<String, dynamic>? voiceProfile}) async {
+    final profileMood = voiceProfile?['emotion'] as String?;
+    final mood = _normalizeVoiceMood(profileMood ?? voiceMood);
+    final intensity = _clamp((voiceProfile?['energy'] as num?)?.toDouble() ?? voiceIntensity, 0.0, 1.0);
+    final cue = (voiceProfile?['cue'] as String? ?? voiceCue).trim();
+    final pause = _normalizePause(voiceProfile?['pause'] as String?);
+    debugPrint('[TTS] API Key loaded: ${_apiKey.isEmpty ? "EMPTY" : "EXISTS (${_apiKey.substring(0, 5)}...)"} | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | pause=$pause | cue=${cue.isEmpty ? "none" : cue} | rawText="${text.substring(0, text.length.clamp(0, 140))}"');
     if (text.trim().isEmpty) return false;
 
-    final ttsText = _prepareForTTS(text);
+    final ttsText = _prepareForTTS(text, voiceCue: cue, pause: pause);
+    debugPrint('[TTS] Prepared | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | pause=$pause | cue=${cue.isEmpty ? "none" : cue} | text="${ttsText.substring(0, ttsText.length.clamp(0, 180))}"');
     if (ttsText.isEmpty) return false;
 
     final t = ttsText.length > 300 ? '${ttsText.substring(0, 297)}...' : ttsText;
-    final h = _hash(t);
+    final pace = (voiceProfile?['pace'] as num?)?.toDouble() ?? 1.0;
+    final pitch = (voiceProfile?['pitch'] as num?)?.toDouble() ?? 1.0;
+    final volume = (voiceProfile?['volume'] as num?)?.toDouble() ?? 1.0;
+    final h = _hash(
+      '$mood|${intensity.toStringAsFixed(2)}|${pace.toStringAsFixed(2)}|${pitch.toStringAsFixed(2)}|${volume.toStringAsFixed(2)}|$t',
+    );
 
     if (_isPlaying && _currentHash == h) {
       await stop();
@@ -89,14 +205,40 @@ class TTSService {
       _isLoading = true;
       _currentHash = h;
 
+      if (_apiKey.isEmpty) {
+        debugPrint('[TTS] Missing YSHOP_TTS_API_KEY - ElevenLabs is disabled');
+        if (_allowBrowserFallback && kIsWeb) {
+          debugPrint('[TTS] Browser fallback is enabled explicitly');
+          _isLoading = false;
+          _isPlaying = true;
+          _playbackCompleter = Completer<void>();
+          final started = await _webSpeech.speak(ttsText, onDone: () {
+            debugPrint('[TTS] Browser speech complete');
+            _isPlaying = false;
+            _currentHash = null;
+            if (_playbackCompleter != null && !_playbackCompleter!.isCompleted) {
+              _playbackCompleter!.complete();
+            }
+          });
+
+          if (started) return true;
+        }
+
+        _isLoading = false;
+        _isPlaying = false;
+        _currentHash = null;
+        return false;
+      }
+
       Uint8List? bytes;
       if (_cache.containsKey(h)) {
         debugPrint('[TTS] Cache hit: $h');
         bytes = _cache[h];
       } else {
         debugPrint('[TTS] Calling ElevenLabs...');
-        bytes = await _callAPI(t);
+        bytes = await _callAPI(t, voiceMood: mood, voiceIntensity: intensity, voiceProfile: voiceProfile);
         if (bytes != null && bytes.length > 1000) {
+          debugPrint('[TTS] Audio received | bytes=${bytes.length} | hash=$h');
           _cache[h] = bytes;
         } else if (bytes != null && bytes.length <= 1000) {
           debugPrint('[TTS] Audio too small (${bytes.length}b), discarding');
@@ -149,12 +291,18 @@ class TTSService {
     } catch (_) {}
   }
 
-  Future<Uint8List?> _callAPI(String text) async {
+  Future<Uint8List?> _callAPI(String text, {String voiceMood = 'neutral', double voiceIntensity = 0.65, Map<String, dynamic>? voiceProfile}) async {
     try {
       if (_apiKey.isEmpty) {
         debugPrint('[TTS] No API key');
         return null;
       }
+
+      final profileMood = _normalizeVoiceMood((voiceProfile?['emotion'] as String?) ?? voiceMood);
+      final profile = _voiceProfile(profileMood, _clamp((voiceProfile?['energy'] as num?)?.toDouble() ?? voiceIntensity, 0.0, 1.0));
+      final pace = (voiceProfile?['pace'] as num?)?.toDouble();
+      final volume = (voiceProfile?['volume'] as num?)?.toDouble();
+      final pitch = (voiceProfile?['pitch'] as num?)?.toDouble();
 
       final r = await http.post(
         Uri.parse('$_baseUrl/text-to-speech/$_voiceId'),
@@ -167,13 +315,15 @@ class TTSService {
           'text': text,
           'model_id': 'eleven_multilingual_v2',
           'voice_settings': {
-            'stability': 0.40,
-            'similarity_boost': 0.75,
-            'style': 0.10,
+            'stability': profile.stability,
+            'similarity_boost': profile.similarityBoost,
+            'style': profile.style,
             'use_speaker_boost': true,
           },
         }),
       ).timeout(const Duration(seconds: 15));
+
+      debugPrint('[TTS] ElevenLabs profile | mood=$profileMood | pace=${pace?.toStringAsFixed(2) ?? "default"} | volume=${volume?.toStringAsFixed(2) ?? "default"} | pitch=${pitch?.toStringAsFixed(2) ?? "default"}');
 
       if (r.statusCode == 200 && r.bodyBytes.isNotEmpty) {
         debugPrint('[TTS] Got ${r.bodyBytes.length} bytes');
@@ -193,6 +343,7 @@ class TTSService {
   Future<void> stop() async {
     if (_isPlaying) {
       _player.stop();
+      _webSpeech.stop();
       _isPlaying = false;
       _currentHash = null;
       if (_playbackCompleter != null && !_playbackCompleter!.isCompleted) {

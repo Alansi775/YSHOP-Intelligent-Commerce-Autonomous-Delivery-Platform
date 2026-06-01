@@ -335,8 +335,9 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
   }
 
   Widget _buildLoadingIndicator(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     return Positioned(
-      bottom: 24,
+      bottom: 24 + bottomInset,
       right: 24,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -400,6 +401,7 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     return ValueListenableBuilder<bool>(
       valueListenable: isAboveHeroNotifier,
       builder: (context, isAboveHero, child) {
+        final bottomInset = MediaQuery.of(context).padding.bottom;
         final useWhiteBackground = isDark ? false : isAboveHero;
         final containerColor = useWhiteBackground ? Colors.white : (isDark ? Colors.white : Colors.black);
         final textIconColor = useWhiteBackground ? Colors.black : (isDark ? Colors.black : Colors.white);
@@ -408,7 +410,7 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
           : (isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12));
 
         return Positioned(
-          bottom: 24,
+          bottom: 24 + bottomInset,
           right: 24,
           child: AnimatedOpacity(
             opacity: _isDialogOpen ? 0.0 : 1.0,
@@ -1168,7 +1170,7 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
         _hasValidLocations = true;
       } else {
         // Default fallback - should not be used with invalid coordinates
-        customerLocation = LatLng(24.7136, 46.6753); // Riyadh center as fallback
+        customerLocation = LatLng(41.0082, 28.9784); // Istanbul center as fallback
         _hasValidLocations = false;
       }
       
@@ -1176,7 +1178,7 @@ class _DeliveryMapWidgetState extends State<_DeliveryMapWidget> {
       driverLocation = _parseDriverLocation(widget.orderData['driverLocation'] ?? widget.orderData['driver_location']);
     } catch (e) {
       debugPrint('Error initializing locations: $e');
-      customerLocation = LatLng(24.7136, 46.6753);
+      customerLocation = LatLng(41.0082, 28.9784);
       driverLocation = null;
       _hasValidLocations = false;
     }

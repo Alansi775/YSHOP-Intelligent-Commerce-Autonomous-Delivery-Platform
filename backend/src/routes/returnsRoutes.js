@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import ReturnController from '../controllers/ReturnController.js';
-import { verifyFirebaseToken, verifyAdminToken } from '../middleware/auth.js';
+import { verifyFirebaseToken, verifyAdminToken, verifyJWTToken } from '../middleware/auth.js';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -57,8 +57,23 @@ const handleMulterErrors = (err, req, res, next) => {
 
 const router = Router();
 
-// Admin route - get all returned products
-router.get('/list', verifyAdminToken, ReturnController.getReturnedProducts);
+// /list: accessible by admin OR delivery driver
+const verifyAdminOrDriver = (req, res, next) => {
+  verifyJWTToken(req, res, (err) => {
+    if (err) return next(err);
+    const role = req.user?.role;
+    if (role === 'admin' || role === 'deliveryDriver') return next();
+    // fallback: try admin token path
+    verifyAdminToken(req, res, next);
+  });
+};
+router.get('/list', verifyAdminOrDriver, ReturnController.getReturnedProducts);
+
+// Driver: pending return pickups (admin_accepted=1, store_received=0)
+router.get('/driver/pending', verifyJWTToken, ReturnController.getDriverReturnPickups);
+
+// Driver: confirm picked up from customer
+router.put('/:returnId/driver-picked-up', verifyJWTToken, ReturnController.driverPickedUp);
 
 // All other return routes require firebase authentication
 router.use(verifyFirebaseToken);

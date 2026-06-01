@@ -1,0 +1,14 @@
+// Fix for qr_code_scanner namespace issue
+allprojects {
+    subprojects {
+        afterEvaluate { project ->
+            if (project.plugins.hasPlugin('com.android.library')) {
+                android {
+                    if (!android.namespace) {
+                        namespace = project.group
+                    }
+                }
+            }
+        }
+    }
+}

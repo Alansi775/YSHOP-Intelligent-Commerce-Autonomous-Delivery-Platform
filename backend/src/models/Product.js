@@ -85,7 +85,7 @@ export class Product {
       }
 
       // Ensure image_url is a full URL and store_phone is always present
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.BASE_URL || 'http://192.168.1.59:3000';
       rows.forEach(row => {
         if (row.image_url && typeof row.image_url === 'string' && !row.image_url.startsWith('http')) {
           row.image_url = baseUrl + row.image_url;
@@ -223,6 +223,7 @@ export class Product {
           p.name,
           p.description,
           p.price,
+          p.currency,
           p.stock,
           p.image_url,
           p.status,
@@ -231,7 +232,7 @@ export class Product {
           p.category_id,
           s.name as store_name,
           s.phone as store_phone,
-          u.email as owner_email,
+          COALESCE(u.email, s.email) as owner_email,
           c.name as category_name
         FROM products p
         LEFT JOIN stores s ON p.store_id = s.id
@@ -264,6 +265,7 @@ export class Product {
           p.name,
           p.description,
           p.price,
+          p.currency,
           p.stock,
           p.image_url,
           p.video_url,
@@ -273,7 +275,7 @@ export class Product {
           p.store_id,
           s.name as store_name,
           s.phone as store_phone,
-          u.email as owner_email
+          COALESCE(u.email, s.email) as owner_email
         FROM products p
         LEFT JOIN stores s ON p.store_id = s.id
         LEFT JOIN users u ON s.owner_uid = u.uid
@@ -286,7 +288,7 @@ export class Product {
       connection.release();
 
       // Ensure image_url is a full URL
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.BASE_URL || 'http://192.168.1.59:3000';
       rows.forEach(row => {
         if (row.image_url && typeof row.image_url === 'string' && !row.image_url.startsWith('http')) {
           row.image_url = baseUrl + row.image_url;

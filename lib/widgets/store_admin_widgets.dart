@@ -6,10 +6,7 @@ import '../models/currency.dart';
 import 'package:provider/provider.dart';
 import '../state_management/auth_manager.dart';
 import '../services/api_service.dart';
-
-// دالة مساعدة لتحويل الرابط النسبي إلى رابط كامل
-// ⚠️ Replace with your actual local IP address below (e.g., 192.168.1.70)
-const String kBackendIp = '192.168.1.70';
+import '../config/api_config.dart';
 
 // دالة للحصول على رمز العملة الصحيح
 String getCurrencySymbol(String? currencyCode) {
@@ -17,19 +14,36 @@ String getCurrencySymbol(String? currencyCode) {
   final currency = Currency.fromCode(currencyCode);
   return currency?.symbol ?? '';
 }
+
 String getFullImageUrl(String? url, {String? cacheBuster}) {
   if (url == null || url.isEmpty) return '';
-  if (url.startsWith('http')) {
-    // Add cache buster to HTTP URLs too
-    if (cacheBuster != null && !url.contains('?')) {
-      return '$url?cb=$cacheBuster';
+  try {
+    if (url.startsWith('http')) {
+      // If absolute, check if host is a LAN/localhost address and rewrite to current base host
+      final uri = Uri.parse(url);
+      final base = Uri.parse(ApiConfig.baseHost);
+      final srcHost = uri.host;
+      final baseHost = base.host;
+
+      if (srcHost != baseHost && (
+          srcHost.startsWith('192.168.') ||
+          srcHost.startsWith('10.') ||
+          srcHost == '127.0.0.1' ||
+          srcHost == 'localhost')) {
+        final replaced = base.replace(path: uri.path, query: uri.hasQuery ? uri.query : null);
+        final out = replaced.toString();
+        return cacheBuster != null && !out.contains('?') ? '$out?cb=$cacheBuster' : out;
+      }
+
+      final out = url;
+      return cacheBuster != null && !out.contains('?') ? '$out?cb=$cacheBuster' : out;
     }
-    return url;
+  } catch (_) {
+    // fall back to treating as relative
   }
-  final baseUrl = 'http://$kBackendIp:3000$url';
-  if (cacheBuster != null) {
-    return '$baseUrl?cb=$cacheBuster';
-  }
+
+  final baseUrl = '${ApiConfig.baseHost}$url';
+  if (cacheBuster != null) return '$baseUrl?cb=$cacheBuster';
   return baseUrl;
 }
 

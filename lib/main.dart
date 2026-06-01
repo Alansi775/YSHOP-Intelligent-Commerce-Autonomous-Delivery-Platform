@@ -86,9 +86,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load environment variables from .env (do NOT commit secrets)
-  // For Flutter Web the env file must be included as an asset — we bundle it as assets/.env
-  // For native builds, either fileName '.env' or 'assets/.env' works; prefer assets for consistency.
-  await dotenv.load(fileName: '.env');
+  // Prefer the project root .env because it is consistently bundled on web and desktop.
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    // Fallback for development if the root file is unavailable.
+    await dotenv.load(fileName: 'assets/.env');
+  }
+
+  debugPrint(
+    '[ENV] TTS key loaded: ${dotenv.env['YSHOP_TTS_API_KEY']?.isNotEmpty == true ? "YES" : "NO"}',
+  );
 
   //  CRITICAL: Initialize SharedPreferences before anything else
   await SharedPreferences.getInstance();

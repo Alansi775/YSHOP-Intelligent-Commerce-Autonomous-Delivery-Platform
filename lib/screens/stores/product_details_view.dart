@@ -186,6 +186,61 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
     required bool dark,
     Color? valueColor,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 420;
+
+    if (isCompact && label == 'Contact') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: dark
+                        ? Colors.white.withOpacity(0.08)
+                        : Colors.black.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: dark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: dark ? Colors.grey.shade500 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.only(left: 46),
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: valueColor ?? (dark ? Colors.white : Colors.black87),
+                ),
+                softWrap: true,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
@@ -225,6 +280,8 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
                 color: valueColor ?? (dark ? Colors.white : Colors.black87),
               ),
               textAlign: TextAlign.right,
+              softWrap: true,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),

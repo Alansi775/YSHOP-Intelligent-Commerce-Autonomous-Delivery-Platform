@@ -496,6 +496,114 @@ class ReturnController {
   }
 
   /**
+   * Get pending return pickups for delivery driver
+   * GET /returns/driver/pending
+   */
+  static async getDriverReturnPickups(req, res) {
+    let connection;
+    try {
+      const driverUid = req.user?.id || req.user?.uid;
+      if (!driverUid) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      connection = await pool.getConnection();
+
+      const [driverRows] = await connection.execute(
+        `SELECT uid, is_working FROM delivery_requests WHERE uid = ? LIMIT 1`,
+        [driverUid]
+      );
+
+      const driver = driverRows?.[0] || null;
+      if (!driver || Number(driver.is_working) !== 1) {
+        connection.release();
+        return res.status(200).json({ success: true, data: [], count: 0 });
+      }
+
+      // Returns approved by admin but not yet received by store (driver needs to pick up)
+      const [returns] = await connection.execute(`
+        SELECT
+          rp.*,
+          u.display_name as customer_display_name,
+          u.phone as customer_phone_direct,
+          o.shipping_address,
+          u.latitude as customer_latitude,
+          u.longitude as customer_longitude,
+          o.total_price as order_total
+        FROM returned_products rp
+        LEFT JOIN orders o ON rp.order_id = o.id
+        LEFT JOIN users u ON rp.user_id = u.uid
+        WHERE rp.admin_accepted = 1
+          AND rp.store_received = 0
+          AND rp.driver_id = ?
+        ORDER BY rp.return_requested_at ASC
+        LIMIT 50
+      `, [driverUid]);
+
+      connection.release();
+
+      return res.status(200).json({
+        success: true,
+        data: returns || [],
+        count: returns?.length || 0,
+      });
+    } catch (error) {
+      logger.error('❌ Error fetching driver return pickups:', error);
+      if (connection) connection.release();
+      return res.status(500).json({
+        success: false,
+        message: 'Error fetching return pickups',
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Driver confirms pickup from customer
+   * PUT /returns/:returnId/driver-picked-up
+   */
+  static async driverPickedUp(req, res) {
+    let connection;
+    try {
+      const { returnId } = req.params;
+      const driverUid = req.user?.id || req.user?.uid;
+
+      if (!driverUid) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      connection = await pool.getConnection();
+
+      const [returns] = await connection.execute(
+        `SELECT id FROM returned_products WHERE id = ? AND admin_accepted = 1`,
+        [returnId]
+      );
+
+      if (!returns || returns.length === 0) {
+        connection.release();
+        return res.status(404).json({ success: false, message: 'Return not found' });
+      }
+
+      await connection.execute(
+        `UPDATE returned_products SET driver_picked_up = 1, driver_picked_up_at = NOW(), updated_at = NOW() WHERE id = ?`,
+        [returnId]
+      );
+
+      connection.release();
+      logger.info(`✅ Driver ${driverUid} picked up return ${returnId}`);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Return pickup confirmed',
+      });
+    } catch (error) {
+      logger.error('❌ Error confirming driver pickup:', error);
+      if (connection) connection.release();
+      return res.status(500).json({ success: false, message: 'Error confirming pickup', error: error.message });
+    }
+  }
+
+  /**
    * Mark return as received by store owner
    * PUT /returns/:returnId/store-received
    */

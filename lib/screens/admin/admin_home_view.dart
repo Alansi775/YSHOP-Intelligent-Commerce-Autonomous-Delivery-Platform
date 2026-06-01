@@ -103,11 +103,19 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       final orders = dashboardStats['orders'] as List? ?? [];
       double totalRevenue = 0.0;
       double appRevenue = 0.0;
+      String dashboardCurrency = 'USD';
       
       for (final o in orders) {
         final price = double.tryParse((o['total_price'] ?? '0').toString()) ?? 0.0;
         totalRevenue += price;
         appRevenue += RevenueCalculator.calculateAppRevenue(price);
+
+        final orderCurrency = (o['currency']?.toString() ?? '').trim().toUpperCase();
+        if (dashboardCurrency == 'USD' && orderCurrency.isNotEmpty && orderCurrency != 'USD') {
+          dashboardCurrency = orderCurrency;
+        } else if (dashboardCurrency == 'USD' && orderCurrency.isNotEmpty) {
+          dashboardCurrency = orderCurrency;
+        }
       }
       
       final approvedStoresCount = (dashboardStats['approved_stores'] as List?)?.length ?? 0;
@@ -127,6 +135,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
           'ordersCount': orders.length,
           'totalRevenue': totalRevenue,
           'appRevenue': appRevenue,
+          'currency': dashboardCurrency,
         };
         _isLoading = false;
       });
@@ -599,6 +608,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       appRevenue: appRevenue.toDouble(),
       storeRevenue: storeRevenue.toDouble(),
       ordersCount: ordersCount,
+      currencyCode: (_dashboardData['currency'] as String?) ?? 'USD',
     );
   }
 

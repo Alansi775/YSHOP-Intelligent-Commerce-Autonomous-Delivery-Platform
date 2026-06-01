@@ -35,6 +35,66 @@ export class OrderController {
         currency,
         items,
       });
+
+      // Send emails after order creation
+      try {
+        const emailService = await getEmailService();
+        
+        // Get user and store info for emails
+        const userInfo = req.user;
+        const store = await Store.findById(storeId);
+        
+        if (emailService && userInfo && store) {
+          // Prepare order object for email templates
+          const orderForEmail = {
+            id: order.id,
+            total_price: totalPrice,
+            total: totalPrice,
+            created_at: new Date().toISOString(),
+            items: items,
+            customer: {
+              name: userInfo.displayName || userInfo.email || 'Customer',
+              email: userInfo.email,
+            },
+          };
+
+          // Send customer receipt email
+          if (userInfo.email) {
+            const customerHTML = renderReceiptCustomerHTML({
+              order: orderForEmail,
+              logoUrl: '',
+              frontendOrderUrl: '',
+            });
+            await emailService.sendOrderReceiptEmail(
+              userInfo.email,
+              `YSHOP - Order #${order.id} Confirmation`,
+              customerHTML
+            );
+            logger.info(`✓ Order confirmation email sent to customer: ${userInfo.email}`);
+          }
+
+          // Send store owner notification email
+          if (store.owner_email || store.ownerEmail) {
+            const storeEmail = store.owner_email || store.ownerEmail;
+            const storeHTML = renderReceiptStoreHTML({
+              order: orderForEmail,
+              store: { name: store.name || store.storeName },
+              splits: {},
+              logoUrl: '',
+            });
+            await emailService.sendOrderReceiptEmail(
+              storeEmail,
+              `YSHOP - New Order #${order.id} from ${userInfo.displayName || 'Customer'}`,
+              storeHTML
+            );
+            logger.info(`✓ Order notification email sent to store: ${storeEmail}`);
+          }
+        }
+      } catch (emailError) {
+        logger.warn('Email sending failed but order created successfully:', emailError.message);
+        // Don't fail the order creation if email fails
+      }
+
       res.status(201).json({
         success: true,
         data: order,
@@ -332,7 +392,7 @@ export class OrderController {
 
       // Customer email (English template)
       if (customerEmail) {
-        const frontendOrderUrl = (process.env.FRONTEND_URL || 'http://localhost:3000') + `/orders/${order.id}`;
+        const frontendOrderUrl = (process.env.FRONTEND_URL || 'http://192.168.1.59:3000') + `/orders/${order.id}`;
         const html = renderReceiptCustomerHTML({ order, frontendOrderUrl });
         await emailService.sendOrderReceiptEmail(customerEmail, `YSHOP - Receipt for Order ${order.id}`, html, attachments);
       }

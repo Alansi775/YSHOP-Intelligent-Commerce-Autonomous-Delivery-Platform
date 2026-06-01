@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../services/api_service.dart';
 import '../../services/reactive_sync_mixin.dart';
+import '../../config/api_config.dart';
 
 class ReturnsManagementView extends StatefulWidget {
   const ReturnsManagementView({Key? key}) : super(key: key);
@@ -800,7 +801,7 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
     if (photoPath == null) return '';
     final path = photoPath.toString();
     if (path.startsWith('http')) return path;
-    return 'http://localhost:3000$path';
+    return '${ApiConfig.baseHost}$path';
   }
 
   // Show image viewer with blur backdrop

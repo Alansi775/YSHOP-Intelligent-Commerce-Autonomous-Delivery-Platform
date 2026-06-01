@@ -49,6 +49,11 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
   String _transcript = '';
   String _lastAiResponse = '';      // raw → TTS engine
   String _lastAiDisplayText = '';   // clean → screen
+  String _lastAiVoiceMood = 'neutral';
+  double _lastAiVoiceIntensity = 0.65;
+  String _lastAiVoiceCue = '';
+  Map<String, dynamic>? _lastAiVoiceProfile;
+  String _lastConversationStage = 'browsing';
   double _audioLevel = 0.0;
   List<Map<String, dynamic>>? _products;
   bool _isActive = false;
@@ -112,7 +117,12 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
       _phase = _Phase.speaking;
       _transcript = '';
     });
-    _speak(_lastAiResponse);
+    _speak(
+      _lastAiResponse,
+      voiceMood: _lastAiVoiceMood,
+      voiceIntensity: _lastAiVoiceIntensity,
+      voiceCue: _lastAiVoiceCue,
+    );
   }
 
   // ── LISTEN ──
@@ -165,8 +175,19 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
 
       if (resp['success'] == true && resp['data'] != null) {
         final data = resp['data'];
+        final meta = resp['meta'] as Map?;
+        final traceId = meta?['traceId']?.toString() ?? 'unknown';
         final msg = data['message'] as String? ?? '';
+        final voiceProfile = data['voiceProfile'] is Map ? Map<String, dynamic>.from(data['voiceProfile'] as Map) : null;
+        final stage = data['conversationStage'] as String? ?? 'browsing';
+        final mood = data['voiceMood'] as String? ?? 'neutral';
+        final intensity = (data['voiceIntensity'] as num?)?.toDouble() ?? 0.65;
+        final cue = data['voiceCue'] as String? ?? '';
         final prods = data['products'] as List?;
+
+        debugPrint(
+          '[Overlay] Backend | trace=$traceId | messageLen=${msg.length} | products=${prods?.length ?? 0} | stage=$stage | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | cue=${cue.isEmpty ? "none" : cue}'
+        );
 
         // Only update products when AI sends new ones
         if (prods != null && prods.isNotEmpty) {
@@ -175,9 +196,32 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
 
         _lastAiResponse = msg;
         _lastAiDisplayText = TTSService.cleanForDisplay(msg);
+        _lastAiVoiceMood = mood;
+        _lastAiVoiceIntensity = intensity;
+        _lastAiVoiceCue = cue;
+        _lastAiVoiceProfile = voiceProfile;
+        _lastConversationStage = stage;
+
+        final refined = _refineVoiceMetadata(
+          text: msg,
+          mood: mood,
+          intensity: intensity,
+          cue: cue,
+          voiceProfile: voiceProfile,
+        );
+
+        debugPrint(
+          '[Overlay] Speak | trace=$traceId | refinedMood=${refined.mood} | refinedIntensity=${refined.intensity.toStringAsFixed(2)} | refinedCue=${refined.cue.isEmpty ? "none" : refined.cue} | stage=$_lastConversationStage'
+        );
 
         if (msg.isNotEmpty) {
-          await _speak(msg);
+          await _speak(
+            msg,
+            voiceMood: mood,
+            voiceIntensity: intensity,
+            voiceCue: cue,
+            voiceProfile: voiceProfile,
+          );
         } else {
           _transitionToListening();
         }
@@ -198,9 +242,51 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     _lastAiDisplayText = TTSService.cleanForDisplay(text);
   }
 
+  ({String mood, double intensity, String cue}) _refineVoiceMetadata({
+    required String text,
+    required String mood,
+    required double intensity,
+    required String cue,
+    Map<String, dynamic>? voiceProfile,
+  }) {
+    var resolvedMood = (voiceProfile?['emotion'] as String? ?? mood).trim().toLowerCase();
+    var resolvedIntensity = ((voiceProfile?['energy'] as num?)?.toDouble() ?? intensity).clamp(0.0, 1.0).toDouble();
+    var resolvedCue = (voiceProfile?['cue'] as String? ?? cue).trim();
+
+    final disallowedCuePrefixes = [
+      'hey', 'hello', 'hi', 'ya hla', 'يا هلا', 'مرحبا', 'اهلا', 'أهلا',
+    ];
+    final loweredCue = resolvedCue.toLowerCase();
+    if (disallowedCuePrefixes.any((prefix) => loweredCue == prefix || loweredCue.startsWith('$prefix '))) {
+      resolvedCue = '';
+    }
+
+    if (resolvedMood == 'whisper' && resolvedCue.isEmpty) {
+      resolvedCue = 'psst';
+    }
+
+    if (resolvedMood.isEmpty) {
+      resolvedMood = 'neutral';
+    }
+
+    return (
+      mood: resolvedMood,
+      intensity: resolvedIntensity,
+      cue: resolvedCue,
+    );
+  }
+
   // ── SPEAK ──
-  Future<void> _speak(String text) async {
+  Future<void> _speak(String text, {String? voiceMood, double voiceIntensity = 0.65, String voiceCue = '', Map<String, dynamic>? voiceProfile}) async {
     if (!_isActive || !mounted) return;
+
+    final refined = _refineVoiceMetadata(
+      text: text,
+      mood: voiceMood ?? 'neutral',
+      intensity: voiceIntensity,
+      cue: voiceCue,
+      voiceProfile: voiceProfile,
+    );
 
     // Show the AI response text immediately
     setState(() {
@@ -208,7 +294,13 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
       _audioLevel = 0.4;
     });
 
-    final ok = await _tts.speak(text);
+    final ok = await _tts.speak(
+      text,
+      voiceMood: refined.mood,
+      voiceIntensity: refined.intensity,
+      voiceCue: refined.cue,
+      voiceProfile: voiceProfile,
+    );
 
     if (ok) {
       _animateSpeech();

@@ -13,6 +13,7 @@ export class AIController {
   static async chat(req, res) {
     try {
       const { message, userId, language = 'auto' } = req.body;
+      const traceId = `${userId || 'guest'}-${Date.now()}`;
 
       // ── Validation ──────────────────────────────────────────────
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -38,7 +39,7 @@ export class AIController {
 
       const trimmedMessage = message.trim();
 
-      logger.info(`[AIController] Chat | userId=${userId} | message="${trimmedMessage.substring(0, 60)}"`);
+      logger.info(`[AIController] Chat | trace=${traceId} | userId=${userId} | lang=${language} | message="${trimmedMessage.substring(0, 80)}"`);
 
       // ── Single call does everything ──────────────────────────────
       // generateResponse:
@@ -48,14 +49,17 @@ export class AIController {
       //   ✅ AI understands context ("give me another" = different product)
       //   ✅ Protects identity (never mentions Google/Gemini)
       //   ✅ Saves to conversation memory automatically
-      const { reply, products } = await YShopAIService.generateResponse(
+      const { reply, products, voiceProfile, conversationStage, voiceMood, voiceIntensity, voiceCue } = await YShopAIService.generateResponse(
         trimmedMessage,
         userId,
+        { traceId },
       );
 
       logger.info(
-        `[AIController] Done | userId=${userId} | ` +
-        `products=${products?.length || 0} | replyLen=${reply?.length || 0}`,
+        `[AIController] Done | trace=${traceId} | userId=${userId} | ` +
+        `products=${products?.length || 0} | replyLen=${reply?.length || 0} | ` +
+        `voiceMood=${voiceMood || 'neutral'} | voiceIntensity=${Number.isFinite(Number(voiceIntensity)) ? Number(voiceIntensity).toFixed(2) : '0.65'} | ` +
+        `voiceCue=${voiceCue || 'none'}`,
       );
 
       // ── Return response ──────────────────────────────────────────
@@ -63,6 +67,11 @@ export class AIController {
         success: true,
         data: {
           message: reply || "I'm here to help! What are you looking for?",
+          voiceProfile: voiceProfile || null,
+          conversationStage: conversationStage || 'browsing',
+          voiceMood: voiceMood || 'neutral',
+          voiceIntensity: Number.isFinite(Number(voiceIntensity)) ? Number(voiceIntensity) : 0.65,
+          voiceCue: typeof voiceCue === 'string' ? voiceCue : '',
           products: (products || []).map(p => ({
             id:          p.id,
             name:        p.name,
@@ -85,6 +94,7 @@ export class AIController {
         meta: {
           timestamp: new Date().toISOString(),
           language,
+          traceId,
         },
       });
 
@@ -106,8 +116,9 @@ export class AIController {
       return res.status(200).json({
         success: true,
         data: {
-          operational: YShopAIService.model !== null,
+          operational: YShopAIService.isOperational(),
           service: 'YSHOP AI',
+          provider: YShopAIService.provider || (YShopAIService.model ? 'gemini' : 'groq'),
           features: [
             'Conversational shopping',
             'Intelligent product selection',

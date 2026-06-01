@@ -42,6 +42,7 @@ import '../screens/customers/product_detail_view.dart';
 import '../services/tts_service.dart';
 import '../services/stt_service.dart';
 import '../widgets/ai_voice_call_overlay.dart';
+import '../services/image_cache_manager.dart';
 
 class AIHomeConversationBox extends StatefulWidget {
   final Future<void> Function(String) onSearch;
@@ -78,6 +79,7 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
   final ScrollController _scrollController = ScrollController();
   final TTSService _tts = TTSService();
   final STTService _stt = STTService();
+  final Set<String> _seenAiImages = <String>{};
 
   late AnimationController _expandCtrl;
   late Animation<double> _expandAnim;
@@ -180,14 +182,14 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
   }
 
   // ── Voice TTS ──
-  Future<void> _speakText(String text) async {
+  Future<void> _speakText(String text, {String? voiceMood, double voiceIntensity = 0.65, String voiceCue = ''}) async {
     if (_isSpeaking) {
       await _tts.stop();
       if (mounted) setState(() => _isSpeaking = false);
       return;
     }
     setState(() => _isSpeaking = true);
-    final ok = await _tts.speak(text);
+    final ok = await _tts.speak(text, voiceMood: voiceMood, voiceIntensity: voiceIntensity, voiceCue: voiceCue);
     if (!ok && mounted) {
       setState(() => _isSpeaking = false);
     }
@@ -320,16 +322,41 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
 
   // ═══════════════════════════════════════════
   Widget _expanded() {
-    return Column(
-      children: [
-        _header(),
-        Container(height: 0.5, color: Colors.white.withOpacity(0.08)),
-        Expanded(
-          child: widget.messages.isEmpty ? _empty() : _messagesList(),
-        ),
-        if (_isListening) _listeningBar(),
-        _inputBar(),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 260;
+
+        final content = Column(
+          mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+          children: [
+            _header(),
+            Container(height: 0.5, color: Colors.white.withOpacity(0.08)),
+            if (compact)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: math.max(0, constraints.maxHeight - 150),
+                  maxHeight: math.max(0, constraints.maxHeight - 150),
+                ),
+                child: widget.messages.isEmpty ? _empty() : _messagesList(),
+              )
+            else
+              Expanded(
+                child: widget.messages.isEmpty ? _empty() : _messagesList(),
+              ),
+            if (_isListening) _listeningBar(),
+            _inputBar(),
+          ],
+        );
+
+        if (compact) {
+          return SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: content,
+          );
+        }
+
+        return content;
+      },
     );
   }
 
@@ -566,7 +593,15 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
           final name = p['name'] ?? 'Product';
           final price = p['price']?.toString() ?? '0';
           final currency = p['currency'] ?? 'TRY';
-          final imageUrl = p['image'] ?? p['image_url'];
+          final rawImage = p['image'] ?? p['image_url'];
+          final imageUrl = Product.getFullImageUrl(rawImage?.toString());
+          if (rawImage != null) {
+            final s = rawImage.toString();
+            if (!_seenAiImages.contains(s)) {
+              debugPrint('[AI] product image raw: $rawImage -> resolved: $imageUrl');
+              _seenAiImages.add(s);
+            }
+          }
           final stock = (p['stock'] as int?) ?? 10;
           final reason = p['reason'] ?? '';
 
@@ -578,6 +613,7 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
             categoryId: p['category_id']?.toString(),
             storeName: p['store_name'] ?? p['storeName'],
             storeOwnerEmail: p['store_owner_email'] ?? p['storeOwnerEmail'],
+            storeIconUrl: p['store_icon'] ?? p['store_icon_url'] ?? p['storeIconUrl'],
             status: 'approved', isActive: true,
           );
 
@@ -601,9 +637,14 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
                     child: Container(
                       width: 56, height: 56,
                       color: Colors.white.withOpacity(0.04),
-                      child: imageUrl != null && imageUrl.toString().isNotEmpty
-                          ? Image.network(imageUrl, fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _placeholder())
+                        child: imageUrl != null && imageUrl.toString().isNotEmpty
+                          ? CachedNetworkImage(
+                            cacheManager: ImageCacheManager.instance,
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => _placeholder(),
+                            errorWidget: (_, __, ___) => _placeholder(),
+                          )
                           : _placeholder(),
                     ),
                   ),

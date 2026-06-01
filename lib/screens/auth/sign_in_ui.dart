@@ -34,20 +34,22 @@ class SignInUIComponents {
     bool readOnly = false,
     required bool isDark,
   }) {
+    const double inputRadius = 18;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
         color: isDark 
             ? Colors.white.withOpacity(0.05)
             : Colors.grey.withOpacity(0.15), // رمادي واضح في Light Mode
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(inputRadius),
         border: Border.all(
           color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.withOpacity(0.3),
           width: 1,
         ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(inputRadius),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Frosted Glass Effect
           child: TextFormField(
@@ -94,15 +96,17 @@ class SignInUIComponents {
     required bool isLoading,
     required bool isDark,
     bool isPrimary = true,
+    IconData? leadingIcon,
   }) {
     // Primary Color: Light Blue
     final Color btnColor = isPrimary
         ? (isDark ? const Color(0xFFF5F5F5) : const Color(0xFF1A1A1A)) // معكوس: فاتح في داكن، غامق في فاتح
-        : Colors.transparent;
+        : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.82));
         
     final Color textColor = isPrimary
         ? (isDark ? Colors.black : Colors.white) // النص معاكس أيضاً
         : (isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy);
+    final double borderRadius = 18;
 
     return Container(
       width: double.infinity,
@@ -124,11 +128,12 @@ class SignInUIComponents {
           foregroundColor: textColor,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(2), // Very sharp, high-end feel
+            borderRadius: BorderRadius.circular(borderRadius),
             side: isPrimary 
               ? BorderSide.none 
-              : BorderSide(color: isDark ? Colors.white24 : Colors.black.withOpacity(0.24)),
+              : BorderSide(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12)),
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
         ),
         child: isLoading
             ? SizedBox(
@@ -136,13 +141,34 @@ class SignInUIComponents {
                 width: 20, 
                 child: CircularProgressIndicator(strokeWidth: 2, color: textColor)
               )
-            : Text(
-                title.toUpperCase(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  letterSpacing: 2.0, // W I D E letter spacing looks expensive
-                ),
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  if (leadingIcon != null) ...[
+                    Container(
+                      width: 18,
+                      height: 18,
+                      alignment: Alignment.center,
+                      child: Icon(leadingIcon, size: 17, color: textColor),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Flexible(
+                    child: Text(
+                      title.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
       ),
     );
@@ -189,7 +215,7 @@ class SignInUIComponents {
     return Column(
       children: [
         Row(children: [
-          Expanded(child: luxuryInput(placeholder: "FIRST NAME", controller: nameController, isDark: isDark)),
+          Expanded(child: luxuryInput(placeholder: "NAME", controller: nameController, isDark: isDark)),
           const SizedBox(width: 15),
           Expanded(child: luxuryInput(placeholder: "SURNAME", controller: surnameController, isDark: isDark)),
         ]),
@@ -200,11 +226,12 @@ class SignInUIComponents {
         Container(
           margin: const EdgeInsets.only(bottom: 15),
           child: prestigeButton(
-            title: addressController.text.isEmpty ? "SELECT LOCATION ON MAP" : "📍 ${addressController.text}", 
+            title: addressController.text.isEmpty ? "PICK ON MAP" : "📍 ${addressController.text}", 
             action: onSelectMap, 
             isLoading: false, 
             isDark: isDark,
-            isPrimary: false
+              isPrimary: false,
+              leadingIcon: Icons.location_on,
           ),
         ),
 
@@ -269,19 +296,24 @@ class SignInUIComponents {
             decoration: BoxDecoration(
               color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
               border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  storeTypeController.text.isEmpty ? "SELECT BUSINESS CATEGORY" : storeTypeController.text.toUpperCase(),
-                  style: TextStyle(
-                    color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy,
-                    letterSpacing: 1,
-                    fontSize: 14,
+                Expanded(
+                  child: Text(
+                    storeTypeController.text.isEmpty ? "SELECT BUSINESS TYPE" : storeTypeController.text.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isDark ? LuxuryTheme.kPlatinum : LuxuryTheme.kDeepNavy,
+                      letterSpacing: 1,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Icon(Icons.arrow_drop_down, color: isDark ? LuxuryTheme.kLightBlueAccent : LuxuryTheme.kDeepNavy),
               ],
             ),
@@ -292,11 +324,12 @@ class SignInUIComponents {
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
           child: prestigeButton(
-            title: addressController.text.isEmpty ? "PINPOINT HEADQUARTERS" : "📍 ${addressController.text}", 
+            title: addressController.text.isEmpty ? "PICK ON MAP" : "📍 ${addressController.text}", 
             action: onSelectMap, 
             isLoading: false, 
             isDark: isDark,
-            isPrimary: false
+            isPrimary: false,
+            leadingIcon: Icons.location_on
           ),
         ),
 
@@ -306,7 +339,7 @@ class SignInUIComponents {
         luxuryInput(placeholder: "CONFIRM", controller: confirmPasswordController, isSecure: true, onSubmitted: (_) => onRequest(), isDark: isDark),
         
         const SizedBox(height: 10),
-        prestigeButton(title: "SUBMIT APPLICATION", action: onRequest, isLoading: isLoading, isDark: isDark),
+        prestigeButton(title: "SUBMIT", action: onRequest, isLoading: isLoading, isDark: isDark),
       ],
     );
   }
@@ -451,16 +484,36 @@ class SignInUIComponents {
     required bool isDark,
   }) {
     return Center(
-      child: TextButton(
-        onPressed: onToggle,
-        child: Text(
-          isStoreOwner ? "← Return to Customer Entrance" : "Are you a Merchant? Enter Here →",
-          softWrap: false,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: isDark ? Colors.white54 : Colors.black54,
-            fontSize: 13,
-            letterSpacing: 0.5,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                ),
+              ),
+              child: Text(
+                isStoreOwner ? "← Return to Customer Entrance" : "Are you a Store Owner?\n Enter Here →",
+                softWrap: true,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.white54 : Colors.black54,
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -474,31 +527,46 @@ class SignInUIComponents {
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: GestureDetector(
-          onTap: onToggle,
-          child: Text.rich(
-            TextSpan(
-              style: TextStyle(
-                color: isDark ? Colors.white60 : Colors.black54,
-                fontSize: 14,
-                fontFamily: 'Arial',
-              ),
-              children: [
-                TextSpan(text: showSignUp ? "Already a member? " : "New to YSHOP? "),
-                TextSpan(
-                  text: showSignUp ? "Sign In" : "Create Account",
-                  style: TextStyle(
-                    color: isDark ? LuxuryTheme.kLightBlueAccent : LuxuryTheme.kDeepNavy,
-                    fontWeight: FontWeight.bold,
-                    decoration: TextDecoration.underline,
-                  ),
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.72),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
                 ),
-              ],
+              ),
+              child: Text.rich(
+                TextSpan(
+                  style: TextStyle(
+                    color: isDark ? Colors.white60 : Colors.black54,
+                    fontSize: 14,
+                    fontFamily: 'Arial',
+                  ),
+                  children: [
+                    TextSpan(text: showSignUp ? "Already a member?\n " : "New to YSHOP?\n "),
+                    TextSpan(
+                      text: showSignUp ? "Sign In" : "Create Account",
+                      style: TextStyle(
+                        color: isDark ? LuxuryTheme.kLightBlueAccent : LuxuryTheme.kDeepNavy,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                strutStyle: const StrutStyle(forceStrutHeight: true),
+                textAlign: TextAlign.center,
+              ),
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            strutStyle: const StrutStyle(forceStrutHeight: true),
           ),
         ),
       ),

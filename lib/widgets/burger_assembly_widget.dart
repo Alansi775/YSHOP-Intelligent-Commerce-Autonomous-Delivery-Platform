@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-/// 🚀 EXPLODED VIEW BURGER ASSEMBLY
+///  EXPLODED VIEW BURGER ASSEMBLY
 /// كل طبقة تنفجر من مركزها مع تأثيرات 3D خرافية!
 class BurgerAssemblyWidget extends StatefulWidget {
   final ValueNotifier<double> scrollNotifier;
@@ -241,7 +241,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
           
           if (_assemblyProgress <= 0.05) _buildInitialWelcomeText(),
           
-          // 🚀 EXPLODED VIEW ASSEMBLY
+          //  EXPLODED VIEW ASSEMBLY
           _buildExplodedView(),
           
           if (_isAssembled) _buildWelcomeToRestaurant(),
@@ -292,7 +292,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
     );
   }
 
-  /// 🚀 EXPLODED VIEW - كل طبقة تنفجر وتتجمع
+  ///  EXPLODED VIEW - كل طبقة تنفجر وتتجمع
   Widget _buildExplodedView() {
     return AnimatedBuilder(
       animation: _breathingController,
@@ -403,116 +403,136 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
 
 
   Widget _buildInitialWelcomeText() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    final double subtitleSize = isMobile ? 12 : 14;
+    final double titleSize = isMobile ? 24 : 28;
+    final double iconSize = isMobile ? 26 : 32;
+    final double lineWidth = isMobile ? 120 : 180;
+    final double spacing1 = isMobile ? 12 : 20;
+    final double spacing2 = isMobile ? 16 : 30;
+    final double letterSpacingSubtitle = isMobile ? 3 : 5;
+
     return ValueListenableBuilder<double>(
       valueListenable: initialWelcomeOpacityNotifier,
       builder: (context, opacity, _) => AnimatedBuilder(
         animation: _shimmerController,
         builder: (context, child) {
-          // 🆕 يدخل من البداية (اليسار) ويخرج من النهاية (اليمين)
-          // -2 إلى 2 = يغطي النص كامل بدون رجوع
           final shimmerOffset = (_shimmerController.value * 4.0) - 2.0;
           
           return AnimatedOpacity(
             opacity: opacity,
             duration: Duration(milliseconds: 300),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Animated subtitle
-                ShaderMask(
-                  shaderCallback: (bounds) {
-                    return LinearGradient(
-                      begin: Alignment(-1.0 + shimmerOffset, 0),
-                      end: Alignment(1.0 + shimmerOffset, 0),
-                      colors: [
-                        Colors.transparent,
-                        Colors.white.withOpacity(0.9),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.5, 1.0],
-                    ).createShader(bounds);
-                  },
-                  child: Text(
-                    'DISCOVER EXCELLENCE',
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 5,
-                      color: Colors.white,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                
-                SizedBox(height: 20),
-                
-                // Main animated welcome message with shimmer
-                ShaderMask(
-                  shaderCallback: (bounds) {
-                    return LinearGradient(
-                      begin: Alignment(-1.0 + shimmerOffset, 0),
-                      end: Alignment(1.0 + shimmerOffset, 0),
-                      colors: [
-                        Colors.transparent,
-                        Colors.white.withOpacity(0.9),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.5, 1.0],
-                    ).createShader(bounds);
-                  },
-                  child: Text(
-                    'Scroll Down to Explore',
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                
-                SizedBox(height: 30),
-                
-                // Animated arrow
-                Transform.translate(
-                  offset: Offset(0, math.sin(shimmerOffset * math.pi * 2) * 8),
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 32,
-                    color: Color(0xFFFF6B35).withOpacity(0.8),
-                  ),
-                ),
-                
-                SizedBox(height: 15),
-                
-                // Decorative shimmer line
-                Container(
-                  width: 180,
-                  height: 2,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(1),
-                    gradient: LinearGradient(
-                      begin: Alignment(-1.0 + shimmerOffset, 0),
-                      end: Alignment(1.0 + shimmerOffset, 0),
-                      colors: [
-                        Colors.transparent,
-                        Colors.white.withOpacity(0.9),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.5, 1.0],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0xFFFF6B35).withOpacity(0.5),
-                        blurRadius: 12,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0), // 🆕 هوامش أمان للشاشات الصغيرة
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Animated subtitle
+                  ShaderMask(
+                    shaderCallback: (bounds) {
+                      return LinearGradient(
+                        begin: Alignment(-1.0 + shimmerOffset, 0),
+                        end: Alignment(1.0 + shimmerOffset, 0),
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withOpacity(0.9),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ).createShader(bounds);
+                    },
+                    child: FittedBox( // 🆕 يمنع النص من النزول لسطر جديد
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'DISCOVER EXCELLENCE',
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: subtitleSize,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: letterSpacingSubtitle,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                  
+                  SizedBox(height: spacing1),
+                  
+                  // Main animated welcome message with shimmer
+                  ShaderMask(
+                    shaderCallback: (bounds) {
+                      return LinearGradient(
+                        begin: Alignment(-1.0 + shimmerOffset, 0),
+                        end: Alignment(1.0 + shimmerOffset, 0),
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withOpacity(0.9),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ).createShader(bounds);
+                    },
+                    child: FittedBox( // 🆕 السحر هنا
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Scroll Down to Explore',
+                        maxLines: 1, // 🆕 إجبار النص على سطر واحد
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: titleSize,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 1.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  
+                  SizedBox(height: spacing2),
+                  
+                  // Animated arrow
+                  Transform.translate(
+                    offset: Offset(0, math.sin(shimmerOffset * math.pi * 2) * 8),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: iconSize,
+                      color: Color(0xFFFF6B35).withOpacity(0.8),
+                    ),
+                  ),
+                  
+                  SizedBox(height: 15),
+                  
+                  // Decorative shimmer line
+                  Container(
+                    width: lineWidth,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(1),
+                      gradient: LinearGradient(
+                        begin: Alignment(-1.0 + shimmerOffset, 0),
+                        end: Alignment(1.0 + shimmerOffset, 0),
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withOpacity(0.9),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0xFFFF6B35).withOpacity(0.5),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -521,6 +541,13 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   }
 
   Widget _buildWelcomeToRestaurant() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    final double titleSize = isMobile ? 28 : 40;
+    final double subtitleSize = isMobile ? 9 : 12;
+    final double letterSpacingSub = isMobile ? 3 : 5;
+
     return Positioned(
       bottom: -80,
       left: 0,
@@ -535,36 +562,49 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
             scale: clampedVal,
             child: Opacity(
               opacity: clampedVal,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.storeName ?? "PARADISE",
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      color: Colors.white,
-                      fontSize: 40,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                      shadows: [
-                        Shadow(
-                          color: Color(0xFFFF6B35),
-                          blurRadius: 30,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox( // 🆕 إضافة FittedBox لاسم المطعم
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        widget.storeName ?? "PARADISE",
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          color: Colors.white,
+                          fontSize: titleSize,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                          shadows: [
+                            Shadow(
+                              color: Color(0xFFFF6B35),
+                              blurRadius: 30,
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    "MASTERPIECE ASSEMBLED",
-                    style: TextStyle(
-                      fontFamily: 'TenorSans',
-                      color: Colors.white70,
-                      letterSpacing: 5,
-                      fontSize: 12,
+                    SizedBox(height: 8),
+                    FittedBox( // 🆕 إضافة FittedBox للنص السفلي
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "MASTERPIECE ASSEMBLED",
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontFamily: 'TenorSans',
+                          color: Colors.white70,
+                          letterSpacing: letterSpacingSub,
+                          fontSize: subtitleSize,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );

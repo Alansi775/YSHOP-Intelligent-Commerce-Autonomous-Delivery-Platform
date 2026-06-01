@@ -285,7 +285,7 @@ class _DriverRequestCard extends StatelessWidget {
 // --------------------------------------------------
 
 // يجب إضافة هذه الودجتس في admin_home_view.dart إذا لم تكن موجودة بعد
-// وإلا، يجب استيرادها من ملف آخر مشترك. سنضيفها هنا للتوثيق.
+// وإلا، يجب استيراهذاا من ملف آخر مشترك. سنضيفها هنا للتوثيق.
 
 class _DetailRow extends StatelessWidget {
   final String label;

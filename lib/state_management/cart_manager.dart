@@ -65,7 +65,7 @@ class CartManager with ChangeNotifier {
       // Add small delay to ensure backend transaction is committed
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // 🚀 Always fetch fresh (no caching)
+      //  Always fetch fresh (no caching)
       final serverCart = await ApiService.getCart();
       print('CartManager._fetchCart - serverCart raw: ${serverCart.length} items');
       
@@ -105,7 +105,7 @@ class CartManager with ChangeNotifier {
 
       print('🛒 CartManager.addToCart START - productId=$id quantity=$quantity');
 
-      // 🚀 OPTIMISTIC UPDATE: Add to local cart immediately for seamless UX
+      //  OPTIMISTIC UPDATE: Add to local cart immediately for seamless UX
       final productName = product is Map ? product['name'] : product?.name ?? 'Loading...';
       final productPrice = product is Map ? product['price'] : product?.price ?? 0.0;
       final productImage = product is Map ? product['image_url'] : product?.imageUrl ?? '';
@@ -191,7 +191,7 @@ class CartManager with ChangeNotifier {
         throw Exception(_errorMessage);
       }
 
-      // 🚀 OPTIMISTIC UPDATE: Update quantity immediately
+      //  OPTIMISTIC UPDATE: Update quantity immediately
       if (quantity <= 0) {
         print(' CartManager.updateQuantity - removing item (qty=$quantity)');
         await removeFromCart(_cartItems[localIndex]);
@@ -254,7 +254,7 @@ class CartManager with ChangeNotifier {
 
       print('🗑️ CartManager.removeFromCart - itemId=$itemId');
 
-      // 🚀 OPTIMISTIC UPDATE: Remove from local cart immediately
+      //  OPTIMISTIC UPDATE: Remove from local cart immediately
       final indexToRemove = _cartItems.indexWhere((i) => i['id']?.toString() == itemId);
       dynamic removedItem;
       if (indexToRemove != -1) {
@@ -329,7 +329,7 @@ class CartManager with ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      // 🚀 OPTIMISTIC: Clear local cart immediately
+      //  OPTIMISTIC: Clear local cart immediately
       final oldItems = List.from(_cartItems);
       _cartItems.clear();
       _totalPrice = 0;

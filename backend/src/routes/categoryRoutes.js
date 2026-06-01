@@ -182,21 +182,43 @@ router.post('/:storeId/categories', async (req, res) => {
 
 // ============================================
 // DELETE /stores/:storeId/categories/:categoryId
-// Delete a category (move products out)
+// Delete a category, optionally deleting products inside it
 // ============================================
 router.delete('/:storeId/categories/:categoryId', async (req, res) => {
   const { storeId, categoryId } = req.params;
+  const deleteProducts = req.query.deleteProducts === '1' || req.query.deleteProducts === 'true';
 
   const connection = await pool.getConnection();
   try {
     await ensureCategorySchema();
     await connection.beginTransaction();
 
-    // Remove category_id from all products
-    await connection.query(
-      'UPDATE products SET category_id = NULL WHERE category_id = ?',
-      [categoryId]
-    );
+    if (deleteProducts) {
+      const [productsToDelete] = await connection.query(
+        'SELECT id FROM products WHERE category_id = ? AND store_id = ?',
+        [categoryId, storeId]
+      );
+
+      const productIds = productsToDelete.map((row) => row.id);
+      if (productIds.length > 0) {
+        const placeholders = productIds.map(() => '?').join(',');
+        await connection.query(
+          `DELETE FROM order_items WHERE product_id IN (${placeholders})`,
+          productIds
+        );
+
+        await connection.query(
+          'DELETE FROM products WHERE category_id = ? AND store_id = ?',
+          [categoryId, storeId]
+        );
+      }
+    } else {
+      // Remove category_id from all products in this store/category only
+      await connection.query(
+        'UPDATE products SET category_id = NULL WHERE category_id = ? AND store_id = ?',
+        [categoryId, storeId]
+      );
+    }
 
     // Delete the category
     await connection.query(

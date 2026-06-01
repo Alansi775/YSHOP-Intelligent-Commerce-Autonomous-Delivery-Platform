@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../services/reactive_sync_service.dart';
+import '../../config/api_config.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/scheduler.dart';
@@ -89,7 +90,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
 
       // Initialize Socket.io (first time only)
       if (!reactiveSyncService.isConnected) {
-        reactiveSyncService.initialize(serverUrl: 'http://localhost:3000');
+        reactiveSyncService.initialize(serverUrl: ApiConfig.baseHost);
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
@@ -966,10 +967,13 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
           // Add currency from the parent order
           if (returnData['order_id'] != null) {
             final orderId = returnData['order_id'].toString();
-            final parentOrder = allOrders.firstWhere(
-              (o) => o['id'].toString() == orderId,
-              orElse: () => null,
-            );
+            Map<String, dynamic>? parentOrder;
+            for (final o in allOrders) {
+              if ((o as Map<String, dynamic>)['id'].toString() == orderId) {
+                parentOrder = o;
+                break;
+              }
+            }
             if (parentOrder != null) {
               returnData['product_currency'] = parentOrder['currency'] ?? 'USD';
             }
@@ -2784,7 +2788,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     if (photoPath == null) return '';
     final path = photoPath.toString();
     if (path.startsWith('http')) return path;
-    return 'http://localhost:3000$path';
+    return '${ApiConfig.baseHost}$path';
   }
 
   String _resolveImageUrl(String? url) {

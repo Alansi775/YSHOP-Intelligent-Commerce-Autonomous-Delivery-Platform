@@ -8,14 +8,18 @@ class ApiConfig {
   /// Detects platform and returns appropriate base URL
   static String get baseUrl {
     if (kIsWeb) {
-      return 'http://localhost:3000/api/v1';
+      // Use the current page host for web builds so images and sockets
+      // resolve correctly when the backend IP changes (avoids hardcoding).
+      final host = Uri.base.host;
+      final scheme = Uri.base.scheme.isNotEmpty ? Uri.base.scheme : 'http';
+      return '$scheme://$host:3000/api/v1';
     }
     try {
       if (Platform.isAndroid) {
-        return 'http://10.0.2.2:3000/api/v1';
+        return 'http://192.168.1.59:3000/api/v1';
       }
     } catch (_) {}
-    return 'http://localhost:3000/api/v1';
+    return 'http://192.168.1.59:3000/api/v1';
   }
 
   /// Raw host without /api/v1

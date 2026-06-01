@@ -19,6 +19,7 @@ class Product {
   final bool isActive;
   final String status;
   final String? currency; //  حقل العملة
+  final String? storeIconUrl;
 
   // use ApiService.baseUrl for platform-aware host
 
@@ -39,6 +40,7 @@ class Product {
     this.status = 'approved',
     this.storeOwnerEmail,
     this.currency,
+    this.storeIconUrl,
   });
 
   // Factory for backend API (MySQL)
@@ -94,6 +96,7 @@ class Product {
       status: json['status'] ?? 'pending',
       storeOwnerEmail: json['store_owner_email'] ?? json['storeOwnerEmail'],
       currency: json['currency'] as String? ?? 'USD',
+      storeIconUrl: json['store_icon_url'] as String? ?? json['store_icon'] as String? ?? json['storeIconUrl'] as String?,
     );
   }
 
@@ -106,7 +109,34 @@ class Product {
   //  Helper method لتحويل أي مسار نسبي إلى URL كامل
   static String getFullImageUrl(String? path) {
     if (path == null || path.isEmpty) return '';
-    if (path.startsWith('http')) return path;
+    try {
+      // If already absolute URL, verify host. For LAN IP mismatches (e.g. old IP),
+      // replace host with the configured ApiService.baseHost so the client can load the image.
+      if (path.startsWith('http')) {
+        final uri = Uri.parse(path);
+        final base = Uri.parse(ApiService.baseHost);
+        final srcHost = uri.host;
+        final baseHost = base.host;
+
+        // If the source host looks like a private LAN address but doesn't match our base host,
+        // rewrite the URL to use the base host (preserve path and query).
+        if (srcHost != baseHost && (
+            srcHost.startsWith('192.168.') ||
+            srcHost.startsWith('10.') ||
+            srcHost == '127.0.0.1' ||
+            srcHost == 'localhost')) {
+          final replaced = base.replace(path: uri.path, query: uri.hasQuery ? uri.query : null);
+          return replaced.toString();
+        }
+
+        // otherwise return unchanged absolute URL
+        return path;
+      }
+    } catch (_) {
+      // parsing failed — fall through to treat as relative
+    }
+
+    // relative path — prefix with base host
     return '${ApiService.baseHost}$path';
   }
 
@@ -129,6 +159,7 @@ class Product {
       'status': status,
       'storeOwnerEmail': storeOwnerEmail,
       'currency': currency,
+      'store_icon_url': storeIconUrl,
     };
   }
 }

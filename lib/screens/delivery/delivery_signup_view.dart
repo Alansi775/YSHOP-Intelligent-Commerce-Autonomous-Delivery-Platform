@@ -41,10 +41,10 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
     _addressController.dispose();
     super.dispose();
   }
-
+  
   void _showMapPicker() async {
-    final defaultLat = 24.7136;
-    final defaultLng = 46.6753;
+    final defaultLat = 41.0082;
+    final defaultLng = 28.9784;
     final initialCoordinate = LatLng(
       _latitude != 0.0 ? _latitude : defaultLat,
       _longitude != 0.0 ? _longitude : defaultLng,
@@ -233,12 +233,13 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
                                   padding: const EdgeInsets.only(bottom: 15),
                                   child: SignInUIComponents.prestigeButton(
                                     title: _addressController.text.isEmpty 
-                                        ? "PINPOINT LOCATION" 
+                                        ? "PICK ON MAP" 
                                         : "📍 ${_addressController.text}",
                                     action: _showMapPicker,
                                     isLoading: false,
                                     isDark: isDark,
                                     isPrimary: false,
+                                    leadingIcon: Icons.location_on
                                   ),
                                 ),
 
@@ -271,10 +272,19 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
 
                                 // Submit Button
                                 SignInUIComponents.prestigeButton(
-                                  title: "SUBMIT APPLICATION",
+                                  title: "SUBMIT",
                                   action: _requestDriverAccount,
                                   isLoading: _isLoading,
                                   isDark: isDark,
+                                ),
+
+                                SignInUIComponents.prestigeButton(
+                                  title: "BACK",
+                                  action: () => Navigator.maybePop(context),
+                                  isLoading: false,
+                                  isDark: isDark,
+                                  isPrimary: false,
+                                  leadingIcon: Icons.arrow_back_rounded,
                                 ),
 
                                 // Message Display

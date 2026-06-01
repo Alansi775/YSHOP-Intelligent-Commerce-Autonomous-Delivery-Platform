@@ -40,7 +40,7 @@ app.use(helmet());
 app.use(
   cors({
     origin: process.env.NODE_ENV === 'production' 
-      ? ['http://localhost:3000'] // Update with production domain
+      ? ['http://192.168.1.59:3000'] // Update with production domain
       : '*',
     credentials: true,
   })
@@ -141,6 +141,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Discovery endpoint — lets Swift app find the server IP with no auth
+app.get('/api/v1/discover', (req, res) => {
+  const host = req.headers.host || `${process.env.API_BASE_URL || 'localhost:3000'}`;
+  const baseURL = `http://${host}/api/v1`;
+  res.json({ success: true, baseURL, name: 'YShop' });
+});
+
 // 404 Handler
 app.use(notFound);
 
@@ -157,8 +164,8 @@ import { setIO } from './utils/socketInstance.js';
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? ['http://localhost:3000']
-      : ['http://localhost', 'http://localhost:3000', '*'],
+      ? ['http://192.168.1.59:3000']
+      : ['http://192.168.1.59', 'http://192.168.1.59:3000', '*'],
     credentials: true,
   },
   transports: ['websocket', 'polling'],
@@ -217,7 +224,7 @@ ReactiveSyncManager.on('broadcast', (msg) => {
 });
 
 // Start Server
-const server = httpServer.listen(PORT, async () => {
+const server = httpServer.listen(PORT, '0.0.0.0', async () => {
   try {
     // Test database connection
     const connection = await pool.getConnection();
@@ -249,7 +256,7 @@ const server = httpServer.listen(PORT, async () => {
     
     connection.release();
     
-    logger.info(` Server running on http://localhost:${PORT}`);
+    logger.info(` Server running on http://192.168.1.59:${PORT}`);
     logger.info(` Database connected successfully`);
     
     // Initialize email service

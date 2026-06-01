@@ -12,6 +12,7 @@ import '../../state_management/theme_manager.dart';
 import '../../services/api_service.dart';
 import '../../services/reactive_sync_mixin.dart';
 import 'return_request_dialog.dart';
+import '../../widgets/order_tracker_widget.dart';
 
 class MyOrdersView extends StatefulWidget {
   const MyOrdersView({Key? key}) : super(key: key);
@@ -34,7 +35,7 @@ class _MyOrdersViewState extends State<MyOrdersView> with ReactiveSyncMixin {
   @override
   void onReactiveUpdate(Map<String, dynamic> update) {
     final newData = (update['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final baseUrl = 'http://localhost:3000';
+    final baseUrl = ApiService.baseHost;
 
     if (mounted) {
       setState(() {
@@ -93,7 +94,7 @@ class _MyOrdersViewState extends State<MyOrdersView> with ReactiveSyncMixin {
   void _loadOrders() async {
     try {
       final ordersList = await ApiService.getUserOrders();
-      const baseUrl = 'http://localhost:3000';
+      final baseUrl = ApiService.baseHost;
       
       setState(() {
         orders = ordersList.map((order) {
@@ -365,6 +366,37 @@ class _MyOrdersViewState extends State<MyOrdersView> with ReactiveSyncMixin {
                           fontWeight: FontWeight.w600,
                           color: _getStatusColor(order.status),
                           letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Tracking Button
+                    GestureDetector(
+                      onTap: () {
+                        // Navigate to order tracker
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => Scaffold(
+                              appBar: AppBar(
+                                title: const Text('Track Order'),
+                                backgroundColor: Colors.transparent,
+                                elevation: 0,
+                              ),
+                              body: const OrderTrackerWidget(),
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.location_on_outlined,
+                          size: 18,
+                          color: Colors.blue,
                         ),
                       ),
                     ),

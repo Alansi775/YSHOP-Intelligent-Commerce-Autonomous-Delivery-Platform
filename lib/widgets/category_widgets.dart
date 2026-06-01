@@ -191,48 +191,64 @@ class BrandShowcaseView extends StatelessWidget {
   Widget build(BuildContext context) {
     final Brightness brightness = Theme.of(context).brightness;
     final Color cardBackgroundColor = Theme.of(context).cardColor;
-    
-    // 1. إنشاء ويدجت الصورة الأصلية
-    Widget brandImage = Image.asset(
-      'assets/images/Brand.png', 
-      fit: BoxFit.cover,
-      height: 190,
-    );
 
-    // 2. تطبيق فلتر الألوان إذا كان الوضع داكناً
-    if (brightness == Brightness.dark) {
-      //  ColorFilter.matrix لعكس الألوان (تحويل الأسود إلى أبيض)
-      brandImage = ColorFiltered(
-        // هذه المصفوفة تعكس قيم الألوان (R, G, B) مما يحول الأسود (0) إلى أبيض (255)
-        colorFilter: const ColorFilter.matrix(<double>[
-          -1, 0, 0, 0, 255, // Red
-          0, -1, 0, 0, 255, // Green
-          0, 0, -1, 0, 255, // Blue
-          0, 0, 0, 1, 0, // Alpha
-        ]),
-        child: brandImage,
-      );
-    }
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 40),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cardBackgroundColor, // لون الخلفية يتغير ديناميكياً
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double availableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 200;
+        final double imageHeight = (availableHeight * 0.78).clamp(120.0, 190.0);
+        final double imageWidth = (constraints.maxWidth * 0.72).clamp(220.0, 760.0);
+
+        // 1. إنشاء ويدجت الصورة الأصلية
+        Widget brandImage = Center(
+          child: Image.asset(
+            'assets/images/Brand.png',
+            fit: BoxFit.contain,
+            height: imageHeight,
+            width: imageWidth,
+          ),
+        );
+
+        // 2. تطبيق فلتر الألوان إذا كان الوضع داكناً
+        if (brightness == Brightness.dark) {
+          //  ColorFilter.matrix لعكس الألوان (تحويل الأسود إلى أبيض)
+          brandImage = ColorFiltered(
+            // هذه المصفوفة تعكس قيم الألوان (R, G, B) مما يحول الأسود (0) إلى أبيض (255)
+            colorFilter: const ColorFilter.matrix(<double>[
+              -1, 0, 0, 0, 255, // Red
+              0, -1, 0, 0, 255, // Green
+              0, 0, -1, 0, 255, // Blue
+              0, 0, 0, 1, 0, // Alpha
+            ]),
+            child: brandImage,
+          );
+        }
+
+        return Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: constraints.maxWidth > 700 ? 28.0 : 0,
+            vertical: constraints.maxWidth > 700 ? 18.0 : 0,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: cardBackgroundColor, // لون الخلفية يتغير ديناميكياً
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(15),
-          child: brandImage, // استخدام الصورة التي تم تطبيق الفلتر عليها
-        ),
-      ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: brandImage, // استخدام الصورة التي تم تطبيق الفلتر عليها
+            ),
+          ),
+        );
+      },
     );
   }
 }

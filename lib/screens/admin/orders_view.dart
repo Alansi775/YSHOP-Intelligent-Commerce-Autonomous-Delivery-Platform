@@ -48,6 +48,7 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
       if (mounted) {
         setState(() {
           _orders = newData.map((o) => OrderModel.fromMap(o)).toList();
+          _currency = _resolveDisplayCurrency();
           _recalculateRevenue();
         });
       }
@@ -91,6 +92,20 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
     _storeRevenue = store;
   }
 
+  String _resolveDisplayCurrency() {
+    if (_orders.isEmpty) return 'USD';
+
+    for (final order in _orders) {
+      final currency = order.currency.trim().toUpperCase();
+      if (currency.isNotEmpty && currency != 'USD') {
+        return currency;
+      }
+    }
+
+    final firstCurrency = _orders.first.currency.trim().toUpperCase();
+    return firstCurrency.isNotEmpty ? firstCurrency : 'USD';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -128,7 +143,7 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
         
         // Get currency from first order
         if (orders.isNotEmpty) {
-          _currency = orders.first.currency ?? 'USD';
+          _currency = _resolveDisplayCurrency();
         }
         
         setState(() {
@@ -281,7 +296,7 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 600;
               
-              final currencySymbol = getCurrencySymbol(_currency);
+              final currencySymbol = getCurrencySymbol(_resolveDisplayCurrency());
               if (isWide) {
                 return Row(
                   children: [

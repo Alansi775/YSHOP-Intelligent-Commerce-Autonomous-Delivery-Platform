@@ -40,6 +40,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
       imagePath: '9.png',
       gradientColors: [Color(0xFF2A1810), Color(0xFF0D0806)],
       category: 'Food',
+      icon: Icons.restaurant_rounded,
     ),
     HeroProduct(
       name: 'HEALTHCARE',
@@ -47,6 +48,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
       imagePath: 'Hero.png',
       gradientColors: [Color(0xFF1A2530), Color(0xFF000000)],
       category: 'Pharmacy',
+      icon: Icons.medical_services_rounded,
     ),
     HeroProduct(
       name: 'FASHION',
@@ -54,6 +56,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
       imagePath: '0.png',
       gradientColors: [Color(0xFF25283A), Color(0xFF0A0B12)],
       category: 'Clothes',
+      icon: Icons.checkroom_rounded,
     ),
     HeroProduct(
       name: 'FRESH MARKET',
@@ -61,6 +64,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
       imagePath: '1.png',
       gradientColors: [Color(0xFF2D2418), Color(0xFF0F0A06)],
       category: 'Market',
+      icon: Icons.shopping_basket_rounded,
     ),
   ];
 
@@ -149,6 +153,17 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
       _fadeController.forward();
 
       _startAutoRotate();
+    }
+  }
+
+  void _handleMobileHeroSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity.abs() < 180) return;
+
+    if (velocity < 0) {
+      _changeProduct((_currentProductIndex + 1) % heroProducts.length);
+    } else {
+      _changeProduct((_currentProductIndex - 1 + heroProducts.length) % heroProducts.length);
     }
   }
 
@@ -291,59 +306,243 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
   Widget build(BuildContext context) {
     final themeManager = Provider.of<ThemeManager>(context);
     final isDark = themeManager.isDarkMode;
+    final screenW = MediaQuery.of(context).size.width;
+    final screenH = MediaQuery.of(context).size.height;
+    final bool isMobile = screenW < 700;
 
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       endDrawer: const Drawer(child: SideCartViewContents()),
       body: Stack(
         children: [
-          // Main Content
-          SingleChildScrollView(
-            controller: _scrollController,
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            child: Column(
-              children: [
-                // Hero Section
-                RepaintBoundary(
-                  child: SizedBox(
-                    height: MediaQuery.of(context).size.height,
-                    child: Stack(
-                      children: [
-                        _buildHeroContent(),
-                        Positioned(
-                          left: 40,
-                          top: 0,
-                          bottom: 0,
-                          child: RepaintBoundary(
-                            child: _buildProductSidebar(),
+          if (isMobile)
+            _buildMobileLayout(isDark, screenW, screenH)
+          else
+            // Main Content
+            SingleChildScrollView(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              child: Column(
+                children: [
+                  // Hero Section
+                  RepaintBoundary(
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.height,
+                      child: Stack(
+                        children: [
+                          _buildHeroContent(),
+                          Positioned(
+                            left: 40,
+                            top: 0,
+                            bottom: 0,
+                            child: RepaintBoundary(
+                              child: _buildProductSidebar(),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                RepaintBoundary(
-                  child: Container(
-                    color: isDark ? Colors.black : Colors.white,
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 80),
-                        _buildBrandsSection(isDark),
-                        const SizedBox(height: 100),
-                        _buildFooter(isDark),
-                        const SizedBox(height: 60),
-                      ],
+                  RepaintBoundary(
+                    child: Container(
+                      color: isDark ? Colors.black : Colors.white,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 80),
+                          _buildBrandsSection(isDark),
+                          const SizedBox(height: 100),
+                          _buildFooter(isDark),
+                          const SizedBox(height: 60),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
           // Floating Header
-          _buildFloatingHeader(isDark),
+          _buildFloatingHeader(isDark, isMobile),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout(bool isDark, double screenW, double screenH) {
+    final currentProduct = heroProducts[_currentProductIndex];
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    return SingleChildScrollView(
+      controller: _scrollController,
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragEnd: _handleMobileHeroSwipe,
+            child: RepaintBoundary(
+              child: SizedBox(
+                height: screenH * 0.96,
+                child: Stack(
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.easeInOut,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: currentProduct.gradientColors,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 112,
+                      left: 16,
+                      right: 16,
+                      child: AIHomeConversationBox(
+                        onSearch: _performAISearch,
+                        onAddToCart: _handleAddToCart,
+                        messages: _aiMessages,
+                        isExpanded: _isAIExpanded,
+                        onToggleExpand: (val) {
+                          setState(() => _isAIExpanded = val);
+                          if (val) _aiExpandAnimation.forward();
+                        },
+                        onCollapse: _handleCollapseConversation,
+                        onNewConversation: _startNewConversation,
+                        aiSearchController: _aiSearchController,
+                        aiSearchFocusNode: _aiSearchFocusNode,
+                        sendButtonAnimation: _sendButtonAnimation,
+                      ),
+                    ),
+                    Center(
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 300),
+                        opacity: _isAIExpanded ? 0.15 : 1.0,
+                        child: FadeTransition(
+                          opacity: _fadeController,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 450),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.18, 0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              key: ValueKey(currentProduct.imagePath),
+                              padding: EdgeInsets.only(top: screenH * 0.05),
+                              child: Image.asset(
+                                'assets/images/${currentProduct.imagePath}',
+                                height: screenH * 0.25,
+                                fit: BoxFit.contain,
+                                gaplessPlayback: true,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: bottomInset + 104,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 300),
+                        opacity: _isAIExpanded ? 0.0 : 1.0,
+                        child: IgnorePointer(
+                          ignoring: _isAIExpanded,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 22),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 450),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder: (child, animation) {
+                                return SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0.0, 0.16),
+                                    end: Offset.zero,
+                                  ).animate(animation),
+                                  child: FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: Column(
+                                key: ValueKey(currentProduct.name),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    currentProduct.name,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontFamily: 'TenorSans',
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w300,
+                                      color: Colors.white,
+                                      letterSpacing: 2.4,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    currentProduct.subtitle,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontFamily: 'TenorSans',
+                                      fontSize: 12,
+                                      color: Colors.white.withOpacity(0.72),
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 22),
+                                  _buildExploreButton(currentProduct.category),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: bottomInset + 16,
+                      child: _buildMobileCategoryToolbar(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          RepaintBoundary(
+            child: Container(
+              color: isDark ? Colors.black : Colors.white,
+              child: Column(
+                children: [
+                  const SizedBox(height: 48),
+                  _buildBrandsSection(isDark),
+                  const SizedBox(height: 72),
+                  _buildFooter(isDark),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -390,8 +589,12 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
             // AI Search Bar (INSIDE HERO)
             Positioned(
               top: 140,
-              left: MediaQuery.of(context).size.width * 0.15,
-              right: MediaQuery.of(context).size.width * 0.15,
+              left: MediaQuery.of(context).size.width > 600 
+                ? MediaQuery.of(context).size.width * 0.15 
+                : MediaQuery.of(context).size.width * 0.08,
+              right: MediaQuery.of(context).size.width > 600 
+                ? MediaQuery.of(context).size.width * 0.15 
+                : MediaQuery.of(context).size.width * 0.08,
               child: AIHomeConversationBox(
                 onSearch: _performAISearch,
                 onAddToCart: _handleAddToCart,
@@ -428,20 +631,20 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
                             currentProduct.name,
                             style: TextStyle(
                               fontFamily: 'TenorSans',
-                              fontSize: 48,
+                              fontSize: MediaQuery.of(context).size.width > 600 ? 48 : 32,
                               fontWeight: FontWeight.w300,
                               color: Colors.white,
-                              letterSpacing: 4,
+                              letterSpacing: 3,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
                           Text(
                             currentProduct.subtitle,
                             style: TextStyle(
                               fontFamily: 'TenorSans',
-                              fontSize: 16,
+                              fontSize: MediaQuery.of(context).size.width > 600 ? 16 : 12,
                               color: Colors.white.withOpacity(0.7),
-                              letterSpacing: 2,
+                              letterSpacing: 1.5,
                             ),
                           ),
                           const SizedBox(height: 32),
@@ -516,6 +719,61 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
             const SizedBox(width: 8),
             Icon(Icons.arrow_forward, color: Colors.white, size: 16),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileCategoryToolbar() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        child: Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.16), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.16),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(heroProducts.length, (index) {
+              final isSelected = _currentProductIndex == index;
+              final product = heroProducts[index];
+
+              return GestureDetector(
+                onTap: () => _changeProduct(index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.white.withOpacity(0.14) : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected ? Colors.white.withOpacity(0.32) : Colors.transparent,
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(
+                    product.icon,
+                    size: isSelected ? 22 : 20,
+                    color: isSelected ? Colors.white : Colors.white.withOpacity(0.56),
+                  ),
+                ),
+              );
+            }),
+          ),
         ),
       ),
     );
@@ -623,103 +881,182 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
     return widgets;
   }
 
-  Widget _buildFloatingHeader(bool isDark) {
+  Widget _buildFloatingHeader(bool isDark, bool isMobile) {
     return Positioned(
       top: 0,
       left: 0,
       right: 0,
       child: Container(
         padding: EdgeInsets.only(
-          top: MediaQuery.of(context).padding.top + 16,
-          left: 40,
-          right: 40,
-          bottom: 16,
+          top: MediaQuery.of(context).padding.top + (isMobile ? 10 : 16),
+          left: isMobile ? 16 : 40,
+          right: isMobile ? 16 : 40,
+          bottom: isMobile ? 10 : 16,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const SizedBox(width: 48),
-            Text(
-              'YSHOP',
-              style: TextStyle(
-                fontFamily: 'CinzelDecorative',
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 3,
-                color: Colors.white,
-              ),
-            ),
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: () => ProfilePopupView.show(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 1,
+        child: isMobile
+            ? Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => ProfilePopupView.show(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Image.asset(
+                        'assets/icons/user.png',
+                        width: 18,
+                        height: 18,
+                        color: Colors.white,
                       ),
                     ),
-                    child: Image.asset(
-                      'assets/icons/user.png',
-                      width: 20,
-                      height: 20,
+                  ),
+                  const Spacer(),
+                  Text(
+                    'YSHOP',
+                    style: TextStyle(
+                      fontFamily: 'CinzelDecorative',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 3,
                       color: Colors.white,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                CartIconWithBadge(iconColor: Colors.white),
-              ],
-            ),
-          ],
-        ),
+                  const Spacer(),
+                  CartIconWithBadge(iconColor: Colors.white),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const SizedBox(width: 48),
+                  Text(
+                    'YSHOP',
+                    style: TextStyle(
+                      fontFamily: 'CinzelDecorative',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 3,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => ProfilePopupView.show(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Image.asset(
+                            'assets/icons/user.png',
+                            width: 20,
+                            height: 20,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      CartIconWithBadge(iconColor: Colors.white),
+                    ],
+                  ),
+                ],
+              ),
       ),
     );
   }
 
   Widget _buildBrandsSection(bool isDark) {
+    final screenW = MediaQuery.of(context).size.width;
+    final bool isMobile = screenW < 700;
+    final double sectionHorizontal = isMobile ? 20 : 60;
+    final double showcaseHeight = isMobile ? 200 : 260;
+    final double showcasePadding = isMobile ? 14 : 24;
+
     return Container(
       constraints: const BoxConstraints(maxWidth: 1200),
-      padding: const EdgeInsets.symmetric(horizontal: 60),
+      padding: EdgeInsets.symmetric(horizontal: sectionHorizontal),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'FEATURED BRANDS',
-            style: TextStyle(
-              fontFamily: 'TenorSans',
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 3,
-              color: isDark
-                  ? Colors.white.withOpacity(0.5)
-                  : Colors.black.withOpacity(0.5),
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'FEATURED BRANDS',
+                  style: TextStyle(
+                    fontFamily: 'TenorSans',
+                    fontSize: isMobile ? 11 : 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 3.2,
+                    color: isDark
+                        ? Colors.white.withOpacity(0.5)
+                        : Colors.black.withOpacity(0.5),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 54,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDark
+                          ? [
+                              Colors.white.withOpacity(0.65),
+                              Colors.white.withOpacity(0.12)
+                            ]
+                          : [
+                              Colors.black.withOpacity(0.65),
+                              Colors.black.withOpacity(0.12)
+                            ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Container(
-            width: 50,
-            height: 2,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [
-                        Colors.white.withOpacity(0.6),
-                        Colors.white.withOpacity(0.1)
-                      ]
-                    : [
-                        Colors.black.withOpacity(0.6),
-                        Colors.black.withOpacity(0.1)
-                      ],
+          SizedBox(height: isMobile ? 18 : 28),
+          Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isMobile ? 420 : 980,
+              ),
+              child: Container(
+                height: showcaseHeight,
+                padding: EdgeInsets.all(showcasePadding),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.04)
+                      : Colors.black.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(isMobile ? 22 : 28),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.08)
+                        : Colors.black.withOpacity(0.06),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.22 : 0.06),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const BrandShowcaseView(),
               ),
             ),
           ),
-          const SizedBox(height: 40),
-          const BrandShowcaseView(),
         ],
       ),
     );
@@ -773,6 +1110,7 @@ class HeroProduct {
   final String imagePath;
   final List<Color> gradientColors;
   final String category;
+  final IconData icon;
 
   HeroProduct({
     required this.name,
@@ -780,5 +1118,6 @@ class HeroProduct {
     required this.imagePath,
     required this.gradientColors,
     required this.category,
+    required this.icon,
   });
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
-import 'dart:html' as html show document, SelectElement, OptionElement;
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:ui';
@@ -94,8 +93,8 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
 
   // Map pickers
   Future<void> _showMapPickerForSignup() async {
-    final defaultLat = 24.7136;
-    final defaultLng = 46.6753;
+    final defaultLat = 41.0082;
+    final defaultLng = 28.9784;
 
     final initialCoordinate = LatLng(
       _latitude != 0.0 ? _latitude : defaultLat,
@@ -119,8 +118,8 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
   }
 
   Future<void> _showMapPickerForStoreOwner() async {
-    final defaultLat = 24.7136;
-    final defaultLng = 46.6753;
+    final defaultLat = 41.0082;
+    final defaultLng = 28.9784;
 
     final initialCoordinate = LatLng(
       _latitude != 0.0 ? _latitude : defaultLat,
@@ -175,56 +174,8 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
   }
 
   Future<void> _showHtmlNativeStorePicker() async {
-    try {
-      final select = html.SelectElement();
-      select.style.position = 'fixed';
-      select.style.top = '50%';
-      select.style.left = '50%';
-      select.style.transform = 'translate(-50%, -50%)';
-      select.style.width = '280px';
-      select.style.height = '45px';
-      select.style.padding = '10px 12px';
-      select.style.fontSize = '15px';
-      select.style.borderRadius = '10px';
-      select.style.border = '1px solid #444';
-      select.style.backgroundColor = '#2c2c2e';
-      select.style.color = '#fff';
-      select.style.zIndex = '99999';
-      
-      final emptyOption = html.OptionElement()..value = ''..text = 'Select Store Type'..disabled = true;
-      select.append(emptyOption);
-      
-      for (final category in StoreCategories.all) {
-        final option = html.OptionElement()..value = category..text = category;
-        select.append(option);
-      }
-      
-      select.selectedIndex = 0;
-      html.document.body!.append(select);
-      
-      bool handled = false;
-      select.onChange.listen((event) {
-        if (!handled) {
-          handled = true;
-          final selected = select.value;
-          select.remove();
-          if (selected != null && selected.isNotEmpty && mounted) {
-            setState(() => _storeTypeController.text = selected);
-          }
-        }
-      });
-      
-      select.onBlur.listen((event) {
-        if (!handled) {
-          handled = true;
-          if (select.parent != null) select.remove();
-        }
-      });
-      
-      select.click();
-    } catch (e) {
-      _showMaterialStorePicker();
-    }
+    // Use Material picker for all platforms
+    await _showMaterialStorePicker();
   }
 
   Future<void> _showMaterialStorePicker() async {
@@ -441,9 +392,13 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                   isLoading: _isLoading,
                   context: context,
                 ),
-                TextButton(
-                  onPressed: () => setState(() => _isNewStoreOwner = false),
-                  child: Text("Back", style: TextStyle(color: isDark ? Colors.grey : Colors.grey.shade600)),
+                SignInUIComponents.prestigeButton(
+                  title: "BACK",
+                  action: () => setState(() => _isNewStoreOwner = false),
+                  isLoading: false,
+                  isDark: isDark,
+                  isPrimary: false,
+                  leadingIcon: Icons.arrow_back_rounded,
                 ),
               ],
             )
@@ -458,14 +413,32 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                   context: context,
                 ),
                 const SizedBox(height: 15),
-                TextButton(
-                  onPressed: () => setState(() { _isNewStoreOwner = true; }),
-                  child: const Text("New Store Owner?", style: TextStyle(fontSize: 14)),
+                InkWell(
+                  onTap: () => setState(() { _isNewStoreOwner = true; }),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.72),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08)),
+                    ),
+                    child: const Text("New Store Owner?", style: TextStyle(fontSize: 14)),
+                  ),
                 ),
                 const SizedBox(height: 10),
-                TextButton(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (c) => const DeliverySignupView())),
-                  child: const Text("Become a Delivery Driver", style: TextStyle(fontSize: 14)),
+                InkWell(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (c) => const DeliverySignupView())),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.72),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08)),
+                    ),
+                    child: const Text("Become a Delivery Driver", style: TextStyle(fontSize: 14), textAlign: TextAlign.center),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 ElevatedButton(
@@ -473,6 +446,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black87,
                     foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                   ),
                   child: const Text("Admin Login"),
                 ),
@@ -654,17 +628,26 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                 } else {
                   // Mobile layout
                   return SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 20),
-                          FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: _buildGlassCard(isDark),
-                          ),
-                          const SizedBox(height: 40),
-                        ],
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                        child: Column(
+                          children: [
+                            FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: _buildMobileIntro(isDark),
+                            ),
+                            const SizedBox(height: 18),
+                            FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 460),
+                                child: _buildGlassCard(isDark, isMobile: true),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -677,17 +660,86 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildGlassCard(bool isDark) {
+  Widget _buildMobileIntro(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  Colors.white.withOpacity(0.06),
+                  Colors.white.withOpacity(0.03),
+                ]
+              : [
+                  Colors.white.withOpacity(0.9),
+                  Colors.white.withOpacity(0.75),
+                ],
+        ),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.06),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E88E5).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFF1E88E5).withOpacity(0.28)),
+            ),
+            child: const Text(
+              'YSHOP PLATFORM',
+              style: TextStyle(
+                color: Color(0xFF1E88E5),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _isStoreOwner
+                ? (_isNewStoreOwner ? 'Join as Partner' : 'Store Access')
+                : (_showSignUp ? 'Create Account' : 'Welcome Back'),
+            style: TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+              height: 1.0,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "Seamless shopping experience.",
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: isDark ? Colors.white.withOpacity(0.62) : Colors.black.withOpacity(0.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlassCard(bool isDark, {bool isMobile = false}) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(isMobile ? 22 : 16),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: isMobile ? 18 : 10, sigmaY: isMobile ? 18 : 10),
         child: Container(
           decoration: BoxDecoration(
             color: isDark
               ? Colors.white.withOpacity(0.05)
               : Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(isMobile ? 22 : 16),
             border: Border.all(
               color: isDark
                 ? Colors.white.withOpacity(0.1)
@@ -704,7 +756,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                 ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(30),
+            padding: EdgeInsets.all(isMobile ? 20 : 30),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -713,13 +765,17 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                   // WelcomingPageShimmer with animation
                   FadeTransition(
                     opacity: _fadeAnimation,
-                    child: const Padding(
-                      padding: EdgeInsets.only(bottom: 20),
-                      child: WelcomingPageShimmer(),
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: isMobile ? 14 : 20),
+                      child: Transform.scale(
+                        scale: isMobile ? 0.76 : 1.0,
+                        alignment: Alignment.topCenter,
+                        child: const WelcomingPageShimmer(),
+                      ),
                     ),
                   ),
                   
-                  const SizedBox(height: 10),
+                  SizedBox(height: isMobile ? 6 : 10),
 
                   // Forms with smooth animation
                   AnimatedSwitcher(
@@ -737,7 +793,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                     ),
                   ),
 
-                const SizedBox(height: 15),
+                SizedBox(height: isMobile ? 12 : 15),
                   SignInUIComponents.messageDisplay(message: _message, isDark: isDark),
                 ],
               ),

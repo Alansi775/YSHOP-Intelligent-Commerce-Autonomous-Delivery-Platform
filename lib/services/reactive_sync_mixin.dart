@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'reactive_sync_service.dart';
+import '../config/api_config.dart';
 
 /// 🔥 Reactive Sync Mixin
 /// 
@@ -53,7 +54,7 @@ mixin ReactiveSyncMixin<T extends StatefulWidget> on State<T> {
     try {
       // Initialize Socket.io (first time only)
       if (!reactiveSyncService.isConnected) {
-        reactiveSyncService.initialize(serverUrl: 'http://localhost:3000');
+        reactiveSyncService.initialize(serverUrl: ApiConfig.baseHost);
         await Future.delayed(const Duration(milliseconds: 500));
       }
 

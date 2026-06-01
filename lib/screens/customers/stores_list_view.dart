@@ -129,17 +129,99 @@ class _StoresListViewState extends State<StoresListView> {
   }
 
   Widget _buildWebContainer({required Widget child}) {
-    if (MediaQuery.of(context).size.width > 600) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth > 900) {
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
-            maxWidth: 1000,
+            maxWidth: 1200,
           ),
           child: child,
         ),
       );
     }
+    // Mobile: no max width constraint
     return child;
+  }
+
+  Widget _buildResponsiveStoreGrid(Color textColor) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth <= 600;
+    
+    int crossAxisCount; 
+    double childAspectRatio;
+    double horizontalSpacing;
+    double verticalSpacing;
+    
+    if (screenWidth > 1200) {
+      crossAxisCount = 4;
+      childAspectRatio = 0.9;
+      horizontalSpacing = 20.0;
+      verticalSpacing = 20.0;
+    } else if (screenWidth > 900) {
+      crossAxisCount = 3;
+      childAspectRatio = 0.8;
+      horizontalSpacing = 16.0;
+      verticalSpacing = 16.0;
+    } else if (screenWidth > 600) {
+      crossAxisCount = 2;
+      childAspectRatio = 0.75;
+      horizontalSpacing = 12.0;
+      verticalSpacing = 12.0;
+    } else {
+      //  إعدادات شاشات الجوال (< 600)
+      
+      // الخيار الموصى به: كرتين جنب بعض (يطلع شكلها أنيق زي اللابتوب)
+      crossAxisCount = 1;
+      childAspectRatio = 1.1; 
+      horizontalSpacing = 40.0;
+      verticalSpacing = 16.0;
+    }
+    
+    final grid = GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: horizontalSpacing,
+        mainAxisSpacing: verticalSpacing,
+        childAspectRatio: childAspectRatio,
+      ),
+      itemCount: _stores.length,
+      itemBuilder: (context, index) {
+        final store = _stores[index];
+        return StoreCard(
+          store: store,
+          onTap: () {
+            Navigator.of(context).push(
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    StoreDetailView(store: store),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(
+                    opacity: animation.drive(Tween(begin: 0.0, end: 1.0)),
+                    child: child,
+                  );
+                },
+                transitionDuration: const Duration(milliseconds: 200),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (isMobile) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: grid,
+        ),
+      );
+    }
+
+    return grid;
   }
 
   // MARK: - Main Build Method
@@ -218,7 +300,10 @@ class _StoresListViewState extends State<StoresListView> {
                       children: [
                         // Content Header
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 100),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: MediaQuery.of(context).size.width > 600 ? 20.0 : 16.0,
+                            vertical: MediaQuery.of(context).size.width > 600 ? 120.0 : 58.0,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -226,18 +311,18 @@ class _StoresListViewState extends State<StoresListView> {
                                 widget.categoryName,
                                 style: TextStyle(
                                   fontFamily: 'Didot',
-                                  fontSize: 36,
+                                  fontSize: MediaQuery.of(context).size.width > 600 ? 36 : 24,
                                   fontWeight: FontWeight.w600,
                                   color: textColor,
                                   letterSpacing: 0.5,
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Text(
                                 "${_stores.length} locations available",
                                 style: TextStyle(
                                   fontFamily: 'TenorSans',
-                                  fontSize: 14,
+                                  fontSize: 12,
                                   color: secondaryText,
                                   fontWeight: FontWeight.w400,
                                 ),
@@ -251,40 +336,8 @@ class _StoresListViewState extends State<StoresListView> {
                           _buildEmptyStateView(context, textColor, secondaryText)
                         else if (_stores.isNotEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                            child: GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 250,
-                                crossAxisSpacing: 20,
-                                mainAxisSpacing: 20,
-                                childAspectRatio: 0.8,
-                              ),
-                              itemCount: _stores.length,
-                              itemBuilder: (context, index) {
-                                final store = _stores[index];
-                                return StoreCard(
-                                  store: store,
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      PageRouteBuilder(
-                                        pageBuilder: (context, animation, secondaryAnimation) =>
-                                            StoreDetailView(store: store),
-                                        transitionsBuilder:
-                                            (context, animation, secondaryAnimation, child) {
-                                          return FadeTransition(
-                                            opacity: animation.drive(Tween(begin: 0.0, end: 1.0)),
-                                            child: child,
-                                          );
-                                        },
-                                        transitionDuration: const Duration(milliseconds: 200),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                            child: _buildResponsiveStoreGrid(textColor),
                           ),
                         const SizedBox(height: 30),
                       ],

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../models/product.dart';
+import '../../models/store.dart';
 import '../../models/currency.dart';
 import '../../state_management/cart_manager.dart';
 import '../../state_management/auth_manager.dart';
@@ -40,6 +41,8 @@ class _ProductDetailViewState extends State<ProductDetailView>
   int _quantity = 1;
   final GlobalKey _cartIconKey = GlobalKey();
   final String fontTenor = 'TenorSans';
+  String? _storeIconUrl;
+  static final Map<String, String> _storeNameIconCache = {};
 
   // ── Animation Controllers ──
   late AnimationController _entryController;
@@ -54,16 +57,54 @@ class _ProductDetailViewState extends State<ProductDetailView>
   // ── Scroll ──
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0;
+  bool _scrolledToTopOnce = false;
+  final GlobalKey _contentKey = GlobalKey();
+  bool _entryAnimationEnabled = true;
 
   @override
   void initState() {
     super.initState();
+    _loadStoreIcon();
 
     // Entry orchestration
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
+
+    // When entry animation completes, ensure content is scrolled to top
+    _entryController.addStatusListener((status) {
+      if (!_entryAnimationEnabled) return;
+      if (status == AnimationStatus.completed && !_scrolledToTopOnce) {
+        _scrolledToTopOnce = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          // Prefer ensuring the main content is visible (handles hero/transform layouts)
+          try {
+            final ctx = _contentKey.currentContext;
+            if (ctx != null) {
+              await Scrollable.ensureVisible(
+                ctx,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                alignment: 0.0,
+              );
+              return;
+            }
+          } catch (_) {}
+
+          // Fallback: simple jump to top
+          if (_scrollController.hasClients) {
+            try {
+              await _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+              );
+            } catch (_) {}
+          }
+        });
+      }
+    });
 
     _imageScale = Tween<double>(begin: 1.08, end: 1.0).animate(
       CurvedAnimation(
@@ -115,6 +156,73 @@ class _ProductDetailViewState extends State<ProductDetailView>
     });
 
     _entryController.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final isWide = MediaQuery.of(context).size.width > 800;
+    _entryAnimationEnabled = isWide;
+    if (!_entryAnimationEnabled) {
+      // Skip entry animations on narrow/mobile screens
+      _entryController.value = 1.0;
+      _scrolledToTopOnce = true;
+    }
+  }
+
+  Future<void> _loadStoreIcon() async {
+    try {
+      // If product already carries a store icon (from AI/response), use it immediately
+      final directIcon = (widget.product.storeIconUrl ?? '').toString();
+      if (directIcon.isNotEmpty) {
+        _storeIconUrl = Product.getFullImageUrl(directIcon);
+        if (mounted) setState(() {});
+        return;
+      }
+
+      final storeId = widget.product.storeId;
+      if (storeId == null || storeId.isEmpty) {
+        // Fallback: try to resolve by store name if provided
+        final storeName = (widget.product.storeName ?? '').toString().trim();
+        if (storeName.isNotEmpty) {
+          final key = storeName.toLowerCase();
+          if (_storeNameIconCache.containsKey(key)) {
+            _storeIconUrl = _storeNameIconCache[key];
+            if (mounted) setState(() {});
+            return;
+          }
+
+          // Query stores (cached) and try to find a matching name
+          final stores = await ApiService.getStores(page: 1, limit: 100);
+          for (final s in stores) {
+            final sName = (s['name'] ?? s['store_name'] ?? '').toString().trim();
+            if (sName.isEmpty) continue;
+            final sKey = sName.toLowerCase();
+            if (sKey == key || sKey.contains(key) || key.contains(sKey)) {
+              final icon = s['icon_url'] ?? s['image_url'] ?? s['iconUrl'];
+              if (icon != null && icon is String && icon.isNotEmpty) {
+                final full = Store.getFullImageUrl(icon);
+                _storeNameIconCache[key] = full;
+                _storeIconUrl = full;
+                if (mounted) setState(() {});
+                return;
+              }
+            }
+          }
+        }
+        return;
+      }
+      final store = await ApiService.getStoreById(storeId);
+      if (store == null) return;
+      final icon = store['icon_url'] ?? store['image_url'] ?? store['iconUrl'];
+      if (icon != null && icon is String && icon.isNotEmpty) {
+        // Normalize to full URL using Store model helper
+        _storeIconUrl = Store.getFullImageUrl(icon);
+        if (mounted) setState(() {});
+      }
+    } catch (e) {
+      debugPrint('Error loading store icon: $e');
+    }
   }
 
   @override
@@ -295,153 +403,96 @@ class _ProductDetailViewState extends State<ProductDetailView>
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  📱 MOBILE / NARROW LAYOUT
+  //   MOBILE / NARROW LAYOUT
+  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  //   MOBILE / NARROW LAYOUT (فخامة الموبايل)
   // ═══════════════════════════════════════════════════════════
   Widget _buildMobileLayout(BuildContext context, ThemeData theme, bool isDark,
       double screenW, double screenH, double parallax, double imageOpacity) {
     final topPad = MediaQuery.of(context).padding.top;
-    final imageHeight = screenH * 0.52;
 
     return Stack(
       children: [
         // ── Scrollable Content ──
         CustomScrollView(
           controller: _scrollController,
-          physics: const BouncingScrollPhysics(),
+          // BouncingScrollPhysics تعطي إحساس مطاطي فخم عند السحب
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
           slivers: [
             // ╔══════════════════════════════╗
             // ║   HERO IMAGE SECTION         ║
             // ╚══════════════════════════════╝
-            SliverToBoxAdapter(
-              child: AnimatedBuilder(
-                animation: _entryController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _imageScale.value,
-                    child: Opacity(
-                      opacity: imageOpacity,
-                      child: SizedBox(
-                        height: imageHeight,
-                        width: double.infinity,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            // Blurred background fill
-                            Positioned.fill(
-                              child: Transform.translate(
-                                offset: Offset(0, -parallax),
-                                child: CachedNetworkImage(
-                                  imageUrl: widget.product.imageUrl,
-                                  fit: BoxFit.cover,
-                                  color: isDark
-                                      ? Colors.black.withOpacity(0.3)
-                                      : Colors.white.withOpacity(0.15),
-                                  colorBlendMode: BlendMode.darken,
-                                ),
+            SliverAppBar(
+              expandedHeight: screenH * 0.55, // الصورة تأخذ 55% من الشاشة لتبدو عملاقة وواضحة
+              backgroundColor: theme.scaffoldBackgroundColor,
+              elevation: 0,
+              pinned: true,
+              stretch: true, // تأثير التمدد الفخم عند سحب الشاشة للأسفل
+              leading: const SizedBox(), // تركناها فارغة لأنك تستخدم _buildTopBar الخاص بك
+              flexibleSpace: FlexibleSpaceBar(
+                stretchModes: const [
+                  StretchMode.zoomBackground,
+                  StretchMode.blurBackground
+                ],
+                background: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // الخلفية مع تأثير التعتيم (Blur) الممتاز
+                    CachedNetworkImage(
+                      imageUrl: widget.product.imageUrl,
+                      fit: BoxFit.cover,
+                    ),
+                    BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 35, sigmaY: 35),
+                      child: Container(
+                        color: isDark
+                            ? Colors.black.withOpacity(0.6)
+                            : Colors.white.withOpacity(0.5),
+                      ),
+                    ),
+                    // الصورة الأساسية للمنتج
+                    Center(
+                      child: GestureDetector(
+                        onTap: () => _showImageFullScreen(isDark),
+                        child: Hero(
+                          tag: 'product_${widget.product.id}',
+                          child: Padding(
+                            padding: EdgeInsets.only(top: topPad + 60, bottom: 40),
+                            child: CachedNetworkImage(
+                              imageUrl: widget.product.imageUrl,
+                              fit: BoxFit.contain,
+                              placeholder: (_, __) => const Center(
+                                child: CircularProgressIndicator(strokeWidth: 1.5),
                               ),
+                              errorWidget: (_, __, ___) =>
+                                  const Icon(Icons.broken_image, size: 48),
                             ),
-                            // Blur overlay
-                            Positioned.fill(
-                              child: BackdropFilter(
-                                filter:
-                                    ImageFilter.blur(sigmaX: 35, sigmaY: 35),
-                                child: Container(
-                                  color: isDark
-                                      ? Colors.black.withOpacity(0.4)
-                                      : Colors.white.withOpacity(0.2),
-                                ),
-                              ),
-                            ),
-                            // Main product image – clickable
-                            Center(
-                              child: GestureDetector(
-                                onTap: () => _showImageFullScreen(isDark),
-                                child: Hero(
-                                  tag: 'product_${widget.product.id}',
-                                  child: Transform.translate(
-                                    offset: Offset(0, -parallax * 0.5),
-                                    child: Container(
-                                      constraints: BoxConstraints(
-                                        maxHeight: imageHeight * 0.82,
-                                        maxWidth: screenW * 0.85,
-                                      ),
-                                      child: CachedNetworkImage(
-                                        imageUrl: widget.product.imageUrl,
-                                        fit: BoxFit.contain,
-                                        placeholder: (_, __) => const Center(
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 1.5),
-                                        ),
-                                        errorWidget: (_, __, ___) =>
-                                            const Icon(Icons.broken_image,
-                                                size: 48),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Gradient fade at bottom
-                            Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              height: 100,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.transparent,
-                                      theme.scaffoldBackgroundColor
-                                          .withOpacity(0.8),
-                                      theme.scaffoldBackgroundColor,
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Tap-to-expand hint
-                            Positioned(
-                              bottom: 28,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: AnimatedOpacity(
-                                  opacity: _scrollOffset < 20 ? 0.5 : 0.0,
-                                  duration: const Duration(milliseconds: 300),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.zoom_out_map_rounded,
-                                          size: 14,
-                                          color: isDark
-                                              ? Colors.white54
-                                              : Colors.black38),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Tap image to expand',
-                                        style: TextStyle(
-                                          fontFamily: fontTenor,
-                                          fontSize: 11,
-                                          color: isDark
-                                              ? Colors.white54
-                                              : Colors.black38,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  );
-                },
+                    // تدرج لوني خفيف بالأسفل لدمج الصورة مع باقي الشاشة بسلاسة
+                    Positioned(
+                      bottom: -1,
+                      left: 0,
+                      right: 0,
+                      height: 100,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              theme.scaffoldBackgroundColor,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -449,80 +500,40 @@ class _ProductDetailViewState extends State<ProductDetailView>
             // ║   PRODUCT CONTENT            ║
             // ╚══════════════════════════════╝
             SliverToBoxAdapter(
-              child: AnimatedBuilder(
-                animation: _entryController,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, _contentSlide.value),
-                    child: Opacity(
-                      opacity: _contentFade.value,
-                      child: child,
-                    ),
-                  );
-                },
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // ── Product Name ──
-                          Text(
-                            widget.product.name,
-                            style: _ts(context, 28, weight: FontWeight.w700)
-                                .copyWith(
-                              letterSpacing: -0.5,
-                              height: 1.15,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // ── Price + Stock row ──
-                          AnimatedBuilder(
-                            animation: _entryController,
-                            builder: (context, child) => Opacity(
-                              opacity: _priceFade.value,
-                              child: child,
-                            ),
-                            child: _buildPriceStockRow(theme, isDark),
-                          ),
-
-                          const SizedBox(height: 28),
-
-                          // ── Description ──
-                          _buildDescriptionSection(theme, isDark),
-
-                          const SizedBox(height: 28),
-
-                          // ── Quantity Selector ──
-                          AnimatedBuilder(
-                            animation: _entryController,
-                            builder: (context, child) => Opacity(
-                              opacity: _actionsFade.value,
-                              child: child,
-                            ),
-                            child: _buildQuantitySelector(theme, isDark),
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // ── Store Card ──
-                          AnimatedBuilder(
-                            animation: _entryController,
-                            builder: (context, child) => Opacity(
-                              opacity: _actionsFade.value,
-                              child: child,
-                            ),
-                            child: _buildStoreCard(theme, isDark),
-                          ),
-
-                          // Bottom padding for floating bar
-                          const SizedBox(height: 140),
-                        ],
+              child: Container(
+                color: theme.scaffoldBackgroundColor,
+                child: Padding(
+                  // 140 من الأسفل عشان زر "Add to cart" العائم ما يغطي على المحتوى
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 140),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Product Name ──
+                      Text(
+                        widget.product.name,
+                        style: _ts(context, 28, weight: FontWeight.w800)
+                            .copyWith(
+                          letterSpacing: -0.5,
+                          height: 1.2,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 16),
+
+                      // ── Price + Stock row ──
+                      _buildPriceStockRow(theme, isDark),
+                      const SizedBox(height: 28),
+
+                      // ── Description ──
+                      _buildDescriptionSection(theme, isDark),
+                      const SizedBox(height: 28),
+
+                      // ── Quantity Selector ──
+                      _buildQuantitySelector(theme, isDark),
+                      const SizedBox(height: 24),
+
+                      // ── Store Card ──
+                      _buildStoreCard(theme, isDark),
+                    ],
                   ),
                 ),
               ),
@@ -543,14 +554,7 @@ class _ProductDetailViewState extends State<ProductDetailView>
           bottom: 0,
           left: 0,
           right: 0,
-          child: AnimatedBuilder(
-            animation: _entryController,
-            builder: (context, child) => Transform.translate(
-              offset: Offset(0, 80 * (1 - _actionsFade.value)),
-              child: Opacity(opacity: _actionsFade.value, child: child),
-            ),
-            child: _buildBottomBar(theme, isDark),
-          ),
+          child: _buildBottomBar(theme, isDark),
         ),
       ],
     );
@@ -1030,8 +1034,19 @@ class _ProductDetailViewState extends State<ProductDetailView>
               color: theme.primaryColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(13),
             ),
-            child: Icon(Icons.storefront_rounded,
-                color: theme.primaryColor, size: 22),
+            child: _storeIconUrl != null && _storeIconUrl!.isNotEmpty
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: CachedNetworkImage(
+                      imageUrl: _storeIconUrl!,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                      placeholder: (c, u) => Container(color: theme.primaryColor.withOpacity(0.08)),
+                      errorWidget: (c, u, e) => Icon(Icons.storefront_rounded, color: theme.primaryColor, size: 22),
+                    ),
+                  )
+                : Icon(Icons.storefront_rounded, color: theme.primaryColor, size: 22),
           ),
           const SizedBox(width: 14),
           // Store info

@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:yshop/config/api_config.dart';
+import 'package:yshop/screens/delivery/delivery_shared.dart' as ds;
 
 /// High-performance API Service optimized for millions of users
 /// Features: Connection pooling, smart caching, request deduplication, retry logic
@@ -1017,6 +1018,31 @@ class ApiService {
     );
   }
 
+  // Driver: get pending return pickups (admin approved, store not yet received)
+  static Future<List<Map<String, dynamic>>> getDriverReturnPickups() async {
+    final response = await _request(
+      'GET',
+      '/returns/driver/pending',
+      requiresAuth: true,
+      useCache: false,
+    );
+    final data = response['data'];
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  // Driver: confirm picked up item from customer
+  static Future<bool> driverPickedUpReturn(int returnId) async {
+    final response = await _request(
+      'PUT',
+      '/returns/$returnId/driver-picked-up',
+      requiresAuth: true,
+    );
+    return response['success'] == true;
+  }
+
   static Future<List<dynamic>> getStoreOrders({
     required String storeId,
     int page = 1,
@@ -1878,11 +1904,16 @@ class ApiService {
   }
 
   /// Delete a category
-  static Future<bool> deleteCategory(int storeId, int categoryId) async {
+  static Future<bool> deleteCategory(
+    int storeId,
+    int categoryId, {
+    bool deleteProducts = false,
+  }) async {
     try {
+      final deleteProductsQuery = deleteProducts ? '?deleteProducts=1' : '';
       await _request(
         'DELETE',
-        '/stores/$storeId/categories/$categoryId',
+        '/stores/$storeId/categories/$categoryId$deleteProductsQuery',
         requiresAuth: true,
       );
       // Cache disabled - no invalidation needed
@@ -1980,6 +2011,45 @@ class ApiService {
     } catch (e) {
       debugPrint('❌ Error reordering categories: $e');
       return false;
+    }
+  }
+
+  // ==================== DELIVERY DRIVER DASHBOARD ====================
+
+  /// Get delivery driver statistics (earnings, completed deliveries, etc.)
+  static Future<Map<String, dynamic>?> getDeliveryStats() async {
+    try {
+      final response = await _request(
+        'GET',
+        '/delivery-requests/stats',
+        requiresAuth: true,
+      );
+      return response['data'] as Map<String, dynamic>?;
+    } catch (e) {
+      debugPrint('Error getting delivery stats: $e');
+      return null;
+    }
+  }
+
+  /// Get delivery driver history (completed deliveries)
+  static Future<List<ds.Order>> getDeliveryHistory() async {
+    try {
+      final response = await _request(
+        'GET',
+        '/delivery-requests/history',
+        requiresAuth: true,
+        useCache: false,
+        cacheTtl: 0,
+      );
+      // Backend returns { orders: [...], pagination: {...} }
+      final data = response['data'] as Map<String, dynamic>?;
+      if (data == null) return [];
+      
+      final ordersList = data['orders'] as List<dynamic>? ?? [];
+      return ordersList.map((item) => ds.Order.fromJson(item as Map<String, dynamic>)).toList();
+    } catch (e) {
+      debugPrint('Error getting delivery history: $e');
+      return [];
     }
   }
 }

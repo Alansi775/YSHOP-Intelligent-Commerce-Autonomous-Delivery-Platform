@@ -20,7 +20,9 @@ import '../../state_management/auth_manager.dart';
 import '../auth/sign_in_view.dart';
 import 'delivery_shared.dart' as ds;
 import 'delivery_qr_scanner_view.dart';
+import 'delivery_return_pickup_view.dart';
 import 'map_of_delivery_man.dart';
+import 'delivery_dashboard_view.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  DESIGN CONSTANTS
@@ -503,6 +505,27 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
         elevation: 0,
         centerTitle: false,
         automaticallyImplyLeading: false,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12.0),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const DeliveryDashboardView()),
+                ),
+                child: Icon(Icons.bar_chart, color: kAccentBlue, size: 24),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const DeliveryReturnPickupView()),
+                ),
+                child: Icon(Icons.arrow_back_rounded, color: Colors.orange, size: 24),
+              ),
+            ],
+          ),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),

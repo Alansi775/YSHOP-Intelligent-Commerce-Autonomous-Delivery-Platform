@@ -100,7 +100,7 @@ import './stores/chat_view.dart';               // From root to stores
 4. Removed `const` keyword from OrdersManagementView instantiation
 5. Corrected admin import paths for orders_view.dart
 
-## 🚀 Development Guidelines
+##  Development Guidelines
 
 - **Store screens** → Place in `stores/` folder, use `../../` for service imports
 - **Delivery screens** → Place in `delivery/` folder, use `../../` for service imports

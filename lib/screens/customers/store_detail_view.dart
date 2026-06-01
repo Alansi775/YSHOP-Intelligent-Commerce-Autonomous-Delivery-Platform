@@ -588,14 +588,24 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             (int.tryParse(p.categoryId ?? '0') ?? 0) == _selectedCategoryId
           ).toList();
 
+    // 🌟 ذكاء الاستجابة (Responsive Design)
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    // عدد الأعمدة يتكيف مع الشاشة
+    final int columns = isMobile ? 2 : (screenWidth < 900 ? 3 : 4);
+    
+    // إعطاء نسبة طولية (aspect ratio) أفضل للجوال عشان الـ overflow
+    final double childAspectRatio = isMobile ? 0.60 : 0.75; 
+
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: 0.75,
+          childAspectRatio: childAspectRatio,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) {
@@ -608,6 +618,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     );
   }
 
+  // هذه الدالة ضرورية لربط الأنيميشن بالكارت
   Widget _buildProductCardWithAnimation(Product product, int index, bool isDark) {
     return AnimatedBuilder(
       animation: _productsRevealController,
@@ -657,8 +668,8 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
           ],
           border: Border.all(
             color: isDark
-              ? Colors.white.withOpacity(0.04)
-              : Colors.black.withOpacity(0.03),
+              ? Colors.white.withOpacity(0.06)
+              : Colors.black.withOpacity(0.04),
             width: 1,
           ),
         ),
@@ -667,25 +678,28 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
             child: Container(
-              color: isDark ? Colors.black.withOpacity(0.36) : Colors.white.withOpacity(0.04),
+              color: isDark ? Colors.black.withOpacity(0.4) : Colors.white.withOpacity(0.6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Product image
+                  // 📸 صورة المنتج - تأخذ المساحة بمرونة
                   Expanded(
-                    flex: 7,
-                    child: Hero(
-                      tag: 'product_${product.id}',
-                      child: Center(
-                        child: CachedNetworkImage(
-                          imageUrl: product.imageUrl,
-                          fit: BoxFit.contain,
-                          placeholder: (c, u) => Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: isDark
-                                ? const Color(0xFF4A9FFF)
-                                : const Color(0xFF2196F3),
+                    flex: 5, 
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
+                      child: Hero(
+                        tag: 'product_${product.id}',
+                        child: Center(
+                          child: CachedNetworkImage(
+                            imageUrl: product.imageUrl,
+                            fit: BoxFit.contain,
+                            placeholder: (c, u) => Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: isDark
+                                  ? const Color(0xFF4A9FFF)
+                                  : const Color(0xFF2196F3),
+                              ),
                             ),
                           ),
                         ),
@@ -693,32 +707,30 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                     ),
                   ),
                   
-                  // Product info
+                  // 📝 بيانات المنتج - معدلة لمنع الـ Overflow
                   Flexible(
-                    flex: 1,
-                    fit: FlexFit.loose,
+                    flex: 3, 
                     child: Padding(
-                      padding: const EdgeInsets.all(10.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.start,
                         children: [
-                          Text(
-                            product.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'TenorSans',
-                              color: isDark ? Colors.white : Colors.black,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13.5,
-                              height: 1.18,
+                          Expanded(
+                            child: Text(
+                              product.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'TenorSans',
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12, // تصغير بسيط ليناسب الجوال
+                                height: 1.1,
+                              ),
                             ),
                           ),
-
-                          const SizedBox(height: 4),
-
+                          
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -731,12 +743,12 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                                       ? const Color(0xFF4A9FFF)
                                       : const Color(0xFF2196F3),
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 14,
-                                    letterSpacing: 0.2,
+                                    fontSize: 13,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
                               ),
-
+                              // 🛒 زر الإضافة
                               InkWell(
                                 borderRadius: BorderRadius.circular(10),
                                 onTap: () async {
@@ -752,21 +764,16 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                                   }
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
                                     color: isDark
-                                      ? Colors.white.withOpacity(0.03)
-                                      : Colors.black.withOpacity(0.04),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: isDark
-                                        ? Colors.white.withOpacity(0.06)
-                                        : Colors.black.withOpacity(0.06),
-                                    ),
+                                      ? Colors.white.withOpacity(0.08)
+                                      : Colors.black.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
-                                    Icons.add,
-                                    size: 18,
+                                    Icons.add_shopping_cart_rounded,
+                                    size: 16, // تصغير الأيقونة قليلاً
                                     color: isDark
                                       ? const Color(0xFF4A9FFF)
                                       : const Color(0xFF2196F3),

@@ -152,7 +152,7 @@ export class ProductController {
       const products = await Product.findByStatus('pending', parseInt(page), parseInt(limit));
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
         image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null
@@ -180,7 +180,7 @@ export class ProductController {
       const products = await Product.findByStatus('approved', parseInt(page), parseInt(limit));
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
         image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null
@@ -216,7 +216,7 @@ export class ProductController {
       const products = await Product.findByOwnerEmail(email, parseInt(page), parseInt(limit));
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
         image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null
@@ -254,7 +254,7 @@ export class ProductController {
       );
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
         image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null

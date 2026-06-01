@@ -107,8 +107,51 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
     }
   }
 
+  Future<void> _deleteProductPermanently(ProductS product) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Delete ${product.name}?',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete this product? This cannot be undone and you will need to enter the product details again if you want it back.',
+          style: TextStyle(color: Colors.grey[300], height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final success = await ApiService.deleteProduct(product.id);
+      if (success && mounted) {
+        widget.onProductRemoved(product.id);
+        _fetchProducts();
+      }
+    } catch (e) {
+      debugPrint('Error deleting product permanently: $e');
+    }
+  }
+
   Future<void> _deleteCategory() async {
-    final confirm = await showDialog<bool>(
+    final action = await showDialog<String?>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
@@ -121,12 +164,20 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'All ${_filteredProducts.length} products in this category will be returned to "Products without category"',
+              'Choose what should happen to the ${_filteredProducts.length} products in this category.',
               style: TextStyle(color: Colors.grey[300]),
             ),
             const SizedBox(height: 16),
             Text(
-              'This action cannot be undone.',
+              'Delete category only: products will stay but become uncategorized.\n'
+              'Delete category + products: remove both from this store completely.',
+              style: TextStyle(
+                color: Colors.grey[400],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Cancel keeps everything unchanged.',
               style: TextStyle(
                 color: Colors.red[400],
                 fontWeight: FontWeight.bold,
@@ -136,13 +187,20 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context, null),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(context, 'detach'),
             child: const Text(
-              'Delete & Return Products',
+              'Delete Category Only',
+              style: TextStyle(color: Colors.orange),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'deleteProducts'),
+            child: const Text(
+              'Delete Category + Products',
               style: TextStyle(color: Colors.red),
             ),
           ),
@@ -150,11 +208,19 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
       ),
     );
 
-    if (confirm == true) {
+    if (action == null) return;
+
+    final deleteProducts = action == 'deleteProducts';
+
+    if (action == 'detach' || deleteProducts) {
       setState(() => _isDeleting = true);
       try {
         final success =
-            await ApiService.deleteCategory(widget.storeId, widget.category.id!);
+            await ApiService.deleteCategory(
+          widget.storeId,
+          widget.category.id!,
+          deleteProducts: deleteProducts,
+        );
         if (success && mounted) {
           widget.onCategoryDeleted();
           Navigator.pop(context);
@@ -284,7 +350,7 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
                                   final product = _filteredProducts[index];
                                   return CategoryProductCard(
                                     product: product,
-                                    onDelete: () => _removeProductFromCategory(product.id),
+                                    onDelete: () => _deleteProductPermanently(product),
                                     onTap: () => _onProductTap(product),
                                     onEdit: () => _onEditProduct(product),
                                     onRemoveFromCategory: () => _removeProductFromCategory(product.id),
@@ -322,126 +388,129 @@ class CategoryProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF1E1E1E),
-      borderRadius: BorderRadius.circular(15),
-      elevation: 3,
-      shadowColor: Colors.black.withOpacity(0.05),
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        hoverColor: Colors.blue.withOpacity(0.1),
-        splashColor: Colors.blue.withOpacity(0.2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image with status badge
-            Stack(
-              alignment: Alignment.topRight,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(15),
-                    topRight: Radius.circular(15),
-                  ),
-                  child: CachedNetworkImage(
-                    imageUrl: product.imageUrl,
-                    height: 150,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      height: 150,
-                      color: Colors.grey[800],
+        borderRadius: BorderRadius.circular(24),
+        hoverColor: Colors.white.withOpacity(0.02),
+        splashColor: Colors.white.withOpacity(0.05),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                      child: CachedNetworkImage(
+                        imageUrl: product.imageUrl,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: Colors.white.withOpacity(0.03),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.white.withOpacity(0.03),
+                          child: Center(
+                            child: Icon(
+                              Icons.inventory_2_outlined,
+                              color: Colors.white.withOpacity(0.2),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                    errorWidget: (context, url, error) => Container(
-                      height: 150,
-                      color: Colors.red.withOpacity(0.1),
-                      child: const Icon(Icons.error_outline, color: Colors.red),
+                    Container(
+                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.2)),
                     ),
-                  ),
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: StatusBadge(status: product.approved ? 'Approved' : 'Pending'),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: StatusBadge(status: product.approved ? "Approved" : "Pending"),
-                ),
-              ],
-            ),
-            // Product info
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "${getCurrencySymbol(product.currency)}${product.price}",
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Buttons row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Delete button
-                      Tooltip(
-                        message: 'Delete product',
-                        child: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: onDelete,
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.red.withOpacity(0.1),
-                            shape: const CircleBorder(),
-                            padding: const EdgeInsets.all(8),
-                          ),
-                        ),
-                      ),
-                      // Remove from category button (arrow)
-                      Tooltip(
-                        message: 'Remove from category',
-                        child: IconButton(
-                          icon: const Icon(Icons.arrow_forward, color: Colors.orange),
-                          onPressed: onRemoveFromCategory,
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.orange.withOpacity(0.1),
-                            shape: const CircleBorder(),
-                            padding: const EdgeInsets.all(8),
-                          ),
-                        ),
-                      ),
-                      // Edit button
-                      Tooltip(
-                        message: 'Edit product',
-                        child: TextButton(
-                          onPressed: onEdit,
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.blue.withOpacity(0.1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                          ),
-                          child: const Text(
-                            "Edit",
-                            style: TextStyle(fontSize: 12, color: Colors.blue),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${getCurrencySymbol(product.currency)}${product.price}',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Tooltip(
+                          message: 'Delete product permanently',
+                          child: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: onDelete,
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.red.withOpacity(0.06),
+                              shape: const CircleBorder(),
+                              padding: const EdgeInsets.all(8),
+                            ),
+                          ),
+                        ),
+                        Tooltip(
+                          message: 'Remove from category',
+                          child: IconButton(
+                            icon: const Icon(Icons.arrow_forward, color: Colors.orange),
+                            onPressed: onRemoveFromCategory,
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.orange.withOpacity(0.06),
+                              shape: const CircleBorder(),
+                              padding: const EdgeInsets.all(8),
+                            ),
+                          ),
+                        ),
+                        Tooltip(
+                          message: 'Edit product',
+                          child: TextButton(
+                            onPressed: onEdit,
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.blue.withOpacity(0.08),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                            ),
+                            child: const Text(
+                              'Edit',
+                              style: TextStyle(fontSize: 13, color: Colors.blue),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

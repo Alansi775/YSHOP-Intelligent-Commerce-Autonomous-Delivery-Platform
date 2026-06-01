@@ -2,10 +2,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../models/currency.dart';
-import './custom_form_widgets.dart'; // للوصول إلى primaryText و secondaryText
-import './shimmer_effect.dart'; // لتأثير Shimmer أثناء التحميل
+import '../providers/theme_manager.dart';
+import './custom_form_widgets.dart';
+import './shimmer_effect.dart';
 
 // دالة للحصول على رمز العملة الصحيح
 String getCurrencySymbol(String? currencyCode) {
@@ -20,10 +22,6 @@ class ProductCard extends StatelessWidget {
 
   const ProductCard({Key? key, required this.product, required this.onTap}) : super(key: key);
 
-  // لافتراض وجود المتغيرات
-  final Color primaryText = Colors.black;
-  final Color secondaryText = Colors.grey;
-
   Widget _buildImagePlaceholder() {
     return ShimmerEffect(
       child: Container(
@@ -35,11 +33,17 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeManager = Provider.of<ThemeManager>(context);
+    final isDark = themeManager.isDarkMode;
+    
+    final primaryText = isDark ? Colors.white : Colors.black;
+    final secondaryText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    
     return InkWell(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? Colors.grey.shade900 : Colors.white,
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
@@ -77,31 +81,50 @@ class ProductCard extends StatelessWidget {
             ),
             
             // Product Info
-            Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    product.name,
-                    style: TextStyle(
-                      fontSize: 15, 
-                      fontWeight: FontWeight.w600,
-                      color: primaryText,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          style: TextStyle(
+                            fontSize: 13, 
+                            fontWeight: FontWeight.w600,
+                            color: primaryText,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          product.description.length > 50 
+                            ? "${product.description.substring(0, 50)}..." 
+                            : product.description,
+                          style: TextStyle(
+                            fontSize: 11, 
+                            color: secondaryText,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "${getCurrencySymbol(product.currency)}${product.price.toStringAsFixed(2)}", // تنسيق السعر
-                    style: TextStyle(
-                      fontSize: 16, 
-                      fontWeight: FontWeight.bold,
-                      color: secondaryText, // لون مختلف للسعر
+                    Text(
+                      "${getCurrencySymbol(product.currency)}${product.price.toStringAsFixed(2)}", 
+                      style: TextStyle(
+                        fontSize: 14, 
+                        fontWeight: FontWeight.bold,
+                        color: primaryText,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

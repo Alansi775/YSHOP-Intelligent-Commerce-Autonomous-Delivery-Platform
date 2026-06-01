@@ -27,7 +27,7 @@ class _StoreCardState extends State<StoreCard> {
     //  نستخدم ShimmerEffect كما هو
     return ShimmerEffect(
       child: Container(
-        height: 160,
+        height: 136,
         decoration: BoxDecoration(
           color: Colors.grey.shade300,
           borderRadius: BorderRadius.circular(16),
@@ -90,7 +90,7 @@ class _StoreCardState extends State<StoreCard> {
                         // Background Gradient - Neutral
                         Container(
                           width: double.infinity,
-                          height: 160,
+                          height: 136,
                           decoration: BoxDecoration(
                             borderRadius: const BorderRadius.only(
                               topLeft: Radius.circular(16),
@@ -109,8 +109,8 @@ class _StoreCardState extends State<StoreCard> {
                         
                         // Circular Icon Badge (Center)
                         Container(
-                          width: 90,
-                          height: 90,
+                          width: 82,
+                          height: 82,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
@@ -131,20 +131,20 @@ class _StoreCardState extends State<StoreCard> {
                                     shape: BoxShape.circle,
                                     color: textColor.withOpacity(0.08),
                                   ),
-                                  child: Icon(Icons.store, size: 45, color: textColor.withOpacity(0.6)),
+                                  child: Icon(Icons.store, size: 40, color: textColor.withOpacity(0.6)),
                                 )
                               : ClipOval(
                                   child: CachedNetworkImage(
                                     imageUrl: widget.store.storeIconUrl,
-                                    width: 90,
-                                    height: 90,
+                                    width: 82,
+                                    height: 82,
                                     fit: BoxFit.cover,
                                     placeholder: (context, url) => Container(
                                       color: textColor.withOpacity(0.08),
                                     ),
                                     errorWidget: (context, url, error) => Container(
                                       color: textColor.withOpacity(0.08),
-                                      child: Icon(Icons.store, size: 45, color: textColor.withOpacity(0.6)),
+                                      child: Icon(Icons.store, size: 40, color: textColor.withOpacity(0.6)),
                                     ),
                                   ),
                                 ),
@@ -152,9 +152,11 @@ class _StoreCardState extends State<StoreCard> {
                       ],
                     ),
 
+                          const SizedBox(height: 2),
+
                     // Store Info
                     Padding(
-                      padding: const EdgeInsets.all(14.0),
+                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
@@ -162,7 +164,7 @@ class _StoreCardState extends State<StoreCard> {
                             widget.store.storeName,
                             style: TextStyle(
                               fontFamily: 'TenorSans',
-                              fontSize: 16, 
+                                    fontSize: 15, 
                               fontWeight: FontWeight.w600,
                               color: textColor,
                               letterSpacing: 0.3,
@@ -199,7 +201,7 @@ class _StoreCardState extends State<StoreCard> {
                             children: List.generate(5, (index) {
                               return Icon(
                                 Icons.star_rounded,
-                                size: 14,
+                                size: 13,
                                 color: secondaryText.withOpacity(0.5),
                               );
                             }),

@@ -4,6 +4,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'common.dart';
+import '../../models/currency.dart';
+
+String getCurrencySymbol(String? currencyCode) {
+  if (currencyCode == null || currencyCode.isEmpty) return '';
+  final currency = Currency.fromCode(currencyCode);
+  return currency?.symbol ?? currencyCode.toUpperCase();
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  GLASSMORPHISM WIDGETS - Apple-Inspired Design System
@@ -925,6 +932,7 @@ class RevenueCard extends StatelessWidget {
   final double appRevenue;
   final double storeRevenue;
   final int ordersCount;
+  final String currencyCode;
 
   const RevenueCard({
     super.key,
@@ -932,10 +940,13 @@ class RevenueCard extends StatelessWidget {
     required this.appRevenue,
     required this.storeRevenue,
     required this.ordersCount,
+    this.currencyCode = 'USD',
   });
 
   @override
   Widget build(BuildContext context) {
+    final currencySymbol = getCurrencySymbol(currencyCode);
+
     return GlassContainer(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -972,7 +983,7 @@ class RevenueCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '\$${totalRevenue.toStringAsFixed(2)}',
+                    '$currencySymbol${totalRevenue.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: kPrimaryTextColor,
                       fontSize: 28,
@@ -995,7 +1006,7 @@ class RevenueCard extends StatelessWidget {
                 Expanded(
                   child: _RevenueItem(
                     label: 'Your Revenue',
-                    value: '\$${appRevenue.toStringAsFixed(2)}',
+                    value: '$currencySymbol${appRevenue.toStringAsFixed(2)}',
                     color: kAccentGreen,
                     icon: Icons.trending_up_rounded,
                   ),
@@ -1008,7 +1019,7 @@ class RevenueCard extends StatelessWidget {
                 Expanded(
                   child: _RevenueItem(
                     label: 'Store Revenue',
-                    value: '\$${storeRevenue.toStringAsFixed(2)}',
+                    value: '$currencySymbol${storeRevenue.toStringAsFixed(2)}',
                     color: kAccentBlue,
                     icon: Icons.storefront_rounded,
                   ),
