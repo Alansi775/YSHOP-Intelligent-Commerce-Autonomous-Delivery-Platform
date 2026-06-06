@@ -121,9 +121,11 @@ export class ProductController {
         // try user-based auth
         const callerUser = req.user;
         if (!callerUser) return res.status(401).json({ success: false, message: 'Unauthorized' });
-        // check owner by product.store_owner_uid or product.store_owner_uid field
+
+        // verify ownership through the store attached to the product
         const ownerUid = product.owner_uid || product.store_owner_uid || product.ownerUid || null;
-        if (!ownerUid || String(ownerUid) !== String(callerUser.uid)) {
+        const callerUid = callerUser.uid || callerUser.id || null;
+        if (!ownerUid || !callerUid || String(ownerUid) !== String(callerUid)) {
           return res.status(403).json({ success: false, message: 'Forbidden: not owner' });
         }
       } else {
@@ -152,10 +154,10 @@ export class ProductController {
       const products = await Product.findByStatus('pending', parseInt(page), parseInt(limit));
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
-        image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null
+        image_url: product.image_url ? (product.image_url.startsWith('http') ? (baseUrl + new URL(product.image_url).pathname) : `${baseUrl}${product.image_url}`) : null
       }));
 
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
@@ -180,10 +182,10 @@ export class ProductController {
       const products = await Product.findByStatus('approved', parseInt(page), parseInt(limit));
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
-        image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null
+        image_url: product.image_url ? (product.image_url.startsWith('http') ? (baseUrl + new URL(product.image_url).pathname) : `${baseUrl}${product.image_url}`) : null
       }));
 
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
@@ -216,10 +218,10 @@ export class ProductController {
       const products = await Product.findByOwnerEmail(email, parseInt(page), parseInt(limit));
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
-        image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null
+        image_url: product.image_url ? (product.image_url.startsWith('http') ? (baseUrl + new URL(product.image_url).pathname) : `${baseUrl}${product.image_url}`) : null
       }));
 
       res.json({
@@ -254,10 +256,10 @@ export class ProductController {
       );
 
       // Convert relative image URLs to absolute URLs
-      const baseUrl = process.env.API_BASE_URL || 'http://192.168.1.59:3000';
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
       const productsWithFullUrls = products.map(product => ({
         ...product,
-        image_url: product.image_url ? (product.image_url.startsWith('http') ? product.image_url : `${baseUrl}${product.image_url}`) : null
+        image_url: product.image_url ? (product.image_url.startsWith('http') ? (baseUrl + new URL(product.image_url).pathname) : `${baseUrl}${product.image_url}`) : null
       }));
 
       res.json({

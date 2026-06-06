@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
 import '../../widgets/multi_media_picker.dart';
@@ -18,16 +19,18 @@ class AddProductView extends StatefulWidget {
 
 class _AddProductViewState extends State<AddProductView> {
   final _formKey = GlobalKey<FormState>();
+  static const String _currencyPrefKey = 'store_add_product_currency_code';
   
   // Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
-  final TextEditingController _stockController = TextEditingController(text: '1');
+  final TextEditingController _stockController = TextEditingController();
 
   List<MediaItem> _selectedMedia = [];
   bool _isLoading = false;
-  Currency _selectedCurrency = Currency.currencies[1] ?? Currency.getAll().first;
+  Currency? _selectedCurrency;
+  bool _isLoadingSavedCurrency = true;
 
   // --- Theme Colors (Modern & Minimalist) ---
   final Color _bgDark = const Color(0xFF121212); // خلفية أصلية
@@ -37,9 +40,46 @@ class _AddProductViewState extends State<AddProductView> {
   final Color _textSecondary = const Color(0xFF9E9E9E);
 
   // --- Logic (Same as before) ---
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCurrency();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    _stockController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSavedCurrency() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedCode = prefs.getString(_currencyPrefKey);
+
+    if (!mounted) return;
+
+    setState(() {
+      _selectedCurrency = savedCode == null ? null : Currency.fromCode(savedCode);
+      _isLoadingSavedCurrency = false;
+    });
+  }
+
+  Future<void> _saveSelectedCurrency(Currency currency) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_currencyPrefKey, currency.code);
+  }
+
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate() || _selectedMedia.isEmpty) {
       _showSnack("Please fill required fields & add an image", isError: true);
+      return;
+    }
+
+    if (_selectedCurrency == null) {
+      _showSnack("Please select a currency", isError: true);
       return;
     }
 
@@ -58,10 +98,10 @@ class _AddProductViewState extends State<AddProductView> {
         "name": _nameController.text.trim(),
         "description": _descriptionController.text.trim(),
         "price": double.tryParse(_priceController.text.trim()) ?? 0.0,
-        "stock": int.tryParse(_stockController.text.trim()) ?? 1,
+        "stock": int.parse(_stockController.text.trim()),
         "storeId": storeId,
-        "currencyId": _selectedCurrency.id,
-        "currencyCode": _selectedCurrency.code,
+        "currencyId": _selectedCurrency!.id,
+        "currencyCode": _selectedCurrency!.code,
       };
 
       final firstImageMedia = _selectedMedia.firstWhere((m) => !m.isVideo);
@@ -148,7 +188,7 @@ class _AddProductViewState extends State<AddProductView> {
                             labelStyle: TextStyle(color: _textSecondary),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
                           ),
-                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                         ),
                         Divider(color: _textSecondary.withOpacity(0.1), height: 1),
                         TextFormField(
@@ -163,6 +203,7 @@ class _AddProductViewState extends State<AddProductView> {
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
                             alignLabelWithHint: true,
                           ),
+                          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                         ),
                       ],
                     ),
@@ -179,20 +220,36 @@ class _AddProductViewState extends State<AddProductView> {
                     child: Row(
                       children: [
                         // Currency "Pill" - Minimalist
-                        Theme(
-                          data: Theme.of(context).copyWith(canvasColor: _surfaceColor),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<Currency>(
+                        Expanded(
+                          flex: 2,
+                          child: Theme(
+                            data: Theme.of(context).copyWith(canvasColor: _surfaceColor),
+                            child: DropdownButtonFormField<Currency>(
                               value: _selectedCurrency,
+                              isExpanded: true,
                               icon: Icon(Icons.keyboard_arrow_down_rounded, color: _accentColor, size: 18),
+                              dropdownColor: _surfaceColor,
                               style: TextStyle(color: _textPrimary, fontSize: 16, fontWeight: FontWeight.w500),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                              hint: Text(
+                                "Select currency",
+                                style: TextStyle(color: _textSecondary.withOpacity(0.8), fontSize: 16),
+                              ),
                               items: Currency.getAll().map((c) {
                                 return DropdownMenuItem(
                                   value: c,
                                   child: Text("${c.code} (${c.symbol})"),
                                 );
                               }).toList(),
-                              onChanged: (v) => setState(() => _selectedCurrency = v!),
+                              validator: (v) => v == null ? 'Required' : null,
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => _selectedCurrency = v);
+                                _saveSelectedCurrency(v);
+                              },
                             ),
                           ),
                         ),
@@ -209,7 +266,14 @@ class _AddProductViewState extends State<AddProductView> {
                             decoration: inputDecoration.copyWith(
                               hintText: "0.00",
                             ),
-                            validator: (v) => v!.isEmpty ? 'Required' : null,
+                            validator: (v) {
+                              final value = v?.trim() ?? '';
+                              if (value.isEmpty) return 'Required';
+                              if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                                return 'Enter a valid price';
+                              }
+                              return null;
+                            },
                             onChanged: (_) => setState(() {}), // Trigger rebuild to update revenue breakdown
                           ),
                         ),
@@ -254,8 +318,20 @@ class _AddProductViewState extends State<AddProductView> {
                                   controller: _stockController,
                                   textAlign: TextAlign.center,
                                   keyboardType: TextInputType.number,
+                                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                   style: TextStyle(color: _textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
-                                  decoration: const InputDecoration(border: InputBorder.none, isDense: true),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    hintText: '1',
+                                  ),
+                                  validator: (v) {
+                                    final value = v?.trim() ?? '';
+                                    final parsed = int.tryParse(value);
+                                    if (value.isEmpty) return 'Required';
+                                    if (parsed == null || parsed <= 0) return 'Invalid';
+                                    return null;
+                                  },
                                 ),
                               ),
                               _buildIconButton(Icons.add, () {
@@ -375,7 +451,7 @@ class _AddProductViewState extends State<AddProductView> {
     
     final storeEarning = price * STORE_RATE;
     final appDriverEarning = price * APP_DRIVER_RATE;
-    final symbol = _selectedCurrency.symbol;
+    final symbol = _selectedCurrency?.symbol ?? '';
     
     if (price <= 0) {
       return Container(

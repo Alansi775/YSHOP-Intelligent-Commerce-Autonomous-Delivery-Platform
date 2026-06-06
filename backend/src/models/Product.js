@@ -85,10 +85,12 @@ export class Product {
       }
 
       // Ensure image_url is a full URL and store_phone is always present
-      const baseUrl = process.env.BASE_URL || 'http://192.168.1.59:3000';
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
       rows.forEach(row => {
-        if (row.image_url && typeof row.image_url === 'string' && !row.image_url.startsWith('http')) {
-          row.image_url = baseUrl + row.image_url;
+        if (row.image_url && typeof row.image_url === 'string') {
+          row.image_url = row.image_url.startsWith('http')
+            ? baseUrl + new URL(row.image_url).pathname
+            : baseUrl + row.image_url;
         }
         if (row.store_phone === undefined) {
           row.store_phone = '';
@@ -288,10 +290,12 @@ export class Product {
       connection.release();
 
       // Ensure image_url is a full URL
-      const baseUrl = process.env.BASE_URL || 'http://192.168.1.59:3000';
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
       rows.forEach(row => {
-        if (row.image_url && typeof row.image_url === 'string' && !row.image_url.startsWith('http')) {
-          row.image_url = baseUrl + row.image_url;
+        if (row.image_url && typeof row.image_url === 'string') {
+          row.image_url = row.image_url.startsWith('http')
+            ? baseUrl + new URL(row.image_url).pathname
+            : baseUrl + row.image_url;
         }
         // Ensure store_phone is never undefined
         if (row.store_phone === undefined || row.store_phone === null) {

@@ -48,6 +48,7 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
   final Set<String> _subscribedOrderChannels = {};
   StreamSubscription<Map<String, dynamic>>? _orderSyncSubscription;
   Timer? _orderRefreshTimer;
+  int _categoryContentVersion = 0;
   late final AnimationController _orderPulseController;
   late final Animation<double> _orderPulseAnimation;
   int _activeOrdersCount = 0;
@@ -342,7 +343,13 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
           _fetchCategories(_storeId);
           _fetchProducts();
         },
-        onProductRemoved: (productId) => _fetchProducts(),
+        onCategoryContentChanged: () {
+          _fetchCategories(_storeId);
+          _fetchProducts();
+          if (mounted) {
+            setState(() => _categoryContentVersion++);
+          }
+        },
       ),
     ));
   }
@@ -561,7 +568,9 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
             setState(() {
               _products.removeWhere((p) => p.id == product.id);
               _filteredProducts.removeWhere((p) => p.id == product.id);
+              _categoryContentVersion++;
             });
+            _fetchCategories(_storeId);
           }
         },
       ),
@@ -1056,6 +1065,7 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                       child: _CategoryCardLarge(
                         category: _categories[i],
                         orderNumber: i + 1,
+                        refreshVersion: _categoryContentVersion,
                         onTap: () => _showCategoryProducts(_categories[i]),
                         onDelete: () => _deleteCategory(_categories[i]),
                       ),
@@ -1365,12 +1375,14 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
 class _CategoryCardLarge extends StatefulWidget {
   final Category category;
   final int orderNumber;
+  final int refreshVersion;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _CategoryCardLarge({
     required this.category,
     required this.orderNumber,
+    required this.refreshVersion,
     required this.onTap,
     required this.onDelete,
   });
@@ -1388,6 +1400,16 @@ class _CategoryCardLargeState extends State<_CategoryCardLarge> {
   void initState() {
     super.initState();
     _loadLastProductImage();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CategoryCardLarge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshVersion != widget.refreshVersion || oldWidget.category.id != widget.category.id) {
+      _isLoading = true;
+      _lastProductImage = null;
+      _loadLastProductImage();
+    }
   }
 
   Future<void> _loadLastProductImage() async {

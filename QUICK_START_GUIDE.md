@@ -39,7 +39,7 @@ npm start
 
 ### 2. Test Signup
 ```bash
-curl -X POST http://192.168.1.59:3000/api/v1/auth/signup \
+curl -X POST http://192.168.1.94:3000/api/v1/auth/signup \
   -H "Content-Type: application/json" \
   -d '{
     "email": "testuser@example.com",
@@ -59,7 +59,7 @@ Response:
 
 ### 3. Test Login (user not verified - will fail)
 ```bash
-curl -X POST http://192.168.1.59:3000/api/v1/auth/login \
+curl -X POST http://192.168.1.94:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "testuser@example.com",

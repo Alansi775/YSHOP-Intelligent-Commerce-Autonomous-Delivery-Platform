@@ -305,7 +305,7 @@ class EmailService {
     }
 
     const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-    const frontendUrl = process.env.FRONTEND_URL || 'http://192.168.1.59:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://192.168.1.94:3000';
     const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
 
     const templates = {

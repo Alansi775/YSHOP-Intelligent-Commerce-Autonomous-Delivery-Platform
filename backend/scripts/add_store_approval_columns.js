@@ -15,7 +15,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 
 async function main() {
   const connection = await mysql2.createConnection({
-    host: process.env.DB_HOST || '192.168.1.59',
+    host: process.env.DB_HOST || '192.168.1.94',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'yshop',

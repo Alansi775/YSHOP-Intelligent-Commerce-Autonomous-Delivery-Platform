@@ -226,12 +226,12 @@ export class ProductRetrievalService extends IRetrievalService {
       const [rows] = await connection.execute(query, params);
       connection.release();
 
-      const baseUrl = process.env.BACKEND_URL || 'http://192.168.1.59:3000';
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
       const items = rows.map(p => ({
         ...p,
-        image_url: p.image_url && !p.image_url.startsWith('http')
-          ? baseUrl + p.image_url
-          : (p.image_url || ''),
+        image_url: p.image_url
+          ? (p.image_url.startsWith('http') ? baseUrl + new URL(p.image_url).pathname : baseUrl + p.image_url)
+          : '',
       }));
 
       this.setCacheEntry(storeType, this.buildSearchIndex(items));

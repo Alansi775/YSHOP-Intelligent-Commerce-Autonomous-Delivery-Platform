@@ -58,21 +58,6 @@ export class OrderController {
             },
           };
 
-          // Send customer receipt email
-          if (userInfo.email) {
-            const customerHTML = renderReceiptCustomerHTML({
-              order: orderForEmail,
-              logoUrl: '',
-              frontendOrderUrl: '',
-            });
-            await emailService.sendOrderReceiptEmail(
-              userInfo.email,
-              `YSHOP - Order #${order.id} Confirmation`,
-              customerHTML
-            );
-            logger.info(`✓ Order confirmation email sent to customer: ${userInfo.email}`);
-          }
-
           // Send store owner notification email
           if (store.owner_email || store.ownerEmail) {
             const storeEmail = store.owner_email || store.ownerEmail;
@@ -392,7 +377,7 @@ export class OrderController {
 
       // Customer email (English template)
       if (customerEmail) {
-        const frontendOrderUrl = (process.env.FRONTEND_URL || 'http://192.168.1.59:3000') + `/orders/${order.id}`;
+        const frontendOrderUrl = (process.env.FRONTEND_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000') + `/orders/${order.id}`;
         const html = renderReceiptCustomerHTML({ order, frontendOrderUrl });
         await emailService.sendOrderReceiptEmail(customerEmail, `YSHOP - Receipt for Order ${order.id}`, html, attachments);
       }

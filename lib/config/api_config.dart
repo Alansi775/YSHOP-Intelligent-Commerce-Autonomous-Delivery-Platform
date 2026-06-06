@@ -16,10 +16,10 @@ class ApiConfig {
     }
     try {
       if (Platform.isAndroid) {
-        return 'http://192.168.1.59:3000/api/v1';
+        return 'http://Mohammeds-Mackbook-MacBook-Air.local:3000/api/v1';
       }
     } catch (_) {}
-    return 'http://192.168.1.59:3000/api/v1';
+    return 'http://Mohammeds-Mackbook-MacBook-Air.local:3000/api/v1';
   }
 
   /// Raw host without /api/v1

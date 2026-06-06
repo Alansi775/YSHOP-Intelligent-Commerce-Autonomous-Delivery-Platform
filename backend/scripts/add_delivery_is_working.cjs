@@ -4,7 +4,7 @@ const mysql = require('mysql2/promise');
 
 (async function(){
   try {
-    const host = process.env.DB_HOST || '192.168.1.59';
+    const host = process.env.DB_HOST || '192.168.1.94';
     const user = process.env.DB_USER || 'root';
     const password = process.env.DB_PASSWORD || '';
     const database = process.env.DB_NAME || 'yshop_db';

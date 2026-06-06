@@ -40,7 +40,7 @@ app.use(helmet());
 app.use(
   cors({
     origin: process.env.NODE_ENV === 'production' 
-      ? ['http://192.168.1.59:3000'] // Update with production domain
+      ? [process.env.CORS_ORIGIN || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000']
       : '*',
     credentials: true,
   })
@@ -164,8 +164,8 @@ import { setIO } from './utils/socketInstance.js';
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? ['http://192.168.1.59:3000']
-      : ['http://192.168.1.59', 'http://192.168.1.59:3000', '*'],
+      ? [process.env.CORS_ORIGIN || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000']
+      : ['*'],
     credentials: true,
   },
   transports: ['websocket', 'polling'],
@@ -256,7 +256,7 @@ const server = httpServer.listen(PORT, '0.0.0.0', async () => {
     
     connection.release();
     
-    logger.info(` Server running on http://192.168.1.59:${PORT}`);
+    logger.info(` Server running on http://${process.env.API_BASE_URL ? new URL(process.env.API_BASE_URL).hostname : 'localhost'}:${PORT}`);
     logger.info(` Database connected successfully`);
     
     // Initialize email service

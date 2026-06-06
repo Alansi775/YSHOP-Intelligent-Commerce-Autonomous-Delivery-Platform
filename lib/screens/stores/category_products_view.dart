@@ -16,7 +16,7 @@ class CategoryProductsView extends StatefulWidget {
   final String? storeOwnerEmail;
   final String? storePhone;
   final VoidCallback onCategoryDeleted;
-  final Function(String productId) onProductRemoved;
+  final VoidCallback onCategoryContentChanged;
 
   const CategoryProductsView({
     Key? key,
@@ -26,7 +26,7 @@ class CategoryProductsView extends StatefulWidget {
     this.storeOwnerEmail,
     this.storePhone,
     required this.onCategoryDeleted,
-    required this.onProductRemoved,
+    required this.onCategoryContentChanged,
   }) : super(key: key);
 
   @override
@@ -99,7 +99,7 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
     try {
       final success = await ApiService.removeProductFromCategory(int.parse(productId));
       if (success && mounted) {
-        widget.onProductRemoved(productId);
+        widget.onCategoryContentChanged();
         _fetchProducts();
       }
     } catch (e) {
@@ -142,7 +142,7 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
     try {
       final success = await ApiService.deleteProduct(product.id);
       if (success && mounted) {
-        widget.onProductRemoved(product.id);
+        widget.onCategoryContentChanged();
         _fetchProducts();
       }
     } catch (e) {

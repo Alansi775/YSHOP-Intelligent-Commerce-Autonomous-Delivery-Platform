@@ -16,7 +16,7 @@ import { execSync } from 'child_process';
 
 function getFirebaseToken() {
   try {
-    const token = execSync('firebase auth:login --no-192.168.1.59 --only-show-token 2>/dev/null || echo ""', {
+    const token = execSync('firebase auth:login --no-192.168.1.94 --only-show-token 2>/dev/null || echo ""', {
       encoding: 'utf-8',
     }).trim();
     return token;
