@@ -1010,6 +1010,78 @@ class ApiService {
     return List<dynamic>.from(response['data'] ?? []);
   }
 
+  // ─── Complaints ───────────────────────────────────────────────────────────
+
+  static Future<List<Map<String, dynamic>>> getMyComplaints() async {
+    final response = await _request('GET', '/complaints/my', requiresAuth: true);
+    final data = response['data'];
+    if (data is List) return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    return [];
+  }
+
+  static Future<Map<String, dynamic>> submitComplaint({
+    required int orderId,
+    required String complaintType,
+    String? subType,
+    String? description,
+  }) async {
+    return await _request(
+      'POST',
+      '/complaints',
+      body: {
+        'orderId': orderId.toString(),
+        'complaintType': complaintType,
+        if (subType != null) 'subType': subType,
+        if (description != null && description.isNotEmpty) 'description': description,
+      },
+      requiresAuth: true,
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> getComplaints({String? status}) async {
+    final query = status != null ? '?status=$status' : '';
+    final response = await _request('GET', '/complaints$query', requiresAuth: true);
+    final data = response['data'];
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  static Future<Map<String, dynamic>> getComplaintDetail(int id) async {
+    final response = await _request('GET', '/complaints/$id', requiresAuth: true);
+    return Map<String, dynamic>.from(response['data'] as Map);
+  }
+
+  static Future<List<Map<String, dynamic>>> getDriverComplaints() async {
+    final response = await _request('GET', '/complaints/driver', requiresAuth: true);
+    final data = response['data'];
+    if (data is List) return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> getStoreComplaints(int storeId) async {
+    final response = await _request('GET', '/complaints/store?storeId=$storeId', requiresAuth: true);
+    final data = response['data'];
+    if (data is List) return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    return [];
+  }
+
+  static Future<void> updateComplaintStatus(int id, String status,
+      {String? adminNotes, String? responsibleParty}) async {
+    await _request(
+      'PATCH',
+      '/complaints/$id/status',
+      body: {
+        'status': status,
+        if (adminNotes != null) 'adminNotes': adminNotes,
+        if (responsibleParty != null) 'responsibleParty': responsibleParty,
+      },
+      requiresAuth: true,
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   static Future<void> approveReturn(int returnId) async {
     await _request(
       'POST',

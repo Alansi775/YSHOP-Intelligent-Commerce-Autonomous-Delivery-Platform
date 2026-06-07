@@ -19,6 +19,7 @@ import 'orders_view.dart';
 import 'admins_view.dart';
 import 'users_view.dart';
 import 'returns_view.dart';
+import 'complaints_view.dart';
 import '../customers/settings_view.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -272,6 +273,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       case 5: title = 'Users Management'; break;
       case 6: title = 'Orders & Revenue'; break;
       case 8: title = 'Returns Management'; break;
+      case 9: title = 'Complaints'; break;
     }
     
     return AppBar(
@@ -382,6 +384,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                     _buildDrawerItem(0, Icons.dashboard_rounded, 'Dashboard'),
                     _buildDrawerItem(6, Icons.receipt_long_rounded, 'Orders'),
                     _buildDrawerItem(8, Icons.assignment_return_rounded, 'Returns'),
+                    _buildDrawerItem(9, Icons.report_problem_rounded, 'Complaints'),
                     const SizedBox(height: 8),
                     _buildDrawerItem(2, Icons.storefront_rounded, 'Stores'),
                     _buildDrawerItem(3, Icons.inventory_2_rounded, 'Products'),
@@ -482,6 +485,8 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         return const SettingsView();
       case 8:
         return const ReturnsManagementView();
+      case 9:
+        return const ComplaintsManagementView();
       default:
         return _buildDashboard();
     }

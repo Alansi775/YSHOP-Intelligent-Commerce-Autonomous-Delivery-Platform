@@ -197,6 +197,12 @@ class _AdminSidebarState extends State<AdminSidebar> with SingleTickerProviderSt
           label: 'Returns',
           gradient: AppGradients.danger,
         ),
+        _buildNavItem(
+          index: 9,
+          icon: Icons.report_problem_rounded,
+          label: 'Complaints',
+          gradient: AppGradients.warning,
+        ),
 
         const SizedBox(height: 16),
         if (!_collapsed) _buildSectionLabel('MANAGEMENT'),

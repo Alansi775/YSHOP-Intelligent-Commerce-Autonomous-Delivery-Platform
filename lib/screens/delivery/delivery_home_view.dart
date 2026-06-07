@@ -15,6 +15,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
 import '../../state_management/auth_manager.dart';
 import '../auth/sign_in_view.dart';
@@ -23,6 +24,7 @@ import 'delivery_qr_scanner_view.dart';
 import 'delivery_return_pickup_view.dart';
 import 'map_of_delivery_man.dart';
 import 'delivery_dashboard_view.dart';
+import 'delivery_complaints_view.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  DESIGN CONSTANTS
@@ -65,6 +67,7 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
   ds.Order? _activeOrder;
   bool _isOfferDialogShowing = false;
   bool _isOpenNavLoading = false;
+  int _complaintCount = 0;
   
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -80,6 +83,7 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     _loadDriverStatus();
+    _loadComplaintCount();
   }
 
   @override
@@ -127,6 +131,22 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
     } catch (e) {
       debugPrint('Failed to load driver status: $e');
     }
+  }
+
+  Future<void> _loadComplaintCount() async {
+    try {
+      final complaints = await ApiService.getDriverComplaints();
+      final prefs = await SharedPreferences.getInstance();
+      final seenIds = prefs.getStringList('driver_seen_complaint_ids') ?? [];
+      final unseenCount = complaints.where((c) => !seenIds.contains(c['id']?.toString())).length;
+      if (mounted) setState(() => _complaintCount = unseenCount);
+    } catch (_) {}
+  }
+
+  Future<void> _markComplaintsAsSeen(List<Map<String, dynamic>> complaints) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = complaints.map((c) => c['id']?.toString() ?? '').where((id) => id.isNotEmpty).toList();
+    await prefs.setStringList('driver_seen_complaint_ids', ids);
   }
 
   Future<void> _checkForActiveOrder() async {
@@ -499,12 +519,12 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
     return Scaffold(
       backgroundColor: kDarkBackground,
       appBar: AppBar(
-        title: const Text('Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: kAppBarBackground,
         foregroundColor: kPrimaryTextColor,
         elevation: 0,
         centerTitle: false,
         automaticallyImplyLeading: false,
+        leadingWidth: 140,
         leading: Padding(
           padding: const EdgeInsets.only(left: 12.0),
           child: Row(
@@ -522,6 +542,38 @@ class _DeliveryHomeViewState extends State<DeliveryHomeView> with TickerProvider
                   MaterialPageRoute(builder: (context) => const DeliveryReturnPickupView()),
                 ),
                 child: Icon(Icons.arrow_back_rounded, color: Colors.orange, size: 24),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => DeliveryComplaintsView(
+                    onComplaintsViewed: _markComplaintsAsSeen,
+                  )),
+                ).then((_) => _loadComplaintCount()),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.report_problem_outlined,
+                      color: _complaintCount > 0 ? kAccentBlue : kSecondaryTextColor,
+                      size: 24,
+                    ),
+                    if (_complaintCount > 0) ...[
+                      const SizedBox(width: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: kAccentBlue,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _complaintCount > 9 ? '9+' : '$_complaintCount',
+                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),

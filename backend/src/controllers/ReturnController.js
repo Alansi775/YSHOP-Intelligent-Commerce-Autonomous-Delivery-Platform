@@ -645,6 +645,22 @@ class ReturnController {
         [returnId]
       );
 
+      // Restore stock for all items in the returned order
+      const ret = returns[0];
+      if (ret.order_id) {
+        const [items] = await connection.execute(
+          `SELECT product_id, quantity FROM order_items WHERE order_id = ?`,
+          [ret.order_id]
+        );
+        for (const item of items) {
+          await connection.execute(
+            `UPDATE products SET stock = stock + ? WHERE id = ?`,
+            [item.quantity, item.product_id]
+          );
+        }
+        logger.info(`✅ Stock restored for order ${ret.order_id} after return receipt`);
+      }
+
       connection.release();
 
       logger.info(`✅ Return ${returnId} marked as received by store owner`);

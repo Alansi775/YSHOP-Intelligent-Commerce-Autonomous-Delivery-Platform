@@ -22,6 +22,7 @@ import '../../models/category.dart';
 import '../../services/api_service.dart';
 import '../../services/reactive_sync_service.dart';
 import '../../state_management/auth_manager.dart';
+import '../admin/complaints_view.dart';
 
 class StoreAdminView extends StatefulWidget {
   final String initialStoreName;
@@ -52,6 +53,7 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
   late final AnimationController _orderPulseController;
   late final Animation<double> _orderPulseAnimation;
   int _activeOrdersCount = 0;
+  int _pendingComplaintsCount = 0;
   String? _liveOrdersStoreId;
 
   @override
@@ -187,6 +189,7 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
         
         if (storeId > 0) {
           _startLiveOrderAlerts(storeId.toString());
+          _refreshComplaintsCount(storeId);
         }
 
         if (ownerUid.isNotEmpty) await _fetchProducts(ownerUid);
@@ -206,6 +209,20 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
       _updateLiveOrdersCount(_countActiveOrders(orders));
     } catch (e) {
       debugPrint('Error refreshing active orders count: $e');
+    }
+  }
+
+  Future<void> _refreshComplaintsCount(int storeId) async {
+    try {
+      final complaints = await ApiService.getStoreComplaints(storeId);
+      if (!mounted) return;
+      final pending = complaints.where((c) {
+        final status = (c['status'] as String? ?? '').toUpperCase();
+        return status == 'PENDING' || status == 'UNDER_REVIEW';
+      }).length;
+      setState(() => _pendingComplaintsCount = pending);
+    } catch (e) {
+      debugPrint('Error refreshing complaints count: $e');
     }
   }
 
@@ -249,15 +266,15 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
 
     try {
       final response = await ApiService.getStoreProducts(uidToFetch, bypassCache: true);
-      
+
       if (response is List) {
         _totalProductsCount = response.length;
-        
+
         final productsWithoutCategory = response.where((item) {
           final categoryId = item['category_id'];
           return categoryId == null || categoryId == 0 || categoryId == '';
         }).toList();
-        
+
         setState(() {
           _products = productsWithoutCategory.map((item) => ProductS(
             id: item['id'].toString(),
@@ -274,9 +291,10 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
             stock: item['stock'],
             currency: item['currency'] ?? 'USD',
           )).toList();
-          
+
           _filteredProducts = _searchQuery.isEmpty ? _products : _products.where((p) =>
             p.name.toLowerCase().contains(_searchQuery)).toList();
+          _categoryContentVersion++; // force category cards to re-check out-of-stock
         });
       }
     } catch (e) {
@@ -764,17 +782,18 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                       const SizedBox(height: 48),
                       
                       // Action Buttons
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 16,
+                        runSpacing: 16,
                         children: [
                           _buildHeroButton(
                             'Add Product',
-                            () => Navigator.push(context, 
+                            () => Navigator.push(context,
                               MaterialPageRoute(builder: (_) => const AddProductView()))
                                 .then((_) => _fetchStoreNameAndProducts()),
                             isPrimary: true,
                           ),
-                          const SizedBox(width: 16),
                           _buildHeroButton(
                             'View Orders',
                             () {
@@ -788,6 +807,16 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                             isPrimary: false,
                             badgeCount: _activeOrdersCount,
                             alerting: _activeOrdersCount > 0,
+                          ),
+                          _buildHeroButton(
+                            'Complaints',
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => StoreComplaintsView(storeId: _storeId)),
+                            ).then((_) => _refreshComplaintsCount(_storeId)),
+                            isPrimary: false,
+                            badgeCount: _pendingComplaintsCount,
+                            alerting: _pendingComplaintsCount > 0,
                           ),
                         ],
                       ),
@@ -919,45 +948,41 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                       ]
                     : const [],
               ),
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontFamily: 'TenorSans',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: isPrimary ? Colors.black : Colors.white,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-            if (badgeCount > 0)
-              Positioned(
-                top: -12,
-                right: -10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    badgeCount > 99 ? '99+' : '$badgeCount',
-                    style: const TextStyle(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(
                       fontFamily: 'TenorSans',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: isPrimary ? Colors.black : Colors.white,
+                      letterSpacing: 0.3,
                     ),
                   ),
-                ),
+                  if (badgeCount > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2979FF),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        badgeCount > 99 ? '99+' : '$badgeCount',
+                        style: const TextStyle(
+                          fontFamily: 'TenorSans',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -1231,13 +1256,20 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
   }
 
   Widget _buildProductCardLarge(ProductS product) {
+  final isOutOfStock = product.stock != null && product.stock! <= 0;
   return GestureDetector(
     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailsView(product: product))),
     child: Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06), // خلفية أغمق قليلاً
-        borderRadius: BorderRadius.circular(24), // زوايا أكثر دائرية
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        color: isOutOfStock
+            ? Colors.red.withOpacity(0.08)
+            : Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isOutOfStock
+              ? Colors.red.withOpacity(0.35)
+              : Colors.white.withOpacity(0.1),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1251,6 +1283,13 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                       ? Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity, height: double.infinity)
                       : Container(color: Colors.white.withOpacity(0.03), child: Center(child: Icon(Icons.inventory_2_outlined, color: Colors.white.withOpacity(0.2)))),
                 ),
+                if (isOutOfStock)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.45),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                  ),
                 Positioned(
                   top: 10,
                   right: 10,
@@ -1258,6 +1297,31 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                     status: product.approved ? 'Approved' : 'Pending',
                   ),
                 ),
+                if (isOutOfStock)
+                  Positioned(
+                    bottom: 10,
+                    left: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.inventory_2_outlined, color: Colors.white, size: 13),
+                          SizedBox(width: 5),
+                          Text(
+                            'Out of Stock',
+                            style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'TenorSans'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1395,6 +1459,7 @@ class _CategoryCardLargeState extends State<_CategoryCardLarge> {
   String? _lastProductImage;
   bool _isLoading = true;
   bool _hovering = false;
+  bool _hasOutOfStock = false;
 
   @override
   void initState() {
@@ -1419,8 +1484,13 @@ class _CategoryCardLargeState extends State<_CategoryCardLarge> {
         if (products.isNotEmpty && mounted) {
           final lastProduct = products.last;
           final imageUrl = lastProduct['image_url'] as String? ?? '';
+          final outOfStock = products.any((p) {
+            final stock = p['stock'];
+            return stock != null && (stock is int ? stock <= 0 : (int.tryParse(stock.toString()) ?? 1) <= 0);
+          });
           setState(() {
             _lastProductImage = imageUrl.isNotEmpty ? Store.getFullImageUrl(imageUrl) : null;
+            _hasOutOfStock = outOfStock;
             _isLoading = false;
           });
         } else if (mounted) {
@@ -1515,6 +1585,29 @@ class _CategoryCardLargeState extends State<_CategoryCardLarge> {
                     // controls: delete on left, badge on right
                     Positioned(top: 12, left: 12, child: _deleteButton(widget.onDelete)),
                     Positioned(top: 12, right: 12, child: _badgeContainer(widget.orderNumber)),
+                    if (_hasOutOfStock)
+                      Positioned(
+                        bottom: 12,
+                        right: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.88),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 12),
+                              SizedBox(width: 4),
+                              Text(
+                                'Stock Alert',
+                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600, fontFamily: 'TenorSans'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
 
                     // subtle hint text when hovering
                     if (_hovering)

@@ -762,3 +762,112 @@ export function renderReceiptStoreHTML({ order, store, splits = {}, logoUrl }) {
   </html>
   `;
 }
+
+/**
+ * Render delivery confirmation email sent to customer when driver marks delivered.
+ * Includes a "Report a Problem" link valid for 30 minutes.
+ */
+export function renderDeliveryConfirmationHTML({ order, driverName, deliveryTime, reportUrl }) {
+  const orderId = order.id || '';
+  const storeName = order.store_name || 'Store';
+  const paymentMethod = order.payment_method || '';
+  const total = order.total_price || order.total || 0;
+  const currency = order.currency || '';
+  const customerName = order.customer_name || order.customer?.name || 'Customer';
+
+  const paymentLabel = paymentMethod.toLowerCase() === 'pay at door'
+    ? 'Pay at Door (due upon delivery)'
+    : paymentMethod || 'Online Payment';
+
+  const timeStr = deliveryTime
+    ? new Date(deliveryTime).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    : new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+  return `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:0; background:#FAFAFA; }
+    .wrapper { padding: 30px 20px; background: #FAFAFA; }
+    @media (prefers-color-scheme: dark) { .wrapper { background:#0B0B0B } }
+    .container { max-width:580px; margin:0 auto; background:#fff; border-radius:8px; overflow:hidden; border:1px solid #EEE; box-shadow:0 4px 20px rgba(0,0,0,0.04); }
+    @media (prefers-color-scheme: dark) { .container { background:#111; border-color:#222 } }
+    .header { padding:32px 28px; text-align:center; background:#111; }
+    .wordmark { font-size:26px; font-weight:900; letter-spacing:8px; color:#fff; }
+    .header-badge { display:inline-block; margin-top:8px; color:#4CAF50; font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; }
+    @media (prefers-color-scheme: dark) { .header { background:#fff; } .wordmark { color:#000; } }
+    .check-circle { width:64px; height:64px; background:#4CAF50; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:24px auto 12px; }
+    .content { padding:28px 32px; color:#222; }
+    @media (prefers-color-scheme: dark) { .content { color:#DDD } }
+    .muted { color:#6B7280; }
+    .small { font-size:13px; }
+    .info-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #F3F4F6; font-size:14px; }
+    @media (prefers-color-scheme: dark) { .info-row { border-color:#222 } }
+    .info-label { color:#6B7280; }
+    .info-value { font-weight:600; color:#111; }
+    @media (prefers-color-scheme: dark) { .info-value { color:#FFF; } }
+    .report-btn { display:block; margin:24px auto 0; width:fit-content; padding:14px 32px; background:#EF4444; color:#fff !important; text-decoration:none; border-radius:8px; font-weight:700; font-size:14px; letter-spacing:0.5px; text-align:center; }
+    .report-note { font-size:12px; color:#9CA3AF; text-align:center; margin-top:10px; }
+    .divider { margin:24px 0; border:none; border-top:1px solid #F0F0F0; }
+    .footer { background:#F9F9F9; padding:20px 28px; text-align:center; font-size:11px; color:#9CA3AF; letter-spacing:0.5px; border-top:1px solid #F0F0F0; }
+    @media (prefers-color-scheme: dark) { .footer { background:#0D0D0D; border-color:#222; } }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div class="wordmark">YSHOP</div>
+        <div class="header-badge">✓ Delivered</div>
+      </div>
+      <div class="content">
+        <p style="font-size:15px; margin-bottom:4px;">Hello ${customerName},</p>
+        <h2 style="margin:4px 0 20px; font-size:20px; font-weight:700;">Your order has been delivered!</h2>
+
+        <div class="info-row">
+          <span class="info-label">Order #</span>
+          <span class="info-value">${orderId}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Store</span>
+          <span class="info-value">${storeName}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Delivered at</span>
+          <span class="info-value">${timeStr}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Delivered by</span>
+          <span class="info-value">${driverName || 'Driver'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Payment</span>
+          <span class="info-value">${paymentLabel}</span>
+        </div>
+        <div class="info-row" style="border-bottom:none;">
+          <span class="info-label">Total</span>
+          <span class="info-value" style="font-size:16px;">${Number(total).toFixed(2)} ${currency}</span>
+        </div>
+
+        <hr class="divider" />
+
+        <p class="small muted" style="text-align:center; margin-bottom:8px;">
+          Something wrong with your order? You have <strong>30 minutes</strong> from delivery to report a problem.
+        </p>
+        <a href="${reportUrl}" class="report-btn">Report a Problem</a>
+        <p class="report-note">This button will stop working 30 minutes after delivery.</p>
+      </div>
+      <div class="footer">
+        <p>© 2026 YSHOP. ALL RIGHTS RESERVED.</p>
+        <p style="margin-top:4px;">Support: <a href="mailto:${process.env.EMAIL_USER || 'support@yshop.com'}" style="color:#42A5F5;">${process.env.EMAIL_USER || 'support@yshop.com'}</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}

@@ -341,6 +341,7 @@ export class Order {
           o.payment_method, o.delivery_option, o.driver_id, o.created_at, o.updated_at,
           o.driver_location, o.picked_up_at, o.delivered_at,
           s.name as store_name,
+          s.store_type as store_type,
           s.latitude as store_latitude,
           s.longitude as store_longitude,
           s.phone as store_phone,
@@ -751,6 +752,20 @@ export class Order {
     } catch (error) {
       connection.release();
       throw error;
+    }
+  }
+
+  // Restore stock for all items in an order (used on cancellation / store rejection / return receipt)
+  static async restoreOrderStock(orderId) {
+    const [items] = await pool.execute(
+      `SELECT product_id, quantity FROM order_items WHERE order_id = ?`,
+      [orderId]
+    );
+    for (const item of items) {
+      await pool.execute(
+        `UPDATE products SET stock = stock + ? WHERE id = ?`,
+        [item.quantity, item.product_id]
+      );
     }
   }
 

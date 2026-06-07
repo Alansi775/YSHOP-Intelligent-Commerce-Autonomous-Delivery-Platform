@@ -1,4 +1,5 @@
 import Order from '../models/Order.js';
+import pool from '../config/database.js';
 import logger from '../config/logger.js';
 import { getEmailService, renderReceiptCustomerHTML, renderReceiptStoreHTML } from '../utils/emailService.js';
 import { Store } from '../models/Store.js';
@@ -219,7 +220,24 @@ export class OrderController {
         }
       }
 
+      const previousStatus = order.status;
+
       await Order.updateStatus(id, status);
+
+      // Restore stock when order is cancelled (store rejection or customer cancel)
+      if (status === 'cancelled') {
+        await Order.restoreOrderStock(id).catch(e => logger.warn(`Stock restore failed for order ${id}:`, e.message));
+      }
+
+      // Customer cancelled return → delete returned_products record so it disappears from admin/store/driver
+      if (status === 'delivered' && previousStatus === 'return') {
+        try {
+          await pool.execute(`DELETE FROM returned_products WHERE order_id = ?`, [id]);
+          logger.info(`✓ Deleted returned_products for order ${id} (customer cancelled return)`);
+        } catch (e) {
+          logger.warn(`Failed to delete returned_products for order ${id}:`, e.message);
+        }
+      }
 
       // Set cache-busting headers after update
       res.setHeader('Cache-Control', 'max-age=0, no-cache, no-store, must-revalidate');

@@ -9,6 +9,7 @@ import logger from '../config/logger.js';
 import { getIO } from '../utils/socketInstance.js';
 import pool from '../config/database.js';
 import admin from '../config/firebase.js';
+import { getEmailService, renderDeliveryConfirmationHTML } from '../utils/emailService.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONFIGURATION
@@ -689,8 +690,37 @@ class DeliveryController {
       await DeliveryRequest.recordCompletedDelivery(uid, orderId, earnings);
 
       logger.info(`Order ${orderId} delivered by driver ${uid}. Earnings: $${earnings.toFixed(2)}`);
-      res.json({ 
-        success: true, 
+
+      // Send delivery confirmation email to customer (fire-and-forget)
+      setImmediate(async () => {
+        try {
+          const customerEmail = order.customer_email;
+          if (customerEmail) {
+            const emailService = await getEmailService();
+            if (emailService) {
+              const backendUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
+              const reportUrl = `${backendUrl}/report-problem?orderId=${orderId}`;
+              const html = renderDeliveryConfirmationHTML({
+                order: { ...order, customer_name: order.customer_name },
+                driverName: order.driver_name,
+                deliveryTime: new Date().toISOString(),
+                reportUrl,
+              });
+              await emailService.sendOrderReceiptEmail(
+                customerEmail,
+                `YSHOP — Your Order #${orderId} Has Been Delivered`,
+                html
+              );
+              logger.info(`✓ Delivery confirmation email sent to ${customerEmail} for order ${orderId}`);
+            }
+          }
+        } catch (emailErr) {
+          logger.warn(`Delivery confirmation email failed for order ${orderId}:`, emailErr.message);
+        }
+      });
+
+      res.json({
+        success: true,
         message: 'Order delivered',
         data: { earnings }
       });

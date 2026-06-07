@@ -387,6 +387,7 @@ class CategoryProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isOutOfStock = product.stock != null && product.stock! <= 0;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -396,9 +397,11 @@ class CategoryProductCard extends StatelessWidget {
         splashColor: Colors.white.withOpacity(0.05),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.06),
+            color: isOutOfStock ? Colors.red.withOpacity(0.08) : Colors.white.withOpacity(0.06),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(
+              color: isOutOfStock ? Colors.red.withOpacity(0.35) : Colors.white.withOpacity(0.1),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,6 +430,13 @@ class CategoryProductCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (isOutOfStock)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.45),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                        ),
+                      ),
                     Container(
                       decoration: BoxDecoration(color: Colors.black.withOpacity(0.2)),
                     ),
@@ -435,6 +445,31 @@ class CategoryProductCard extends StatelessWidget {
                       right: 12,
                       child: StatusBadge(status: product.approved ? 'Approved' : 'Pending'),
                     ),
+                    if (isOutOfStock)
+                      Positioned(
+                        bottom: 10,
+                        left: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inventory_2_outlined, color: Colors.white, size: 13),
+                              SizedBox(width: 5),
+                              Text(
+                                'Out of Stock',
+                                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'TenorSans'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
