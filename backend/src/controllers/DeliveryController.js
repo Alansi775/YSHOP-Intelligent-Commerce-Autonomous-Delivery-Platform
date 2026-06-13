@@ -1035,9 +1035,9 @@ function buildOfferResponse(order, driverLat, driverLng) {
   const remainingSeconds = Math.max(0, Math.floor((expiresAt - new Date()) / 1000));
 
   // DEBUG: Log the order object to see what we're getting
-  logger.info(`🔍 Order object keys: ${Object.keys(order).join(', ')}`);
-  logger.info(`🔍 Order.currency value: "${order.currency}" (type: ${typeof order.currency})`);
-  logger.info(`🔍 Full order object: ${JSON.stringify(order)}`);
+  logger.info(` Order object keys: ${Object.keys(order).join(', ')}`);
+  logger.info(` Order.currency value: "${order.currency}" (type: ${typeof order.currency})`);
+  logger.info(` Full order object: ${JSON.stringify(order)}`);
 
   const offerResponse = {
     order_id: order.id,

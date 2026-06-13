@@ -40,7 +40,7 @@ class AuthController {
       const verificationToken = generateVerificationToken();
       const tokenExpires = generateTokenExpiry(24);
 
-      // ✅ احفظ التوكين في DB
+      //  احفظ التوكين في DB
       await connection.execute(
         `INSERT INTO users (uid, email, password_hash, display_name, name, surname, phone, national_id, address, latitude, longitude, building_info, apartment_number, delivery_instructions, email_verified, verification_token, verification_token_expires) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?, ?)`,
@@ -85,7 +85,7 @@ class AuthController {
 
       const connection = await pool.getConnection();
 
-      // ✅ شيك في الجدولين عشان ما يكرر الإيميل
+      //  شيك في الجدولين عشان ما يكرر الإيميل
       const [existingUsers] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
       const [existingDrivers] = await connection.execute('SELECT id FROM delivery_requests WHERE email = ?', [email]);
       
@@ -100,7 +100,7 @@ class AuthController {
       const verificationToken = generateVerificationToken();
       const tokenExpires = generateTokenExpiry(24);
 
-      // ✅ احفظ في delivery_requests (مش users)
+      //  احفظ في delivery_requests (مش users)
       await connection.execute(
         `INSERT INTO delivery_requests 
           (uid, email, password_hash, name, phone, national_id, address, latitude, longitude, status, email_verified, verification_token, verification_token_expires) 
@@ -221,7 +221,7 @@ class AuthController {
           `UPDATE stores SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?`,
           [storesWithToken[0].id]
         );
-        logger.info(`✅ Store email verified: ${storesWithToken[0].email}`);
+        logger.info(` Store email verified: ${storesWithToken[0].email}`);
         connection.release();
         return res.status(200).sendFile(successPath);
       }
@@ -240,12 +240,12 @@ class AuthController {
           `UPDATE users SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?`,
           [usersWithToken[0].id]
         );
-        logger.info(`✅ User email verified: ${usersWithToken[0].email}`);
+        logger.info(` User email verified: ${usersWithToken[0].email}`);
         connection.release();
         return res.status(200).sendFile(successPath);
       }
 
-      // 3) ✅ شيك في delivery_requests (الموصلين)
+      // 3)  شيك في delivery_requests (الموصلين)
       const [driversWithToken] = await connection.execute(
         `SELECT id, email FROM delivery_requests 
          WHERE email_verified = 0 AND verification_token = ? 
@@ -259,7 +259,7 @@ class AuthController {
           `UPDATE delivery_requests SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?`,
           [driversWithToken[0].id]
         );
-        logger.info(`✅ Driver email verified: ${driversWithToken[0].email}`);
+        logger.info(` Driver email verified: ${driversWithToken[0].email}`);
         connection.release();
         return res.status(200).sendFile(successPath);
       }

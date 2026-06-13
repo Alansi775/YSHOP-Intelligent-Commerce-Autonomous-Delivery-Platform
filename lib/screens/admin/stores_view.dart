@@ -106,7 +106,7 @@ class _StoresManagementViewState extends State<StoresManagementView> with Single
           // Debug: Print stores and their statuses
           debugPrint('📥 [_loadStores] Loaded ${_allStores.length} total stores from backend');
           debugPrint(' Approved: ${_approvedStores.length}');
-          debugPrint('⏳ Pending/Rejected: ${_pendingStores.length}');
+          debugPrint(' Pending/Rejected: ${_pendingStores.length}');
           for (var store in _allStores) {
             debugPrint('  - ${store.storeName}: ${store.status}');
           }
@@ -162,7 +162,7 @@ class _StoresManagementViewState extends State<StoresManagementView> with Single
         
         // Wait for backend to process
         await Future.delayed(const Duration(milliseconds: 1000));
-        debugPrint('⏳ [APPROVE] Waited 1000ms for backend');
+        debugPrint(' [APPROVE] Waited 1000ms for backend');
         
         // 🔥 CRITICAL: Reload stores from backend to sync state
         debugPrint(' [APPROVE] Reloading stores from backend...');
@@ -226,7 +226,7 @@ class _StoresManagementViewState extends State<StoresManagementView> with Single
         
         // Wait for backend to process
         await Future.delayed(const Duration(milliseconds: 1000));
-        debugPrint('⏳ [REJECT] Waited 1000ms for backend');
+        debugPrint(' [REJECT] Waited 1000ms for backend');
         
         // 🔥 CRITICAL: Reload stores from backend to sync state
         debugPrint(' [REJECT] Reloading stores from backend...');

@@ -1202,7 +1202,7 @@ class ApiService {
         useCache: false,
         cacheTtl: 0,
       );
-      debugPrint('✅ API: getStoreReturns() - Response: ${response['data']?.length ?? 0} returns');
+      debugPrint(' API: getStoreReturns() - Response: ${response['data']?.length ?? 0} returns');
       return List<dynamic>.from(response['data'] ?? []);
     } catch (e) {
       debugPrint('❌ API: Error fetching store returns: $e');

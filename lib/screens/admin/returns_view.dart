@@ -48,7 +48,7 @@ class _ReturnsManagementViewState extends State<ReturnsManagementView> with Reac
         );
         _isLoading = false;
       });
-      debugPrint('✅ Loaded ${_returnedProducts.length} returned products');
+      debugPrint(' Loaded ${_returnedProducts.length} returned products');
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {

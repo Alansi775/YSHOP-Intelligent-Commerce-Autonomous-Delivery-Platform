@@ -43,6 +43,13 @@ const router = express.Router();
 router.post('/chat', verifyJWTToken, AIController.chat);
 
 /**
+ * POST /api/v1/ai/interact
+ * Record a user interaction with a product surfaced by AI.
+ * eventType: 'view' | 'add_to_cart' | 'purchase'
+ */
+router.post('/interact', verifyJWTToken, AIController.interact);
+
+/**
  * POST /api/v1/ai/chat/history
  * Get conversation history for the current user
  * 

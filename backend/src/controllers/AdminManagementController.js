@@ -304,7 +304,7 @@ export async function getApprovedStores(req, res, next) {
 // This correctly reads the status column, not approval timestamps
 export async function getAllStoresAdmin(req, res, next) {
   try {
-    console.log('🔍 [getAllStoresAdmin] Fetching all stores from database...');
+    console.log(' [getAllStoresAdmin] Fetching all stores from database...');
     
     // 🔥 CRITICAL: Prevent all caching levels
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
@@ -332,7 +332,7 @@ export async function getAllStoresAdmin(req, res, next) {
     );
     connection.release();
 
-    console.log(`🔍 [getAllStoresAdmin] Found ${stores.length} stores:`);
+    console.log(` [getAllStoresAdmin] Found ${stores.length} stores:`);
     for (const store of stores) {
       console.log(`  - ${store.name}: status="${store.status}"`);
     }

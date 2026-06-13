@@ -274,7 +274,7 @@ class _ProductDetailViewState extends State<ProductDetailView>
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  💬 CHAT ACTION
+  //   CHAT ACTION
   // ═══════════════════════════════════════════════════════════
   void _startChat() {
     if (widget.product.storeOwnerEmail == null ||

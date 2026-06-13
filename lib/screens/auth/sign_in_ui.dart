@@ -174,7 +174,7 @@ class SignInUIComponents {
     );
   }
 
-  /// 🛍️ CUSTOMER FORMS
+  ///  CUSTOMER FORMS
   static Widget loginCustomerForm({
     required TextEditingController emailController,
     required TextEditingController passwordController,

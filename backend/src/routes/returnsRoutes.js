@@ -80,7 +80,7 @@ router.use(verifyFirebaseToken);
 
 // Debug middleware for returns routes - log BEFORE auth check
 router.use((req, res, next) => {
-  console.log(`\n🔍 [RETURNS ROUTE] ${req.method} ${req.path}`, {
+  console.log(`\n [RETURNS ROUTE] ${req.method} ${req.path}`, {
     fullUrl: req.url,
     storeId: req.params.storeId,
     returnId: req.params.returnId,

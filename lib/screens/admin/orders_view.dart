@@ -133,13 +133,13 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
     setState(() => _isLoading = true);
     try {
       final response = await ApiService.getAdminOrders();
-      debugPrint('🔍 Admin Orders Response: $response');
+      debugPrint(' Admin Orders Response: $response');
       if (mounted) {
         final orders = (response as List?)?.map((o) {
           debugPrint('📦 Processing order: $o');
           return OrderModel.fromMap(o);
         }).toList() ?? [];
-        debugPrint('✅ Loaded ${orders.length} orders');
+        debugPrint(' Loaded ${orders.length} orders');
         
         // Get currency from first order
         if (orders.isNotEmpty) {
@@ -161,7 +161,7 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
   List<OrderModel> get _filteredOrders {
     if (_filterStatus == 'all') return _orders;
     final filtered = _orders.where((o) => o.status.toLowerCase() == _filterStatus).toList();
-    debugPrint('🔍 Filtering by "$_filterStatus": ${_orders.length} total orders, ${filtered.length} matched');
+    debugPrint(' Filtering by "$_filterStatus": ${_orders.length} total orders, ${filtered.length} matched');
     return filtered;
   }
 

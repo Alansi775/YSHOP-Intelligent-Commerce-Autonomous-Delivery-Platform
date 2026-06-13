@@ -57,7 +57,7 @@ class _CategoryReorderViewState extends State<CategoryReorderView> {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✅ تم حفظ الترتيب بنجاح'),
+              content: Text(' تم حفظ الترتيب بنجاح'),
               backgroundColor: Colors.green,
             ),
           );

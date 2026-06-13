@@ -1,77 +1,37 @@
-// EmbeddingService.js
-import { normalizeText, tokenize, unique } from '../utils/textProcessing.js';
+// EmbeddingService.js — Thin adapter: delegates to VectorStore (real embeddings)
+// Kept for backward compatibility with RankingService.
+// The old hash-based fake embeddings are removed entirely.
+import { VectorStore } from './VectorStore.js';
+import { EmbeddingPipeline } from './EmbeddingPipeline.js';
 
 export class EmbeddingService {
-  static cache = new Map();
-
-  static textToVector(text) {
-    const tokens = unique(tokenize(text));
-    const vector = new Map();
-
-    for (const token of tokens) {
-      const hash = token.split('').reduce((acc, char) => ((acc * 31) + char.charCodeAt(0)) >>> 0, 7);
-      const bucket = hash % 128;
-      vector.set(bucket, (vector.get(bucket) || 0) + 1);
-    }
-
-    return vector;
-  }
+  // Used by RankingService.scoreProduct() synchronously.
+  // Products coming from ProductRetrievalService now carry a pre-computed
+  // `semanticScore` from VectorStore — RankingService will use that instead.
+  // These stubs exist only so old call-sites don't crash during the transition.
 
   static cosineSimilarity(a, b) {
-    if (!a.size || !b.size) return 0;
-
-    let dot = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (const value of a.values()) normA += value * value;
-    for (const value of b.values()) normB += value * value;
-
-    const smaller = a.size <= b.size ? a : b;
-    const larger = a.size <= b.size ? b : a;
-
-    for (const [bucket, value] of smaller.entries()) {
-      dot += value * (larger.get(bucket) || 0);
-    }
-
-    if (normA === 0 || normB === 0) return 0;
-    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    return EmbeddingPipeline.cosineSimilarity(a, b);
   }
 
-  static buildDocument(product) {
-    return normalizeText([
-      product.name,
-      product.description,
-      product.store_type,
-      product.store_name,
-    ].filter(Boolean).join(' '));
+  // RankingService calls this synchronously, but products now carry
+  // `product.semanticScore` (pre-computed in ProductRetrievalService).
+  // Return an empty placeholder — RankingService checks for the pre-computed
+  // score before calling this.
+  static embedProduct(_product) {
+    return [];
   }
 
-  static embedProduct(product) {
-    const key = String(product.id);
-    if (this.cache.has(key)) return this.cache.get(key);
-
-    const vector = this.textToVector(this.buildDocument(product));
-    this.cache.set(key, vector);
-    return vector;
+  static embedQuery(_query) {
+    return [];
   }
 
-  static embedQuery(query) {
-    return this.textToVector(query);
-  }
-
+  // Async search — delegates to VectorStore (real Gemini embeddings).
   static async search(query, products, topK = 20) {
-    const queryVector = this.embedQuery(query);
-    const scored = (products || []).map(product => {
-      const semanticScore = this.cosineSimilarity(queryVector, this.embedProduct(product));
-      return { ...product, semanticScore };
-    });
-
-    scored.sort((a, b) => b.semanticScore - a.semanticScore || b.stock - a.stock || b.id - a.id);
-    return scored.slice(0, topK);
+    return VectorStore.search(query, products, topK);
   }
 
   static clearCache() {
-    this.cache.clear();
+    VectorStore.clearQueryCache();
   }
 }

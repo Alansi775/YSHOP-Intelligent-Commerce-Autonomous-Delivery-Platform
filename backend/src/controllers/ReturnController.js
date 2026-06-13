@@ -342,7 +342,7 @@ class ReturnController {
         [storeId]
       );
 
-      logger.info(`✅ RETURNS FILTER VERIFICATION - APPROVED ONLY`, {
+      logger.info(` RETURNS FILTER VERIFICATION - APPROVED ONLY`, {
         storeId,
         acceptedCount: returns?.length || 0,
         rejectedCount: rejectedReturns?.length || 0,
@@ -590,7 +590,7 @@ class ReturnController {
       );
 
       connection.release();
-      logger.info(`✅ Driver ${driverUid} picked up return ${returnId}`);
+      logger.info(` Driver ${driverUid} picked up return ${returnId}`);
 
       return res.status(200).json({
         success: true,
@@ -658,12 +658,12 @@ class ReturnController {
             [item.quantity, item.product_id]
           );
         }
-        logger.info(`✅ Stock restored for order ${ret.order_id} after return receipt`);
+        logger.info(` Stock restored for order ${ret.order_id} after return receipt`);
       }
 
       connection.release();
 
-      logger.info(`✅ Return ${returnId} marked as received by store owner`);
+      logger.info(` Return ${returnId} marked as received by store owner`);
 
       return res.status(200).json({
         success: true,

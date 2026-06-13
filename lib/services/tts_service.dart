@@ -79,29 +79,47 @@ class TTSService {
     double blend(double low, double high) => low + (high - low) * t;
 
     switch (mood) {
+      // Natural, slightly dynamic — not robotic
       case 'neutral':
-        return (stability: blend(0.64, 0.46), similarityBoost: 0.75, style: blend(0.08, 0.18));
+        return (stability: blend(0.55, 0.35), similarityBoost: 0.78, style: blend(0.15, 0.35));
+
+      // Warm, invested — sounds like someone who genuinely cares
       case 'warm':
       case 'caring':
-        return (stability: blend(0.62, 0.48), similarityBoost: 0.80, style: blend(0.16, 0.42));
+        return (stability: blend(0.48, 0.28), similarityBoost: 0.84, style: blend(0.28, 0.62));
+
+      // Very expressive — almost unhinged excitement
       case 'excited':
-        return (stability: blend(0.42, 0.20), similarityBoost: 0.82, style: blend(0.60, 1.0));
+        return (stability: blend(0.28, 0.06), similarityBoost: 0.88, style: blend(0.75, 1.0));
+
+      // Light, bouncy, teasing
       case 'playful':
-        return (stability: blend(0.48, 0.30), similarityBoost: 0.80, style: blend(0.40, 0.82));
+        return (stability: blend(0.38, 0.10), similarityBoost: 0.85, style: blend(0.58, 0.96));
+
+      // Slightly raised, inquisitive
       case 'curious':
-        return (stability: blend(0.58, 0.40), similarityBoost: 0.78, style: blend(0.20, 0.55));
+        return (stability: blend(0.48, 0.22), similarityBoost: 0.82, style: blend(0.32, 0.68));
+
+      // Near-chaotic — maximum laughter feel
       case 'laugh':
-        return (stability: blend(0.46, 0.28), similarityBoost: 0.80, style: blend(0.42, 0.88));
+        return (stability: blend(0.22, 0.04), similarityBoost: 0.86, style: blend(0.68, 1.0));
+
+      // Barely audible, intimate
       case 'whisper':
-        return (stability: blend(0.88, 0.70), similarityBoost: 0.72, style: blend(0.02, 0.18));
+        return (stability: blend(0.94, 0.80), similarityBoost: 0.70, style: blend(0.01, 0.06));
+
+      // Slow, heavy, sincere
       case 'disappointed':
       case 'sad':
       case 'apologetic':
-        return (stability: blend(0.84, 0.66), similarityBoost: 0.74, style: blend(0.10, 0.26));
+        return (stability: blend(0.75, 0.52), similarityBoost: 0.76, style: blend(0.14, 0.32));
+
+      // Full chaos mode
       case 'crazy':
-        return (stability: blend(0.38, 0.18), similarityBoost: 0.82, style: blend(0.70, 1.0));
+        return (stability: blend(0.18, 0.03), similarityBoost: 0.88, style: blend(0.85, 1.0));
+
       default:
-        return (stability: blend(0.64, 0.42), similarityBoost: 0.75, style: blend(0.10, 0.22));
+        return (stability: blend(0.55, 0.32), similarityBoost: 0.78, style: blend(0.15, 0.38));
     }
   }
 
@@ -133,9 +151,8 @@ class TTSService {
   }
 
   /// Convert AI expression tags to natural text for ElevenLabs.
-  /// ElevenLabs text-to-speech does NOT support SSML tags.
-  /// We convert them to punctuation/words that ElevenLabs handles naturally.
-  static String _prepareForTTS(String text, {String voiceCue = '', String pause = 'normal'}) {
+  /// ElevenLabs does NOT support SSML — we drive emotion through text cues and punctuation.
+  static String _prepareForTTS(String text, {String voiceCue = '', String pause = 'normal', double pace = 1.0, String mood = 'neutral', double energy = 0.65}) {
     var t = text;
 
     final normalizedPause = _normalizePause(pause);
@@ -145,7 +162,7 @@ class TTSService {
       if (lowered == 'laugh' || lowered == 'laugh_soft' || lowered == 'chuckle') {
         t = lowered == 'laugh' ? '(laughs) $t' : '(chuckles) $t';
       } else if (lowered == 'laugh_big') {
-        t = '(laughs) $t';
+        t = '(ha!) $t';
       } else if (lowered == 'deep_breath') {
         t = '(deep breath) $t';
       } else if (lowered == 'pause') {
@@ -153,14 +170,28 @@ class TTSService {
       } else if (lowered == 'thinking' || lowered == 'hmm') {
         t = '(hmm) $t';
       } else if (lowered == 'sigh') {
-        t = '(sigh) $t';
+        t = '(sighs) $t';
       } else if (lowered == 'whisper') {
-        t = '(whispers) $t';
+        t = '(whispering) $t';
       } else if (lowered != 'hey' && lowered != 'hello' && lowered != 'hi' && lowered != 'يا هلا' && lowered != 'مرحبا' && lowered != 'اهلا' && lowered != 'أهلا') {
         t = '$cue. $t';
       }
     } else if (normalizedPause == 'long') {
       t = '... $t';
+    }
+
+    // Pace-based text shaping: slow pace → add pauses, fast → strip them
+    if (pace <= 0.84 && !t.startsWith('...') && !t.startsWith('(')) {
+      // Build in a natural hesitation for dramatic/slow delivery
+      t = t.replaceAll(RegExp(r',\s+'), ', ... ');
+    } else if (pace >= 1.15) {
+      // Fast pace — remove filler pauses
+      t = t.replaceAll(RegExp(r'\.\.\.\s*'), ' ');
+    }
+
+    // Excited/laugh with high energy → add emphasis punctuation
+    if ((mood == 'excited' || mood == 'laugh') && energy >= 0.82 && !t.endsWith('!') && !t.endsWith('?')) {
+      t = '$t!';
     }
 
     t = t.replaceAll(RegExp(r'<break\s*time="[^"]*"\s*/?>'), '...');
@@ -183,12 +214,12 @@ class TTSService {
     debugPrint('[TTS] API Key loaded: ${_apiKey.isEmpty ? "EMPTY" : "EXISTS (${_apiKey.substring(0, 5)}...)"} | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | pause=$pause | cue=${cue.isEmpty ? "none" : cue} | rawText="${text.substring(0, text.length.clamp(0, 140))}"');
     if (text.trim().isEmpty) return false;
 
-    final ttsText = _prepareForTTS(text, voiceCue: cue, pause: pause);
-    debugPrint('[TTS] Prepared | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | pause=$pause | cue=${cue.isEmpty ? "none" : cue} | text="${ttsText.substring(0, ttsText.length.clamp(0, 180))}"');
+    final pace = _clamp((voiceProfile?['pace'] as num?)?.toDouble() ?? 1.0, 0.75, 1.35);
+    final ttsText = _prepareForTTS(text, voiceCue: cue, pause: pause, pace: pace, mood: mood, energy: intensity);
+    debugPrint('[TTS] Prepared | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | pace=${pace.toStringAsFixed(2)} | cue=${cue.isEmpty ? "none" : cue} | text="${ttsText.substring(0, ttsText.length.clamp(0, 180))}"');
     if (ttsText.isEmpty) return false;
 
     final t = ttsText.length > 300 ? '${ttsText.substring(0, 297)}...' : ttsText;
-    final pace = (voiceProfile?['pace'] as num?)?.toDouble() ?? 1.0;
     final pitch = (voiceProfile?['pitch'] as num?)?.toDouble() ?? 1.0;
     final volume = (voiceProfile?['volume'] as num?)?.toDouble() ?? 1.0;
     final h = _hash(
@@ -329,7 +360,7 @@ class TTSService {
         debugPrint('[TTS] Got ${r.bodyBytes.length} bytes');
         return r.bodyBytes;
       }
-      debugPrint('[TTS] API ${r.statusCode}');
+      debugPrint('[TTS] API ${r.statusCode} | body=${r.body.substring(0, r.body.length.clamp(0, 300))}');
       return null;
     } on TimeoutException {
       debugPrint('[TTS] API timeout');

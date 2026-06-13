@@ -172,24 +172,24 @@ export class IntentEngine {
 
     if (isVague) {
       return {
-        showProducts: false,
+        showProducts: true,
         storeType: null,
         confidence: 0.76,
         source: 'rule',
         isProductDiscussion: false,
         discussionProductId: null,
-        reply: this.buildReply(language, 'Sure. What exactly are you looking for?', '(hmm) ايش بالضبط تدور عليه؟'),
+        reply: this.buildReply(language, 'Sure, let me show you some options', 'تفضل، خلني أعطيك خيارات'),
       };
     }
 
     return {
-      showProducts: false,
+      showProducts: true,
       storeType: null,
       confidence: 0.5,
       source: 'ml',
       isProductDiscussion: false,
       discussionProductId: null,
-      reply: this.buildReply(language, 'Tell me what you need and I will help.', 'قلي ايش تشتي وانا اساعدك'),
+      reply: this.buildReply(language, 'Let me find something for you', 'خلني أشوف لك شي'),
     };
   }
 }

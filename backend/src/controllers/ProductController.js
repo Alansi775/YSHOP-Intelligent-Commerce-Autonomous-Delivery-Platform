@@ -1,5 +1,7 @@
 import Product from '../models/Product.js';
 import logger from '../config/logger.js';
+import { ProductRetrievalService } from '../services/ProductRetrievalService.js';
+import { VectorStore } from '../services/VectorStore.js';
 
 export class ProductController {
   static async getAll(req, res, next) {
@@ -70,6 +72,9 @@ export class ProductController {
         currency: currency || 'USD', // Default to USD if not provided
       });
 
+      // New product starts as pending — clear cache so stale data doesn't linger
+      ProductRetrievalService.clearCache();
+
       res.status(201).json({
         success: true,
         data: product,
@@ -95,6 +100,17 @@ export class ProductController {
         return res.status(404).json({
           success: false,
           message: 'Product not found',
+        });
+      }
+
+      // Invalidate catalog cache immediately
+      ProductRetrievalService.clearCache();
+
+      // If name or description changed, the old embedding is stale — re-embed in background
+      if (product && (updateData.name !== undefined || updateData.description !== undefined)) {
+        setImmediate(() => {
+          VectorStore.embedAndStoreById(product.id)
+            .catch(err => logger.debug(`[ProductController] re-embed after update failed: ${err.message}`));
         });
       }
 
@@ -136,6 +152,10 @@ export class ProductController {
       }
 
       await Product.delete(id);
+
+      // FK CASCADE deletes the embedding from product_embeddings automatically.
+      // Still clear catalog cache so the product vanishes from recommendations immediately.
+      ProductRetrievalService.clearCache();
 
       res.json({ success: true, message: 'Product deleted successfully' });
     } catch (error) {
@@ -297,6 +317,16 @@ export class ProductController {
         });
       }
 
+      ProductRetrievalService.clearCache();
+
+      // Generate embedding when product becomes approved for the first time
+      if (status === 'approved') {
+        setImmediate(() => {
+          VectorStore.embedAndStoreById(product.id)
+            .catch(err => logger.debug(`[ProductController] embed after status=approved failed: ${err.message}`));
+        });
+      }
+
       res.json({
         success: true,
         message: `Product status updated to ${status}`,
@@ -322,6 +352,14 @@ export class ProductController {
         });
       }
 
+      ProductRetrievalService.clearCache();
+
+      // Generate embedding immediately so the product is searchable right away
+      setImmediate(() => {
+        VectorStore.embedAndStoreById(product.id)
+          .catch(err => logger.debug(`[ProductController] embed after approve failed: ${err.message}`));
+      });
+
       res.json({
         success: true,
         message: 'Product approved successfully',
@@ -338,8 +376,9 @@ export class ProductController {
     try {
       const { id } = req.params;
 
-      // Delete the product when rejected
+      // Delete the product when rejected — FK CASCADE removes embedding automatically
       await Product.delete(id);
+      ProductRetrievalService.clearCache();
 
       res.json({
         success: true,
@@ -363,6 +402,22 @@ export class ProductController {
         return res.status(404).json({
           success: false,
           message: 'Product not found',
+        });
+      }
+
+      ProductRetrievalService.clearCache();
+
+      if (isActive) {
+        // Re-activated: generate/refresh embedding so it shows up in search immediately
+        setImmediate(() => {
+          VectorStore.embedAndStoreById(product.id)
+            .catch(err => logger.debug(`[ProductController] embed after re-activate failed: ${err.message}`));
+        });
+      } else {
+        // Deactivated: remove embedding to keep DB clean
+        setImmediate(() => {
+          VectorStore.deleteEmbedding(product.id)
+            .catch(err => logger.debug(`[ProductController] delete embedding after deactivate failed: ${err.message}`));
         });
       }
 

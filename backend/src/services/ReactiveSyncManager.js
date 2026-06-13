@@ -24,7 +24,7 @@ class ReactiveSyncManager extends EventEmitter {
   }
 
   /**
-   * ✅ Subscribe socket to data channel
+   *  Subscribe socket to data channel
    * Example: 'returns:502' for store 502 returns
    */
   subscribe(channel, socketId) {
@@ -35,7 +35,7 @@ class ReactiveSyncManager extends EventEmitter {
     }
     
     this.subscribers.get(channel).add(socketId);
-    logger.info(`✅ SOCKET SUBSCRIBED`, { channel, socketId, totalSubscribers: this.subscribers.get(channel).size });
+    logger.info(` SOCKET SUBSCRIBED`, { channel, socketId, totalSubscribers: this.subscribers.get(channel).size });
   }
 
   /**
@@ -57,7 +57,7 @@ class ReactiveSyncManager extends EventEmitter {
   }
 
   /**
-   * 🔍 Start watching a channel for changes
+   *  Start watching a channel for changes
    */
   _startWatcher(channel) {
     if (this.watchers.has(channel)) {
@@ -80,7 +80,7 @@ class ReactiveSyncManager extends EventEmitter {
     }, this.SYNC_INTERVAL);
 
     this.watchers.set(channel, checkInterval);
-    logger.info(`✅ WATCHER STARTED - will check every ${this.SYNC_INTERVAL}ms`, { channel });
+    logger.info(` WATCHER STARTED - will check every ${this.SYNC_INTERVAL}ms`, { channel });
   }
 
   /**
@@ -95,7 +95,7 @@ class ReactiveSyncManager extends EventEmitter {
   }
 
   /**
-   * 🔍 Check database for changes and emit delta
+   *  Check database for changes and emit delta
    */
   async _checkAndEmitChanges(channel, type, storeId) {
     let connection;
@@ -128,7 +128,7 @@ class ReactiveSyncManager extends EventEmitter {
           const timeSinceLastSync = now - lastTime;
 
           if (timeSinceLastSync >= this.BACKPRESSURE_MIN) {
-            // ✅ Emit delta update to subscribers
+            //  Emit delta update to subscribers
             const subCount = this.subscribers.get(channel)?.size || 0;
             
             this._broadcastToChannel(channel, {

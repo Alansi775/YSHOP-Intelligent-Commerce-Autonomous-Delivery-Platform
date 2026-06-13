@@ -7,9 +7,11 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/tts_service.dart';
 import '../services/stt_service.dart';
 import '../services/api_service.dart';
+import '../services/image_cache_manager.dart';
 import '../state_management/auth_manager.dart';
 import '../state_management/cart_manager.dart';
 import '../models/product.dart';
@@ -533,7 +535,8 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
     final name = p['name'] ?? '';
     final price = p['price']?.toString() ?? '0';
     final currency = p['currency'] ?? 'TRY';
-    final img = p['image_url'] ?? p['image'];
+    final rawImg = p['image_url'] ?? p['image'];
+    final img = Product.getFullImageUrl(rawImg?.toString());
     final stock = (p['stock'] as int?) ?? 0;
 
     return GestureDetector(
@@ -543,7 +546,7 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
           id: p['id']?.toString() ?? '', storeId: p['store_id']?.toString() ?? '',
           name: name, description: p['description'] ?? '',
           price: double.tryParse(price) ?? 0.0, currency: currency,
-          imageUrl: img ?? '', stock: stock,
+          imageUrl: img, stock: stock,
           categoryId: p['category_id']?.toString(),
           storeName: p['store_name'] ?? p['storeName'],
           storeOwnerEmail: p['store_owner_email'] ?? p['storeOwnerEmail'],
@@ -565,8 +568,15 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
             borderRadius: BorderRadius.circular(10),
             child: Container(
               width: 50, height: 50, color: Colors.white.withOpacity(0.03),
-              child: img != null ? Image.network(img, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _ph()) : _ph(),
+              child: img.isNotEmpty
+                ? CachedNetworkImage(
+                    cacheManager: ImageCacheManager.instance,
+                    imageUrl: img,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => _ph(),
+                    errorWidget: (_, __, ___) => _ph(),
+                  )
+                : _ph(),
             ),
           ),
           const SizedBox(width: 10),

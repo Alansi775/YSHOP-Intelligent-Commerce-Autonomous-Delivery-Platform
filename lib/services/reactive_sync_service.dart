@@ -54,10 +54,10 @@ class ReactiveSyncService extends ChangeNotifier {
             .build(),
       );
 
-      // ✅ Connected
+      //  Connected
       socket.onConnect((_) {
         _isConnected = true;
-        debugPrint('✅ SOCKET.IO: Connected');
+        debugPrint(' SOCKET.IO: Connected');
         notifyListeners();
       });
 
@@ -107,7 +107,7 @@ class ReactiveSyncService extends ChangeNotifier {
 
     _subscribedChannels.add(channel);
     socket.emit('subscribe', channel);
-    debugPrint('✅ SUBSCRIBED to: $channel');
+    debugPrint(' SUBSCRIBED to: $channel');
     notifyListeners();
   }
 
@@ -155,12 +155,12 @@ class ReactiveSyncService extends ChangeNotifier {
     }
   }
 
-  /// 🔍 Get latest data for a channel
+  ///  Get latest data for a channel
   List<dynamic> getChannelData(String channel) {
     return _latestData[channel] ?? [];
   }
 
-  /// 💬 Request stats from server
+  ///  Request stats from server
   void requestStats() {
     socket.emit('get-stats');
   }

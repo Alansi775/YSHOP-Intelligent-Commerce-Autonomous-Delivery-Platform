@@ -12,7 +12,7 @@ async function addAdminAcceptedColumn() {
     `);
     
     if (columns.length > 0) {
-      console.log('✅ admin_accepted column already exists');
+      console.log(' admin_accepted column already exists');
       connection.release();
       process.exit(0);
     }
@@ -23,7 +23,7 @@ async function addAdminAcceptedColumn() {
       ADD COLUMN admin_accepted BOOLEAN DEFAULT FALSE
     `);
     
-    console.log('✅ admin_accepted column added successfully');
+    console.log(' admin_accepted column added successfully');
     
     connection.release();
   } catch (error) {

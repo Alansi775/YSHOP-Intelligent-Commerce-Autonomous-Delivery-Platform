@@ -5,7 +5,7 @@ async function up() {
   if (cols.length === 0) {
     await pool.execute(`ALTER TABLE order_complaints ADD COLUMN responsible_party VARCHAR(50) DEFAULT NULL`);
   }
-  console.log('✅ Added responsible_party to order_complaints');
+  console.log(' Added responsible_party to order_complaints');
 }
 
 async function down() {

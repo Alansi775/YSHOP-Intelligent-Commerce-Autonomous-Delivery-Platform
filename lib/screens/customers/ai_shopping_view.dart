@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'dart:math' as math;
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../services/image_cache_manager.dart';
 import '../../state_management/theme_manager.dart';
 import '../../state_management/auth_manager.dart';
 import '../../state_management/cart_manager.dart';
@@ -43,6 +44,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   bool _isSearchActive = false;
   bool _isSearching = false;
   bool _hasResults = false;
+  String? _lastAIQuery; // used for interaction tracking
 
   @override
   void initState() {
@@ -136,6 +138,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
       final userId = authManager.userProfile?['id'] ?? 'guest';
 
       conversationProvider.addMessage(role: 'user', message: query);
+      _lastAIQuery = query;
 
       final response = await ApiService.postRequest(
         '/ai/chat',
@@ -204,6 +207,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   void _handleAddToCart(Map<String, dynamic> product) {
     try {
       final cartProvider = Provider.of<CartManager>(context, listen: false);
+      final authManager = Provider.of<AuthManager>(context, listen: false);
       final productId = product['id'] as int?;
       final name = product['name'] ?? 'Product';
 
@@ -213,12 +217,22 @@ class _AIShoppingViewState extends State<AIShoppingView>
           product: product,
           quantity: 1,
         );
-        CenteredNotification.show(context, '"$name" added to cart',
-            success: true);
+        CenteredNotification.show(context, '"$name" added to cart', success: true);
+
+        // Fire-and-forget: record add_to_cart interaction for the recommendation engine
+        final userId = authManager.userProfile?['id'];
+        if (userId != null) {
+          ApiService.postRequest('/ai/interact', {
+            'userId': userId,
+            'productId': productId,
+            'eventType': 'add_to_cart',
+            'query': _lastAIQuery,
+            'storeType': product['store_type'],
+          }).catchError((_) {}); // silent — never block the user
+        }
       }
     } catch (e) {
-      CenteredNotification.show(context, 'Error adding to cart',
-          success: false);
+      CenteredNotification.show(context, 'Error adding to cart', success: false);
     }
   }
 
@@ -387,7 +401,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 📄 BODY — switches between welcome & conversation
+  //  BODY — switches between welcome & conversation
   // ═══════════════════════════════════════════
   Widget _buildBody(AIConversationProvider provider) {
     if (_isSearching && !_hasResults) {
@@ -404,7 +418,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 🌟 WELCOME VIEW — first-time or fresh start
+  //  WELCOME VIEW — first-time or fresh start
   // ═══════════════════════════════════════════
   Widget _buildWelcomeView(AIConversationProvider provider) {
     return Column(
@@ -469,7 +483,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 💬 CONVERSATION VIEW — chat + products
+  //  CONVERSATION VIEW — chat + products
   // ═══════════════════════════════════════════
   Widget _buildConversationView(AIConversationProvider provider) {
     return Column(
@@ -511,7 +525,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 🔍 SEARCH INPUT (Welcome screen)
+  //  SEARCH INPUT (Welcome screen)
   // ═══════════════════════════════════════════
   Widget _buildSearchInput() {
     return ClipRRect(
@@ -588,7 +602,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 💡 QUICK SUGGESTIONS
+  //  QUICK SUGGESTIONS
   // ═══════════════════════════════════════════
   Widget _buildQuickSuggestions() {
     final suggestions = ['I\'m hungry 🍔', 'Fashion finds 👗', 'Health essentials 💊'];
@@ -627,7 +641,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 🤔 THINKING STATE
+  //  THINKING STATE
   // ═══════════════════════════════════════════
   Widget _buildThinkingState() {
     return Center(
@@ -651,7 +665,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 💬 MESSAGE BUBBLE
+  //  MESSAGE BUBBLE
   // ═══════════════════════════════════════════
   Widget _buildMessageBubble(String text, bool isUser) {
     if (text.isEmpty) return const SizedBox.shrink();
@@ -744,7 +758,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // ⏳ TYPING INDICATOR
+  //  TYPING INDICATOR
   // ═══════════════════════════════════════════
   Widget _buildTypingBubble() {
     return Padding(
@@ -776,7 +790,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // 🛍️ PRODUCT CARDS
+  //  PRODUCT CARDS
   // ═══════════════════════════════════════════
   Widget _buildProductCards(List<Map<String, dynamic>> products) {
     return Padding(
@@ -805,7 +819,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
       description: product['description'] ?? '',
       price: double.tryParse(product['price']?.toString() ?? '0') ?? 0.0,
       currency: product['currency'] ?? 'TRY',
-      imageUrl: product['image_url'] ?? product['image'] ?? '',
+      imageUrl: Product.getFullImageUrl((product['image_url'] ?? product['image'])?.toString()),
       stock: (product['stock'] as int?) ?? 0,
       categoryId: product['category_id']?.toString(),
       storeName: product['store_name'] ?? product['storeName'],
@@ -823,7 +837,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
   }
 
   // ═══════════════════════════════════════════
-  // ✍️ REPLY INPUT (Conversation mode)
+  //  REPLY INPUT (Conversation mode)
   // ═══════════════════════════════════════════
   Widget _buildReplyInput() {
     return Container(
@@ -894,7 +908,7 @@ class _AIShoppingViewState extends State<AIShoppingView>
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🃏 PRODUCT CARD — Premium glassmorphic card
+//  PRODUCT CARD — Premium glassmorphic card
 // ═══════════════════════════════════════════════════════════════
 class _ProductCard extends StatelessWidget {
   final Map<String, dynamic> product;
@@ -917,7 +931,7 @@ class _ProductCard extends StatelessWidget {
     final price = product['price']?.toString() ?? '0';
     final currency = product['currency'] ?? 'TRY';
     final storeName = product['store_name'] ?? product['storeName'] ?? '';
-    final imageUrl = product['image_url'] ?? product['image'];
+    final imageUrl = Product.getFullImageUrl((product['image_url'] ?? product['image'])?.toString());
     final stock = (product['stock'] as int?) ?? 0;
     final reason = product['reason'] ?? '';
 
@@ -972,9 +986,9 @@ class _ProductCard extends StatelessWidget {
                           width: 72,
                           height: 72,
                           color: Colors.white.withOpacity(0.05),
-                          child: imageUrl != null &&
-                                  imageUrl.toString().isNotEmpty
+                          child: imageUrl.isNotEmpty
                               ? CachedNetworkImage(
+                                  cacheManager: ImageCacheManager.instance,
                                   imageUrl: imageUrl,
                                   fit: BoxFit.cover,
                                   placeholder: (_, __) => Center(
@@ -1109,7 +1123,7 @@ class _ProductCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ⏳ THINKING DOTS — Smooth animated dots
+//  THINKING DOTS — Smooth animated dots
 // ═══════════════════════════════════════════════════════════════
 class _ThinkingDots extends StatefulWidget {
   const _ThinkingDots();

@@ -1,7 +1,7 @@
 import pool from '../src/config/database.js';
 
 /**
- * ✅ Migration: Add display_order column to categories table
+ *  Migration: Add display_order column to categories table
  * 
  * هذا السكريبت يضيف حقل display_order إلى جدول categories
  * الحقل سيحتفظ برقم ترتيب الفئة (1, 2, 3, إلخ)
@@ -31,7 +31,7 @@ async function addDisplayOrderColumn() {
       ADD COLUMN display_order INT DEFAULT 0 AFTER icon
     `);
     
-    console.log('✅ تم إضافة حقل display_order بنجاح');
+    console.log(' تم إضافة حقل display_order بنجاح');
     
     // تحديث الترتيب لكل فئة بناءً على وقت الإنشاء
     const [categories] = await connection.query(`
@@ -54,7 +54,7 @@ async function addDisplayOrderColumn() {
       );
     }
     
-    console.log('✅ تم تحديث ترتيب جميع الفئات بنجاح');
+    console.log(' تم تحديث ترتيب جميع الفئات بنجاح');
     
   } catch (error) {
     console.error('❌ Error:', error.message);
@@ -67,7 +67,7 @@ async function addDisplayOrderColumn() {
 
 addDisplayOrderColumn()
   .then(() => {
-    console.log('✅ Migration completed successfully');
+    console.log(' Migration completed successfully');
     process.exit(0);
   })
   .catch((error) => {

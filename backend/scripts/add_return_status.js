@@ -19,7 +19,7 @@ async function addReturnStatus() {
       MODIFY COLUMN status ENUM('pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'return') DEFAULT 'pending'
     `);
     
-    logger.info('✅ Successfully added "return" status to orders table');
+    logger.info(' Successfully added "return" status to orders table');
     connection.release();
     process.exit(0);
     

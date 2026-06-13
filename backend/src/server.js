@@ -12,6 +12,9 @@ import startFirestoreSync from './utils/firestoreSync.js';
 import { getEmailService } from './utils/emailService.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import ReactiveSyncManager from './services/ReactiveSyncManager.js';
+import { runAITablesMigration } from '../database/migrations/20260712_add_ai_tables.js';
+import { runImageEmbeddingMigration } from '../database/migrations/20260712_add_image_embedding.js';
+import { VectorStore } from './services/VectorStore.js';
 
 // Routes
 import productRoutes from './routes/productRoutes.js';
@@ -175,7 +178,7 @@ const io = new SocketIOServer(httpServer, {
   pingTimeout: 60000,
 });
 
-// ✅ Socket.io Connection Handler
+//  Socket.io Connection Handler
 setIO(io);
 io.on('connection', (socket) => {
   logger.info(`🔗 NEW SOCKET CONNECTION`, { socketId: socket.id });
@@ -275,6 +278,27 @@ const server = httpServer.listen(PORT, '0.0.0.0', async () => {
     } catch (e) {
       logger.warn('Could not start Firestore sync:', e.message);
     }
+
+    // Run AI infrastructure migrations
+    try {
+      await runAITablesMigration();
+      await runImageEmbeddingMigration(); // adds image_embedding column if missing
+    } catch (e) {
+      logger.warn('⚠ AI tables migration warning:', e.message);
+    }
+
+    // Backfill product embeddings in background — non-blocking
+    setImmediate(() => {
+      VectorStore.backfillMissing()
+        .then(() => {
+          // After text backfill, add image embeddings to products that lack them.
+          // Slow (2s/product) to stay under Gemini Vision free-tier rate limits.
+          setTimeout(() => VectorStore.backfillImages(50).catch(err =>
+            logger.warn(`⚠ Image backfill warning: ${err?.stack || err?.message || String(err)}`),
+          ), 5000);
+        })
+        .catch(err => logger.warn('⚠ Embedding backfill warning:', err.message));
+    });
   } catch (error) {
     logger.error('❌ Failed to connect to database:', error);
     process.exit(1);

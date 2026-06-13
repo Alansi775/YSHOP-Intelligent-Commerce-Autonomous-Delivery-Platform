@@ -65,7 +65,7 @@ class _DeliveryReturnPickupViewState extends State<DeliveryReturnPickupView> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Pickup confirmed! Now deliver to the store.'),
+            content: Text(' Pickup confirmed! Now deliver to the store.'),
             backgroundColor: Colors.orange,
           ),
         );

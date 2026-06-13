@@ -87,7 +87,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     try {
       final raw = await ApiService.getStoreCategories(int.tryParse(widget.store.id) ?? 0);
       final cats = raw.map((m) => app_category.Category.fromJson(m)).toList();
-      // ✅ Sort categories by display_order
+      //  Sort categories by display_order
       cats.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
 
       final allCat = app_category.Category(
@@ -100,7 +100,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
       _categories = [allCat, ...cats];
       _categoryKeys = { for (var c in _categories) (c.id?.toString() ?? 'all') : GlobalKey() };
       
-      // ✅ DEFAULT: Show ALL products (no category selected)
+      //  DEFAULT: Show ALL products (no category selected)
       // User can then click a specific category if they want
     } catch (e) {
       _categories = [];
@@ -205,7 +205,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
               parent: AlwaysScrollableScrollPhysics(),
             ),
             slivers: [
-              // ✅ SPACER - مساحة للبرغر
+              //  SPACER - مساحة للبرغر
               SliverToBoxAdapter(
                 child: SizedBox(height: _burgerScrollEnd),
               ),
@@ -588,7 +588,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             (int.tryParse(p.categoryId ?? '0') ?? 0) == _selectedCategoryId
           ).toList();
 
-    // 🌟 ذكاء الاستجابة (Responsive Design)
+    //  ذكاء الاستجابة (Responsive Design)
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
     

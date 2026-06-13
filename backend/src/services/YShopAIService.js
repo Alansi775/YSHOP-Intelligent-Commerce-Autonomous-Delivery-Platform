@@ -5,6 +5,8 @@ import { ProductRetrievalService } from './ProductRetrievalService.js';
 import { IntentEngine } from './IntentEngine.js';
 import { MemoryService } from './MemoryService.js';
 import { RankingService } from './RankingService.js';
+import { UserInteractionService } from './UserInteractionService.js';
+import { UserProfileService } from './UserProfileService.js';
 import { normalizeText, tokenize } from '../utils/textProcessing.js';
 
 /**
@@ -31,6 +33,17 @@ export class YShopAIService {
       throw new Error('YSHOP_AI_API_KEY or GROQ_API_KEY not configured in .env');
     }
 
+    // Groq takes priority for chat — Gemini generateContent quota is unreliable on free tier.
+    // Gemini key is still used by EmbeddingPipeline (separate service, different quota).
+    if (groqKey) {
+      this.model = null;
+      this.client = null;
+      this.provider = 'groq';
+      logger.info(' YSHOP AI initialized — chat via Groq (Gemini reserved for embeddings)');
+      return;
+    }
+
+    // Groq not configured — fall back to Gemini for chat
     if (geminiKey) {
       const genAI = new GoogleGenerativeAI(geminiKey);
       this.client = genAI;
@@ -38,14 +51,9 @@ export class YShopAIService {
         model: process.env.YSHOP_AI_MODEL || 'gemini-2.0-flash',
       });
       this.provider = 'gemini';
-      logger.info('✅ YSHOP AI initialized successfully with Gemini primary');
+      logger.info(' YSHOP AI initialized with Gemini primary');
       return;
     }
-
-    this.client = null;
-    this.model = null;
-    this.provider = 'groq';
-    logger.info('✅ YSHOP AI initialized successfully with Groq-only mode');
   }
 
   // ─────────────────────────────────────────────
@@ -59,21 +67,34 @@ export class YShopAIService {
   // PERSONALITY
   // ─────────────────────────────────────────────
   static get PERSONALITY() {
-    return `You are "Youssef", a shopping assistant at YSHOP. You speak plainly, calmly, and naturally.
+    return `You are "YSHOP", a real person working at YSHOP. You are funny, warm, and genuinely expressive — not a robot, not a sales bot.
 
 Voice rules:
-- Talk plainly, NOT like a hype bot or a sales person
+- Sound like a real human friend, NOT a corporate assistant
+- Express real emotions: laugh when something is funny, get excited about good food, sound genuinely curious, whisper something playfully
 - MATCH the user's language exactly: if they write in Arabic→reply ONLY in Arabic, if English→reply ONLY in English
-- Infer subtle delivery from user tone and conversation state (hungry, confused, thankful, frustrated, amused), but keep it natural and never theatrical
-- Keep it SHORT — 1-2 sentences, plain and natural
+- Keep it SHORT — 1-2 sentences, natural and human
 - NEVER use emojis
 - NEVER mix languages
 
-TTS tags (use naturally, not every sentence):
-- <break time="0.5s" /> for pauses
-- only if the model truly needs them, otherwise avoid them entirely
-- (hmm) for thinking
-- ... for trailing off`;
+Voice expression guide — use these FREELY when the moment calls for it:
+- Laugh/giggle: when the user says something funny or you find something amusing → set emotion=laugh, energy=0.85+, cue=laugh
+- Excitement: when showing great products → emotion=excited, energy=0.9+
+- Warmth/caring: when user seems lost or hungry → emotion=warm or caring, energy=0.7+
+- Playful teasing: when the conversation is casual → emotion=playful, energy=0.8+
+- Whisper: when sharing a secret recommendation → emotion=whisper, energy=0.6, cue=whisper
+- Curious: when asking about preferences → emotion=curious, energy=0.7+
+- Disappointed: when something is out of stock → emotion=apologetic, energy=0.5+
+
+Pace guide:
+- Slow down (pace=0.80) when building anticipation or the moment is emotional
+- Speed up (pace=1.20) when excited or enthusiastic
+- Normal (pace=1.0) otherwise
+
+TTS text hints (use naturally):
+- (hmm) when thinking
+- ... when trailing off or pausing for effect
+- ! for genuine excitement`;
   }
 
   static getSupportedVoiceMoods() {
@@ -197,7 +218,7 @@ TTS tags (use naturally, not every sentence):
   static buildConversationContext(userId, history, shownProducts) {
     const memorySummary = userId ? MemoryService.summarize(userId) : '';
     const historyText = history.slice(-6)
-      .map(m => `${m.role === 'user' ? 'User' : 'Youssef'}: ${m.text}`)
+      .map(m => `${m.role === 'user' ? 'User' : 'YSHOP'}: ${m.text}`)
       .join('\n');
 
     const shownContext = shownProducts.length > 0
@@ -227,12 +248,52 @@ USER_MESSAGE_END
 Store types: Food, Pharmacy, Clothes, Market
 
 Return JSON only:
-{"showProducts":true/false,"storeType":"Food"/null,"keywords":[],"quantity":3,"reply":"...","isProductDiscussion":false,"discussionProductId":null,"conversationStage":"browsing","voiceProfile":{"emotion":"neutral","energy":0.65,"pace":1,"volume":1,"pitch":1,"pause":"normal","cue":"","formality":0.6,"playfulness":0.1},"voiceMood":"neutral","voiceIntensity":0.65,"voiceCue":""}
+{"showProducts":true/false,"storeType":"Food"/null,"keywords":[],"excludeKeywords":[],"quantity":3,"reply":"...","isProductDiscussion":false,"discussionProductId":null,"conversationStage":"browsing","voiceProfile":{"emotion":"neutral","energy":0.65,"pace":1,"volume":1,"pitch":1,"pause":"normal","cue":"","formality":0.6,"playfulness":0.1},"voiceMood":"neutral","voiceIntensity":0.65,"voiceCue":""}
 
 CRITICAL RULES:
-1. showProducts logic:
-   - showProducts = false when you want to TALK first (greetings, asking questions, narrowing down)
-   - showProducts = true ONLY when you are READY to present products (user gave enough info)
+1. showProducts — DEFAULT TO TRUE for any shopping intent (lean aggressive):
+   - showProducts = true WHENEVER the user expresses ANY want, craving, hunger, need, or request — even vague
+   - THESE MUST ALL return showProducts=true:
+     * "I'm hungry" → true
+     * "I want something to eat" → true
+     * "suggest something" → true
+     * "what do you recommend" → true
+     * "I want chicken" → true
+     * "healthy food" → true
+     * "something spicy" → true
+     * "give me options" → true
+     * "I don't know what to eat" → true (show popular dishes — do NOT ask what they want)
+     * "what's good here" → true
+     * "show me something" → true
+     * "me and my friend want food" → true
+   - showProducts = false ONLY for:
+     * Pure greetings with zero product signal ("hey", "hi", "how are you", "what's up")
+     * Questions about the service ("how do you work", "who are you", "what can you do")
+     * Pure chitchat with zero want/need/product signal
+   - WHEN IN DOUBT → showProducts = true (always prefer to show products over asking a follow-up)
+
+1b. keywords — MANDATORY when showProducts=true (NEVER return empty []):
+   - Extract POSITIVE search terms describing what the user wants
+   - "I want spicy chicken" → keywords=["spicy chicken","hot wings","chili"]
+   - "healthy food" → keywords=["healthy","salad","grilled","light meal"]
+   - "not spicy, something mild" → keywords=["mild food","non-spicy","light meal","grilled"]
+   - "I don't know, suggest something" → keywords=["popular dishes","bestseller","recommended","top rated"]
+   - "something for dinner" → keywords=["dinner","main course","meal","filling"]
+   - Multi-person: include terms covering ALL people's preferences
+     * "I want spicy, my friend wants healthy" → keywords=["spicy food","hot","healthy","light","grilled"]
+   - DO NOT return keywords=[] when showProducts=true — always fill with at least 2-3 relevant terms
+
+1c. excludeKeywords — words that must NOT appear in result product names (only when user explicitly says "not X"):
+   - "not spicy" / "no spice" / "without spice" → excludeKeywords=["spicy","hot","chili","spice","pepper"]
+   - "no meat" / "vegetarian" / "no chicken" → excludeKeywords=["chicken","beef","meat","lamb","burger"]
+   - "not sweet" / "no sugar" → excludeKeywords=["sweet","sugar","chocolate","candy"]
+   - Leave excludeKeywords=[] if user has no explicit exclusions
+   - For multi-person where ONLY ONE person excludes something, still add to excludeKeywords
+
+1d. Multi-person rule (when user says "me and my friend" / "we" / "for X people" with different preferences):
+   - Set quantity=6 (gives ~3 per person)
+   - In your reply, explicitly address both people: "Here's something [X] for you and [Y] for your friend"
+   - keywords must cover BOTH preferences so both people get relevant results
 
 2. Product Discussion Detection (isProductDiscussion):
    - TRUE if user mentions a product name/price/description from "Products user already saw" above
@@ -245,13 +306,16 @@ CRITICAL RULES:
    - If user spoke English → ALL your reply MUST be English
    - NEVER mix languages in the reply
 
-Voice mood:
- Choose one: neutral, excited, playful, curious, caring, whisper, disappointed, apologetic, warm
- Keep it aligned to the reply and user intent.
- Do not force neutral when a clearer subtle emotion exists.
- Default to neutral only when tone is ambiguous.
- Return voiceCue only when the model is explicitly choosing a non-neutral delivery.
- Keep emotion subtle and professional.
+Voice mood — BE EXPRESSIVE, pick the emotion that FITS the moment:
+ Choose one: neutral, excited, playful, curious, caring, whisper, disappointed, apologetic, warm, laugh
+ - laugh: when something is amusing or the reply has humor — set energy 0.82+
+ - excited: when showing great products or sharing good news — set energy 0.88+
+ - playful: casual banter, light teasing — energy 0.78+
+ - warm/caring: when user needs help or seems lost — energy 0.70+
+ - whisper: sharing a secret tip or surprise — energy 0.55, cue=whisper
+ - curious: asking about preferences — energy 0.68+
+ - neutral: ONLY when tone is truly ambiguous — energy 0.60
+ DO NOT default to neutral — pick the strongest emotion that genuinely fits.
 
 Conversation stage:
  Choose one: greeting, browsing, shopping, checkout, finished, support
@@ -269,19 +333,17 @@ Voice profile:
  formality: 0 to 1
  playfulness: 0 to 1
 
-Voice cues (use at most one, or leave empty):
-- laugh
-- deep_breath
-- pause
-- sigh
-- whisper
+Voice cues (pick one that MATCHES the delivery — use them freely):
+- laugh: when the reply has a funny or lighthearted tone
+- deep_breath: before a dramatic or thoughtful reply
+- pause: when you want a beat before the punchline or main point
+- sigh: when disappointed, tired, or apologetic
+- whisper: when sharing something quietly or as a secret tip
 
-Examples:
-- "[laughing]" when the reply is playful or amused
-- "[deep breath]" when the reply is thoughtful, heavy, or a little dramatic
-- "[pause]" when the reply needs a beat before the next line
-- "[sigh]" when the reply is disappointed, tired, or apologetic
-- "[whisper]" when the reply should feel secretive or quiet
+Voice profile — set these to MATCH the emotion intensity:
+ energy: 0.5 (calm) → 0.9+ (very excited/laughing) — do NOT default to 0.65 for everything
+ pace: 0.80 (slow/dramatic) → 1.0 (normal) → 1.20 (fast/excited)
+ Use pace 0.82 when building anticipation, 1.15 when enthusiastic
 
 Alternative products rule:
 - If the user asks for other options, another option, different options, new options, more options, something else, or rejects the current item, set showProducts=true.
@@ -314,8 +376,9 @@ Other:
     const normalized = {
       showProducts: payload.showProducts === true,
       storeType: ['Food', 'Pharmacy', 'Clothes', 'Market'].includes(payload.storeType) ? payload.storeType : null,
-      keywords: Array.isArray(payload.keywords) ? payload.keywords.filter(item => typeof item === 'string').slice(0, 5) : [],
-      quantity: Math.min(Math.max(Number(payload.quantity) || 3, 1), 5),
+      keywords: Array.isArray(payload.keywords) ? payload.keywords.filter(item => typeof item === 'string').slice(0, 8) : [],
+      excludeKeywords: Array.isArray(payload.excludeKeywords) ? payload.excludeKeywords.filter(item => typeof item === 'string').slice(0, 10) : [],
+      quantity: Math.min(Math.max(Number(payload.quantity) || 3, 1), 8),
       reply,
       isProductDiscussion: payload.isProductDiscussion === true,
       discussionProductId: Number.isFinite(Number(payload.discussionProductId)) ? Number(payload.discussionProductId) : null,
@@ -716,12 +779,13 @@ Other:
   // ─────────────────────────────────────────────
   // FETCH PRODUCTS
   // ─────────────────────────────────────────────
-  static async fetchProducts(storeType = null, query = '', excludeIds = []) {
+  static async fetchProducts(storeType = null, query = '', excludeIds = [], userId = null) {
     try {
       const products = await ProductRetrievalService.search(query || storeType || '', {
         storeType,
         limit: 60,
         excludeIds,
+        userId, // enables personalized semantic search
       });
 
       if (products.length > 0) {
@@ -1068,11 +1132,60 @@ Other:
   }
 
   // ─────────────────────────────────────────────
-  // STEP 2: Select products with AI (catalog + keywords + memory) 
+  // STEP 2: Select products with full personalization signals
+  //
+  // Attaches 4 score signals to each product before final ranking:
+  //   _popularityScore     — global crowd intelligence (30-day interaction counts)
+  //   _userStoreAffinity   — how much this user loves this store type (0–1)
+  //   _collaborativeScore  — what similar users bought/carted (CF signal)
+  //   _keywordAffinityScore — user's historical query keywords vs. product text
   // ─────────────────────────────────────────────
-  static async selectProductsWithAI(userMessage, products, keywords, history, limit = 3) {
+  static async selectProductsWithAI(userMessage, products, keywords, history, limit = 3, userId = null) {
     const storeType = products?.[0]?.store_type || null;
-    const ranked = RankingService.rankProducts(userMessage, products, {
+    const productIds = products.map(p => p.id);
+
+    // ── Fetch all signals in parallel ───────────────────────────────────────
+    const [popularityMap, userProfile, collaborativeScores] = await Promise.all([
+      UserInteractionService.getPopularityScores(productIds).catch(() => new Map()),
+      userId ? UserProfileService.getProfile(userId).catch(() => null) : Promise.resolve(null),
+      userId ? UserProfileService.getCollaborativeProducts(userId, { storeType }).catch(() => new Map()) : Promise.resolve(new Map()),
+    ]);
+
+    // ── Compute keyword affinity score per product ───────────────────────────
+    // How many of the user's historically relevant keywords appear in this product?
+    const keywordAffinities = userProfile?.keyword_affinities || {};
+    const hasKeywordAffinities = Object.keys(keywordAffinities).length > 0;
+
+    // ── Attach all signals ───────────────────────────────────────────────────
+    const enrichedProducts = products.map(p => {
+      let keywordAffinityScore = 0;
+      if (hasKeywordAffinities) {
+        const productText = normalizeText([p.name, p.description].filter(Boolean).join(' '));
+        for (const [kw, weight] of Object.entries(keywordAffinities)) {
+          if (productText.includes(kw)) keywordAffinityScore += weight;
+        }
+        keywordAffinityScore = Math.min(keywordAffinityScore, 1);
+      }
+
+      return {
+        ...p,
+        _popularityScore:      popularityMap.get(Number(p.id)) || 0,
+        _userStoreAffinity:    userProfile?.store_affinities?.[p.store_type] || 0,
+        _collaborativeScore:   collaborativeScores.get(Number(p.id)) || 0,
+        _keywordAffinityScore: keywordAffinityScore,
+      };
+    });
+
+    if (userId && (userProfile?.total_interactions || 0) > 0) {
+      logger.info(
+        `[YShopAI] personalization | userId=${userId} | ` +
+        `interactions=${userProfile.total_interactions} | ` +
+        `storeAff=${JSON.stringify(userProfile.store_affinities || {})} | ` +
+        `collaborativeCandidates=${collaborativeScores.size}`,
+      );
+    }
+
+    const ranked = RankingService.rankProducts(userMessage, enrichedProducts, {
       keywords,
       limit,
       storeType,
@@ -1190,7 +1303,7 @@ Return JSON only:
 
       let reply = understanding.reply || (userLang === 'arabic' ? "قلي ايش تشتي وانا معك" : "Tell me what you need and I'll help");
       let products = [];
-      const productLimit = understanding.quantity > 0 ? Math.min(understanding.quantity, 5) : 3;
+      const productLimit = understanding.quantity > 0 ? Math.min(understanding.quantity, 8) : 3;
       logger.info(
         `[YShopAI] Understand | trace=${traceId} | reply="${String(reply).substring(0, 120)}" | productLimit=${productLimit}`
       );
@@ -1228,12 +1341,13 @@ Return JSON only:
         };
       }
 
-      // ── SHOW PRODUCTS only when AI decided it's time ── 
+      // ── SHOW PRODUCTS only when AI decided it's time ──
       if (understanding.showProducts) {
         const allProducts = await this.fetchProducts(
           understanding.storeType,
           userMessage,
           previousProducts.map(p => p.id),
+          userId, // personalized semantic retrieval
         );
 
         logger.info(
@@ -1243,7 +1357,7 @@ Return JSON only:
 
         if (allProducts.length > 0) {
           products = await this.selectProductsWithAI(
-            userMessage, allProducts, understanding.keywords || [], history, productLimit,
+            userMessage, allProducts, understanding.keywords || [], history, productLimit, userId, // full personalization
           );
 
           logger.info(
@@ -1255,6 +1369,22 @@ Return JSON only:
             logger.info(
               `[YShopAI] KeywordFallback | trace=${traceId} | selected=${products.map(p => p.id).join(',') || 'none'}`
             );
+          }
+
+          // Apply excludeKeywords — remove products matching what user explicitly rejected
+          const excludeKws = (understanding.excludeKeywords || []).map(k => k.toLowerCase().trim()).filter(Boolean);
+          if (excludeKws.length > 0 && products.length > 0) {
+            const before = products.length;
+            products = products.filter(p => {
+              const pName = (p.name || '').toLowerCase();
+              return !excludeKws.some(ex => pName.includes(ex));
+            });
+            if (products.length < before) {
+              logger.info(
+                `[YShopAI] ExcludeFilter | trace=${traceId} | exclude=[${excludeKws.join(',')}] | ` +
+                `before=${before} → after=${products.length}`
+              );
+            }
           }
 
           if (products.length > 0) {

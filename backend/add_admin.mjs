@@ -30,7 +30,7 @@ async function addAdmin() {
       ['mohamed@yshop.com', passwordHash, 'Mohammed', 'Alansi', 'superadmin', 'active', 0]
     );
 
-    console.log('\n✅ Admin added successfully!\n');
+    console.log('\n Admin added successfully!\n');
     console.log('📧 Email: mohamed@yshop.com');
     console.log('🔑 Password: Alansi77');
     console.log('👤 Name: Mohammed Alansi');

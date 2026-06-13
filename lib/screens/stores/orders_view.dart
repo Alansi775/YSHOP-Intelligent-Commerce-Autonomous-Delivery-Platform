@@ -223,8 +223,8 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
           _allDataFuture = _loadAllDataOptimized();  // Fast path: refresh returns only!
           _dataRefreshCounter++;  // Force rebuild
         });
-        debugPrint('✅ Return received - refreshing returns data only');
-        // ✅ No success message - button state change is the feedback
+        debugPrint(' Return received - refreshing returns data only');
+        //  No success message - button state change is the feedback
       } else if (mounted) {
         setState(() {
           _loadingReturns[returnId] = false;
@@ -405,7 +405,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       // Count all orders (they all have real payment)
       if (status != 'return' && total > 0) {
         totalRevenue += total;
-        debugPrint('  ✅ Order total: $total');
+        debugPrint('   Order total: $total');
       }
     }
     
@@ -1069,7 +1069,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     try {
       final store = await ApiService.getUserStore();
       final storeId = store?['id']?.toString();
-      debugPrint('🔍 _loadAllData START - storeId: $storeId');
+      debugPrint(' _loadAllData START - storeId: $storeId');
       
       if (storeId == null) {
         debugPrint('❌ storeId is null!');
@@ -1078,7 +1078,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       
       debugPrint('📦 Fetching orders for store: $storeId');
       final allOrders = await ApiService.getStoreOrders(storeId: storeId);
-      debugPrint('✅ Got ${allOrders.length} orders');
+      debugPrint(' Got ${allOrders.length} orders');
       
       // Separate orders and returns
       final orders = allOrders.where((order) {
@@ -1093,7 +1093,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       // 🔥 CRITICAL FIX: Get returns from returned_products table (correct IDs!)
       // This ensures returnData['id'] is from returned_products.id, not orders.id
       final apiReturns = await ApiService.getStoreReturns(storeId: storeId);
-      debugPrint('✅ Got ${apiReturns.length} returns from API');
+      debugPrint(' Got ${apiReturns.length} returns from API');
       
       // 🔥 SAFE CAST: Convert API response to List<Map<String, dynamic>>
       final List<Map<String, dynamic>> allReturns = [];
