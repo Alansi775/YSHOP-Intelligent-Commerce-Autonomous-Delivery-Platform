@@ -158,7 +158,7 @@ export class VectorStore {
       scored.sort((a, b) => b.semanticScore - a.semanticScore || b.stock - a.stock || b.id - a.id);
       return scored.slice(0, topK);
     } catch (err) {
-      logger.error('[VectorStore] personalizedSearch error:', err.message);
+      logger.error(`[VectorStore] personalizedSearch error: ${err?.stack || err?.message || String(err)}`);
       return products.map(p => ({ ...p, semanticScore: 0 }));
     }
   }

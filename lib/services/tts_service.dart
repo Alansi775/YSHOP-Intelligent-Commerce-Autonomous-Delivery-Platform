@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
@@ -12,19 +13,40 @@ import 'tts_player_stub.dart'
     if (dart.library.html) 'tts_player_web.dart'
     if (dart.library.io) 'tts_player_mobile.dart';
 
+/// A distinct AI voice personality from the ElevenLabs pre-made library.
+class VoicePersonality {
+  final String voiceId;
+  final String name;   // shown in overlay ("Aria", "George", …)
+  final String gender; // "female" | "male"
+  final String age;    // "young" | "mid" | "mature"
+
+  const VoicePersonality({
+    required this.voiceId,
+    required this.name,
+    required this.gender,
+    required this.age,
+  });
+}
+
 class TTSService {
   static String get _apiKey => dotenv.env['YSHOP_TTS_API_KEY'] ?? '';
   static bool get _allowBrowserFallback =>
       (dotenv.env['YSHOP_TTS_ALLOW_BROWSER_FALLBACK'] ?? 'false').toLowerCase() == 'true';
 
-  // "George" — deep, warm, professional male
-  static const String _voiceId = 'JBFqnCBsd6RMkjVDRZzb';
   static const String _baseUrl = 'https://api.elevenlabs.io/v1';
+
+  // ── Voice personality pool ────────────────────────────────────────────────
+  // ElevenLabs pre-made voice IDs paired with international character names.
+  // Only confirmed free-tier ElevenLabs voices — others return 402.
+  static const List<VoicePersonality> personalities = [
+    VoicePersonality(voiceId: 'JBFqnCBsd6RMkjVDRZzb', name: 'Karim', gender: 'male',   age: 'mature'),
+    VoicePersonality(voiceId: 'EXAVITQu4vr4xnSDxMaL', name: 'Sara',  gender: 'female', age: 'young'),
+    VoicePersonality(voiceId: 'pNInz6obpgDQGcFmaJgB', name: 'Rami',  gender: 'male',   age: 'mid'),
+  ];
 
   static final TTSService _instance = TTSService._internal();
   factory TTSService() => _instance;
   TTSService._internal() {
-    // Log presence of API key at construction (do not print full key)
     debugPrint('[TTS] API Key loaded at init: ${_apiKey.isEmpty ? "EMPTY" : "EXISTS (${_apiKey.substring(0,5)}...)"}');
   }
 
@@ -36,8 +58,29 @@ class TTSService {
   String? _currentHash;
   Completer<void>? _playbackCompleter;
 
+  // Active personality — defaults to George; randomized per voice session
+  VoicePersonality _activePersonality = personalities[0];
+
+  // Voice IDs that returned 402 on this account — filtered out of random pool
+  final Set<String> _failedVoiceIds = <String>{};
+
   bool get isPlaying => _isPlaying;
   bool get isLoading => _isLoading;
+
+  /// Returns the currently active voice personality.
+  VoicePersonality get currentPersonality => _activePersonality;
+
+  /// Pick a random voice from the pool for the next session.
+  /// Voices that previously returned 402 are excluded automatically.
+  VoicePersonality selectRandomPersonality() {
+    final available = personalities.where((p) => !_failedVoiceIds.contains(p.voiceId)).toList();
+    final pool = available.isNotEmpty ? available : personalities; // fallback to full pool if all failed
+    final next = pool[Random().nextInt(pool.length)];
+    _activePersonality = next;
+    _cache.clear();
+    debugPrint('[TTS] Voice → ${next.name} (${next.gender}, ${next.age}) | id=${next.voiceId}');
+    return next;
+  }
 
   static String _normalizeVoiceMood(String? mood) {
     switch ((mood ?? 'neutral').toLowerCase()) {
@@ -155,46 +198,68 @@ class TTSService {
   static String _prepareForTTS(String text, {String voiceCue = '', String pause = 'normal', double pace = 1.0, String mood = 'neutral', double energy = 0.65}) {
     var t = text;
 
+    // ── Step 1: Clean parenthetical stage directions from body text ─────────
+    // eleven_turbo_v2_5 reads these literally — convert to natural language or em-dash pause.
+    // NOTE: We use em-dashes (—) for pauses instead of SSML <break> tags because
+    // eleven_turbo_v2_5 sometimes reads SSML angle brackets aloud as "less than" or "break".
+    t = t.replaceAll(RegExp(r'\(hmm+\)', caseSensitive: false), 'Hmm...');
+    t = t.replaceAll(RegExp(r'\(hm\)', caseSensitive: false), 'Hm...');
+    t = t.replaceAll(RegExp(r'\(sighs?\)', caseSensitive: false), '—');
+    t = t.replaceAll(RegExp(r'\(laughs?\)', caseSensitive: false), 'Ha!');
+    t = t.replaceAll(RegExp(r'\(chuckles?\)', caseSensitive: false), 'Heh,');
+    t = t.replaceAll(RegExp(r'\(ha!\)', caseSensitive: false), 'Ha!');
+    t = t.replaceAll(RegExp(r'\(deep[\s-]breath\)', caseSensitive: false), '—');
+    t = t.replaceAll(RegExp(r'\(whispering\)', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'\(whispers?\)', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'\(exhales?\)', caseSensitive: false), '—');
+    // Strip any leftover SSML break tags from prior code paths
+    t = t.replaceAll(RegExp(r'<break\s[^>]*/?>', caseSensitive: false), '—');
+
+    // ── Step 2: Apply cue prefix ─────────────────────────────────────────────
+    // Em-dash (—) = natural pause recognized by eleven_turbo_v2_5
     final normalizedPause = _normalizePause(pause);
     final cue = voiceCue.trim();
     if (cue.isNotEmpty) {
       final lowered = cue.toLowerCase();
-      if (lowered == 'laugh' || lowered == 'laugh_soft' || lowered == 'chuckle') {
-        t = lowered == 'laugh' ? '(laughs) $t' : '(chuckles) $t';
+      if (lowered == 'laugh') {
+        t = 'Ha! $t';
+      } else if (lowered == 'laugh_soft' || lowered == 'chuckle') {
+        t = 'Heh, $t';
       } else if (lowered == 'laugh_big') {
-        t = '(ha!) $t';
+        t = 'Haha! $t';
       } else if (lowered == 'deep_breath') {
-        t = '(deep breath) $t';
+        t = '— $t';
       } else if (lowered == 'pause') {
-        t = '... $t';
+        t = '— $t';
       } else if (lowered == 'thinking' || lowered == 'hmm') {
-        t = '(hmm) $t';
+        t = 'Hmm... $t';
       } else if (lowered == 'sigh') {
-        t = '(sighs) $t';
+        t = '— $t';
       } else if (lowered == 'whisper') {
-        t = '(whispering) $t';
-      } else if (lowered != 'hey' && lowered != 'hello' && lowered != 'hi' && lowered != 'يا هلا' && lowered != 'مرحبا' && lowered != 'اهلا' && lowered != 'أهلا') {
-        t = '$cue. $t';
+        // No text prefix — whisper is driven by voice stability settings alone
+      } else {
+        final disallowed = const {'hey', 'hello', 'hi', 'يا هلا', 'مرحبا', 'اهلا', 'أهلا'};
+        if (!disallowed.contains(lowered)) t = '$cue. $t';
       }
     } else if (normalizedPause == 'long') {
-      t = '... $t';
+      t = '— $t';
     }
 
-    // Pace-based text shaping: slow pace → add pauses, fast → strip them
-    if (pace <= 0.84 && !t.startsWith('...') && !t.startsWith('(')) {
-      // Build in a natural hesitation for dramatic/slow delivery
+    // ── Step 3: Pace shaping ──────────────────────────────────────────────────
+    if (pace <= 0.84 && !t.startsWith('—') && !t.startsWith('...')) {
       t = t.replaceAll(RegExp(r',\s+'), ', ... ');
     } else if (pace >= 1.15) {
-      // Fast pace — remove filler pauses
       t = t.replaceAll(RegExp(r'\.\.\.\s*'), ' ');
     }
 
-    // Excited/laugh with high energy → add emphasis punctuation
+    // ── Step 4: Excitement emphasis ───────────────────────────────────────────
     if ((mood == 'excited' || mood == 'laugh') && energy >= 0.82 && !t.endsWith('!') && !t.endsWith('?')) {
       t = '$t!';
     }
 
-    t = t.replaceAll(RegExp(r'<break\s*time="[^"]*"\s*/?>'), '...');
+    // ── Step 5: Final cleanup ─────────────────────────────────────────────────
+    // Keep <break> SSML tags — eleven_turbo_v2_5 interprets them as real pauses
+    // Only strip <prosody> (not supported) and collapse whitespace
     t = t.replaceAllMapped(
       RegExp(r'<prosody[^>]*>(.*?)</prosody>', dotAll: true),
       (m) => m.group(1) ?? '',
@@ -335,8 +400,11 @@ class TTSService {
       final volume = (voiceProfile?['volume'] as num?)?.toDouble();
       final pitch = (voiceProfile?['pitch'] as num?)?.toDouble();
 
-      final r = await http.post(
-        Uri.parse('$_baseUrl/text-to-speech/$_voiceId'),
+      // Free-plan fallback voice (George) — used when selected voice returns 402
+      const String _freeVoiceId = 'JBFqnCBsd6RMkjVDRZzb';
+
+      Future<http.Response> _doRequest(String voiceId) => http.post(
+        Uri.parse('$_baseUrl/text-to-speech/$voiceId'),
         headers: {
           'xi-api-key': _apiKey,
           'Content-Type': 'application/json',
@@ -344,7 +412,7 @@ class TTSService {
         },
         body: jsonEncode({
           'text': text,
-          'model_id': 'eleven_multilingual_v2',
+          'model_id': 'eleven_turbo_v2_5',
           'voice_settings': {
             'stability': profile.stability,
             'similarity_boost': profile.similarityBoost,
@@ -355,6 +423,23 @@ class TTSService {
       ).timeout(const Duration(seconds: 15));
 
       debugPrint('[TTS] ElevenLabs profile | mood=$profileMood | pace=${pace?.toStringAsFixed(2) ?? "default"} | volume=${volume?.toStringAsFixed(2) ?? "default"} | pitch=${pitch?.toStringAsFixed(2) ?? "default"}');
+
+      var r = await _doRequest(_activePersonality.voiceId);
+
+      // 402 = library voice needs paid plan → retry with free fallback voice
+      if (r.statusCode == 402 && _activePersonality.voiceId != _freeVoiceId) {
+        final failedId = _activePersonality.voiceId;
+        final failedName = _activePersonality.name;
+        // Remember this voice as unavailable so it won't be picked again
+        _failedVoiceIds.add(failedId);
+        // Switch active personality to the fallback so name matches voice
+        _activePersonality = personalities.firstWhere(
+          (p) => p.voiceId == _freeVoiceId,
+          orElse: () => personalities[0],
+        );
+        debugPrint('[TTS] 402 for $failedName ($failedId) — switched to ${_activePersonality.name}, retrying');
+        r = await _doRequest(_freeVoiceId);
+      }
 
       if (r.statusCode == 200 && r.bodyBytes.isNotEmpty) {
         debugPrint('[TTS] Got ${r.bodyBytes.length} bytes');

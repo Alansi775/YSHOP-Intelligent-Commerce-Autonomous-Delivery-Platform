@@ -399,15 +399,17 @@ class _AIHomeConversationBoxState extends State<AIHomeConversationBox>
   // ── Empty ──
   Widget _empty() {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LiquidOrbVisualizer(size: 44, phase: _orbPhase(), audioLevel: 0.0, colorful: false),
-          const SizedBox(height: 14),
-          Text('How can I help?', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14)),
-          const SizedBox(height: 6),
-          Text('Type or tap the mic icon down to speak', style: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 11)),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LiquidOrbVisualizer(size: 44, phase: _orbPhase(), audioLevel: 0.0, colorful: false),
+            const SizedBox(height: 14),
+            Text('How can I help?', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14)),
+            const SizedBox(height: 6),
+            Text('Type or tap the mic icon down to speak', style: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 11)),
+          ],
+        ),
       ),
     );
   }

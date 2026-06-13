@@ -270,7 +270,11 @@ CRITICAL RULES:
      * Pure greetings with zero product signal ("hey", "hi", "how are you", "what's up")
      * Questions about the service ("how do you work", "who are you", "what can you do")
      * Pure chitchat with zero want/need/product signal
+     * Thank-you/farewell messages: "thank you", "thanks", "okay thanks", "bye", "goodbye", "شكرا", "مع السلامة"
+     * Social acknowledgements: "okay", "cool", "nice", "got it", "I see", "interesting"
+     * Responses to AI (not requests): "I'm talking with you", "can you hear me", "yes", "no", "sure"
    - WHEN IN DOUBT → showProducts = true (always prefer to show products over asking a follow-up)
+   - CRITICAL OVERRIDE: If the user is saying thank-you or goodbye → ALWAYS showProducts=false and conversationStage=farewell
 
 1b. keywords — MANDATORY when showProducts=true (NEVER return empty []):
    - Extract POSITIVE search terms describing what the user wants
@@ -295,6 +299,17 @@ CRITICAL RULES:
    - In your reply, explicitly address both people: "Here's something [X] for you and [Y] for your friend"
    - keywords must cover BOTH preferences so both people get relevant results
 
+1e. Reply tone when showProducts=true (CRITICAL — never ask what they want if you're showing products):
+   - When showProducts=true you ARE showing products right now — so your reply must PRESENT, not interrogate
+   - BAD: "What kind of food are you in the mood for?" ← this contradicts showing products already
+   - BAD: "What would you like?" ← same problem
+   - GOOD: "Here are some great options for you! 🍽️"
+   - GOOD: "Take a look at these — I think you'll love them"
+   - GOOD: "Found something delicious for you!"
+   - GOOD: "Here's what we've got — you're going to like these"
+   - The reply should be SHORT (1 sentence max), enthusiastic, and directly introduce the products
+   - NEVER end the reply with a question when showProducts=true
+
 2. Product Discussion Detection (isProductDiscussion):
    - TRUE if user mentions a product name/price/description from "Products user already saw" above
    - TRUE if user says "tell me about...", "explain...", "why this...", "about that..."
@@ -318,8 +333,9 @@ Voice mood — BE EXPRESSIVE, pick the emotion that FITS the moment:
  DO NOT default to neutral — pick the strongest emotion that genuinely fits.
 
 Conversation stage:
- Choose one: greeting, browsing, shopping, checkout, finished, support
- Use browsing when the user is still exploring, shopping when they are choosing products, checkout when they are ready to confirm, finished when the order is done, support when they need help or changes, and greeting for the first contact.
+ Choose one: greeting, browsing, shopping, checkout, finished, support, farewell
+ Use browsing when the user is still exploring, shopping when they are choosing products, checkout when they are ready to confirm, finished when the order is done, support when they need help or changes, greeting for the first contact, and farewell when the user says goodbye, "thank you", "bye", "see you", "شكرا", "مع السلامة", "خلاص", "يكفي", "thanks", or any similar closing phrase.
+ IMPORTANT: When conversationStage=farewell → showProducts=false, give a warm heartfelt goodbye, never suggest more products.
 
 Voice profile:
  Return a structured voiceProfile object when possible.
@@ -411,7 +427,7 @@ Other:
   }
 
   static getSupportedConversationStages() {
-    return new Set(['greeting', 'browsing', 'shopping', 'checkout', 'finished', 'support']);
+    return new Set(['greeting', 'browsing', 'shopping', 'checkout', 'finished', 'support', 'farewell']);
   }
 
   static normalizeConversationStage(value, showProducts = false) {
@@ -433,6 +449,10 @@ Other:
       help: 'support',
       greeting: 'greeting',
       hello: 'greeting',
+      farewell: 'farewell',
+      goodbye: 'farewell',
+      bye: 'farewell',
+      thanks: 'farewell',
     };
 
     const normalized = aliases[stage] || stage;
@@ -1055,13 +1075,21 @@ Other:
 
   static resolveConversationStage(userMessage, understanding, reply, products = [], previousProducts = []) {
     const rawStage = String(understanding?.conversationStage || '').trim();
+
+    // User-message farewell detection takes priority — catches LLM misclassification
+    const userLower = String(userMessage || '').toLowerCase().trim();
+    const farewellPattern = /^(thank(s| you|s a lot)|bye|goodbye|see you|that'?s? all|i'?m done|no thanks|all good|شكرا|شكرا?ً?|مع السلامة|خلاص|يكفي|بس|وداع|الى اللقاء|يعطيك العافية)(\s|[.!?,]|$)/i;
+    if (farewellPattern.test(userLower)) {
+      return 'farewell';
+    }
+
     if (rawStage) {
       return this.normalizeConversationStage(rawStage, understanding?.showProducts === true);
     }
 
     const text = `${userMessage} ${reply}`.toLowerCase();
     if (/thank(s| you)|thanks a lot|perfect|great choice|i have chosen|done|that's all|that is all/.test(text)) {
-      return 'finished';
+      return 'farewell';
     }
     if (products.length > 0) return 'shopping';
     if (understanding?.isProductDiscussion || previousProducts.length > 0) return 'support';
@@ -1398,8 +1426,8 @@ Return JSON only:
 
         if (products.length === 0) {
           reply = userLang === 'arabic' 
-            ? "(hmm) ما لقيت شي يناسب... <break time=\"0.3s\" /> جرب تكون اوضح شوي؟"
-            : "(hmm) Couldn't find anything matching... <break time=\"0.3s\" /> Can you be more specific?";
+            ? "هممم... ما لقيت شي يناسب. <break time=\"0.3s\" /> جرب تكون اوضح شوي؟"
+            : "Hmm... Couldn't find anything matching. <break time=\"0.3s\" /> Can you be more specific?";
           logger.info(`[YShopAI] EmptyResults | trace=${traceId} | reply="${reply}"`);
         }
       }
