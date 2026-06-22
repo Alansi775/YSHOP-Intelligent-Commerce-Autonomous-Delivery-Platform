@@ -50,6 +50,9 @@ export class Order {
       if (!columns.has('delivered_at')) {
         alterStatements.push('ALTER TABLE orders ADD COLUMN delivered_at DATETIME NULL');
       }
+      if (!columns.has('live_activity_push_token')) {
+        alterStatements.push('ALTER TABLE orders ADD COLUMN live_activity_push_token TEXT NULL');
+      }
 
       for (const sql of alterStatements) {
         await pool.query(sql);
@@ -524,6 +527,21 @@ export class Order {
       connection.release();
       throw error;
     }
+  }
+
+  static async saveLiveActivityToken(orderId, token) {
+    await pool.execute(
+      `UPDATE orders SET live_activity_push_token = ?, updated_at = NOW() WHERE id = ?`,
+      [token, orderId]
+    );
+  }
+
+  static async getLiveActivityToken(orderId) {
+    const [[row]] = await pool.execute(
+      `SELECT live_activity_push_token FROM orders WHERE id = ?`,
+      [orderId]
+    );
+    return row?.live_activity_push_token ?? null;
   }
 
   static async clearOffer(orderId) {

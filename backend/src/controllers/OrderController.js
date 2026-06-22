@@ -3,6 +3,42 @@ import pool from '../config/database.js';
 import logger from '../config/logger.js';
 import { getEmailService, renderReceiptCustomerHTML, renderReceiptStoreHTML } from '../utils/emailService.js';
 import { Store } from '../models/Store.js';
+import { getIO } from '../utils/socketInstance.js';
+import { pushLiveActivityUpdate, pushLiveActivityEnd } from '../utils/apnsService.js';
+import { buildLiveActivityState, TERMINAL_STATUSES } from '../utils/liveActivityUtils.js';
+
+// Emit a real-time order update to all connected clients
+function emitOrderUpdate(orderId, order) {
+  try {
+    const io = getIO();
+    if (!io) return;
+    io.emit('data:delta', {
+      type: 'order_updated',
+      orderId: String(orderId),
+      id: String(orderId),
+      order,
+      data: order,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.warn(`[Socket] emit failed for order ${orderId}: ${err.message}`);
+  }
+}
+
+async function pushLiveActivity(orderId, order, alertTitle, alertBody) {
+  try {
+    const token = await Order.getLiveActivityToken(orderId);
+    if (!token) return;
+    const state = buildLiveActivityState(order);
+    if (TERMINAL_STATUSES.has(order.status)) {
+      await pushLiveActivityEnd(token, state);
+    } else {
+      await pushLiveActivityUpdate(token, state, alertTitle, alertBody);
+    }
+  } catch (err) {
+    logger.warn(`[APNs] push failed for order ${orderId}: ${err.message}`);
+  }
+}
 
 export class OrderController {
   static async getAdminOrders(req, res, next) {
@@ -224,12 +260,12 @@ export class OrderController {
 
       await Order.updateStatus(id, status);
 
-      // Restore stock when order is cancelled (store rejection or customer cancel)
+      // Restore stock when order is cancelled
       if (status === 'cancelled') {
         await Order.restoreOrderStock(id).catch(e => logger.warn(`Stock restore failed for order ${id}:`, e.message));
       }
 
-      // Customer cancelled return → delete returned_products record so it disappears from admin/store/driver
+      // Customer cancelled return → delete returned_products record
       if (status === 'delivered' && previousStatus === 'return') {
         try {
           await pool.execute(`DELETE FROM returned_products WHERE order_id = ?`, [id]);
@@ -237,6 +273,19 @@ export class OrderController {
         } catch (e) {
           logger.warn(`Failed to delete returned_products for order ${id}:`, e.message);
         }
+      }
+
+      // Emit real-time update + APNs Live Activity push
+      const updatedOrder = await Order.findById(id).catch(() => null);
+      if (updatedOrder) {
+        emitOrderUpdate(id, updatedOrder);
+        const alertTitles = {
+          confirmed: 'Order Confirmed!',
+          shipped:   '🛵 Driver is on the way!',
+          delivered: '✅ Order Delivered!',
+          cancelled: 'Order Cancelled',
+        };
+        await pushLiveActivity(id, updatedOrder, alertTitles[status], null);
       }
 
       // Set cache-busting headers after update
@@ -296,20 +345,9 @@ export class OrderController {
       // return updated order including customer/store info
       const updated = await Order.findById(id);
 
-      try {
-        const io = getIO();
-        if (io && updated) {
-          io.emit('data:delta', {
-            type: 'order_updated',
-            orderId: String(id),
-            id: String(id),
-            order: updated,
-            data: updated,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } catch (socketErr) {
-        logger.warn(`Socket emit failed after order pickup: ${socketErr.message}`);
+      if (updated) {
+        emitOrderUpdate(id, updated);
+        await pushLiveActivity(id, updated, '🛵 Driver is on the way!', 'Your order has been picked up and is heading to you.');
       }
 
       res.json({ success: true, data: updated });
@@ -333,6 +371,12 @@ export class OrderController {
       }
 
       await Order.updateStatus(id, 'delivered');
+
+      const deliveredOrder = await Order.findById(id).catch(() => null);
+      if (deliveredOrder) {
+        emitOrderUpdate(id, deliveredOrder);
+        await pushLiveActivity(id, deliveredOrder, '✅ Order Delivered!', 'Your order has arrived. Enjoy!');
+      }
 
       res.json({ success: true });
     } catch (error) {
@@ -409,6 +453,23 @@ export class OrderController {
       return res.json({ success: true, message: 'Receipt uploaded and emails queued/sent' });
     } catch (error) {
       logger.error('Error in sendReceipt:', error);
+      next(error);
+    }
+  }
+
+  // POST /api/v1/orders/:id/live-activity-token
+  // iOS app calls this right after starting a Live Activity
+  static async saveLiveActivityToken(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { pushToken } = req.body;
+      if (!pushToken) {
+        return res.status(400).json({ success: false, message: 'pushToken required' });
+      }
+      await Order.saveLiveActivityToken(id, pushToken);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error in saveLiveActivityToken:', error);
       next(error);
     }
   }

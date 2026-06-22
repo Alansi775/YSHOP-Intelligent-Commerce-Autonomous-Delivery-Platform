@@ -2,6 +2,13 @@ import Product from '../models/Product.js';
 import logger from '../config/logger.js';
 import { ProductRetrievalService } from '../services/ProductRetrievalService.js';
 import { VectorStore } from '../services/VectorStore.js';
+import { getIO } from '../utils/socketInstance.js';
+
+function emitProductChange(type, productId, storeId, status = null) {
+  try {
+    getIO()?.emit('data:delta', { type, product_id: String(productId), store_id: String(storeId), status });
+  } catch {}
+}
 
 export class ProductController {
   static async getAll(req, res, next) {
@@ -74,6 +81,7 @@ export class ProductController {
 
       // New product starts as pending — clear cache so stale data doesn't linger
       ProductRetrievalService.clearCache();
+      emitProductChange('product_created', product.id, storeId, 'pending');
 
       res.status(201).json({
         success: true,
@@ -105,6 +113,7 @@ export class ProductController {
 
       // Invalidate catalog cache immediately
       ProductRetrievalService.clearCache();
+      emitProductChange('product_updated', id, product.store_id ?? product.storeId, product.status ?? updateData.status ?? 'approved');
 
       // If name or description changed, the old embedding is stale — re-embed in background
       if (product && (updateData.name !== undefined || updateData.description !== undefined)) {
@@ -151,11 +160,13 @@ export class ProductController {
         }
       }
 
+      const storeId = product.store_id ?? product.storeId;
       await Product.delete(id);
 
       // FK CASCADE deletes the embedding from product_embeddings automatically.
       // Still clear catalog cache so the product vanishes from recommendations immediately.
       ProductRetrievalService.clearCache();
+      emitProductChange('product_deleted', id, storeId);
 
       res.json({ success: true, message: 'Product deleted successfully' });
     } catch (error) {
@@ -318,6 +329,7 @@ export class ProductController {
       }
 
       ProductRetrievalService.clearCache();
+      emitProductChange('product_updated', id, product.store_id ?? product.storeId, status);
 
       // Generate embedding when product becomes approved for the first time
       if (status === 'approved') {
@@ -353,6 +365,7 @@ export class ProductController {
       }
 
       ProductRetrievalService.clearCache();
+      emitProductChange('product_updated', id, product.store_id ?? product.storeId);
 
       // Generate embedding immediately so the product is searchable right away
       setImmediate(() => {
@@ -375,6 +388,9 @@ export class ProductController {
   static async rejectProduct(req, res, next) {
     try {
       const { id } = req.params;
+
+      const product = await Product.findById(id).catch(() => null);
+      emitProductChange('product_deleted', id, product?.store_id ?? product?.storeId ?? 0);
 
       // Delete the product when rejected — FK CASCADE removes embedding automatically
       await Product.delete(id);
@@ -406,6 +422,7 @@ export class ProductController {
       }
 
       ProductRetrievalService.clearCache();
+      emitProductChange('product_updated', id, product.store_id ?? product.storeId);
 
       if (isActive) {
         // Re-activated: generate/refresh embedding so it shows up in search immediately

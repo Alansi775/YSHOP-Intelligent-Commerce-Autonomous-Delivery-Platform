@@ -25,5 +25,6 @@ router.put('/:id/status', OrderController.updateStatus);
 router.post('/:id/assign', OrderController.assignToDriver);
 router.post('/:id/picked-up', OrderController.pickedUp);
 router.post('/:id/mark-delivered', OrderController.markDelivered);
+router.post('/:id/live-activity-token', OrderController.saveLiveActivityToken);
 
 export default router;

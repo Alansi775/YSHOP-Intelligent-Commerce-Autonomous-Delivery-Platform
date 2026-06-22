@@ -228,6 +228,41 @@ ReactiveSyncManager.on('broadcast', (msg) => {
   });
 });
 
+// ─── Resilience: catch network-level errors before they crash Node ────────────
+
+// Each raw TCP connection that Express/Socket.io uses can emit 'error' when the
+// client abruptly disconnects (mobile going background, flaky network, etc.).
+// Without this listener Node throws an uncaught 'error' event and crashes.
+httpServer.on('connection', (socket) => {
+  socket.on('error', (err) => {
+    if (err.code === 'ECONNRESET' || err.code === 'EPIPE') return; // normal mobile disconnect
+    logger.warn('TCP socket error:', { code: err.code, message: err.message });
+  });
+});
+
+httpServer.on('error', (err) => {
+  logger.error('HTTP server error:', err);
+});
+
+// Catch any exception that escapes all try/catch blocks.
+// ECONNRESET / EPIPE are transient network events — ignore and stay alive.
+// Everything else: log then exit so the process manager can restart cleanly.
+process.on('uncaughtException', (err) => {
+  if (err.code === 'ECONNRESET' || err.code === 'EPIPE') {
+    logger.warn(`Ignoring transient network error: ${err.code}`);
+    return;
+  }
+  logger.error('UNCAUGHT EXCEPTION — exiting:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('UNHANDLED REJECTION:', reason);
+  // Don't exit — log and keep running; a single rejected promise shouldn't kill the server
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Start Server
 const server = httpServer.listen(PORT, '0.0.0.0', async () => {
   try {

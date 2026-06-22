@@ -2,6 +2,13 @@ import Store from '../models/Store.js';
 import logger from '../config/logger.js';
 import pool from '../config/database.js';
 import admin from '../config/firebase.js';
+import { getIO } from '../utils/socketInstance.js';
+
+function emitStoreChange(type, storeId, storeType, status = null) {
+  try {
+    getIO()?.emit('data:delta', { type, store_id: String(storeId), store_type: storeType, status });
+  } catch {}
+}
 
 export class StoreController {
   /**
@@ -169,6 +176,7 @@ export class StoreController {
       }
 
       const updatedStore = await Store.findById(id);
+      emitStoreChange('store_updated', id, updatedStore?.store_type ?? updatedStore?.type, updatedStore?.status);
       res.json({
         success: true,
         data: updatedStore,
@@ -311,6 +319,8 @@ export class StoreController {
         }
       })();
 
+      emitStoreChange('store_updated', id, storeData.store_type ?? storeData.type, 'Approved');
+
       // أرجع البيانات مع owner_uid
       res.json({
         success: true,
@@ -378,6 +388,9 @@ export class StoreController {
         connection.release();
       }
 
+      // Notify iOS clients BEFORE the hard delete (after delete the row is gone)
+      emitStoreChange('store_deleted', id, storeData.store_type ?? storeData.type);
+
       // احذف المتجر نهائياً
       await Store.hardDelete(id);
 
@@ -413,6 +426,9 @@ export class StoreController {
       //  Update MySQL FIRST (sync) for immediate API response
       await Store.update(id, { status: 'Suspended' });
       logger.info(` Store ${id} MySQL updated to Suspended (sync)`);
+
+      // Notify iOS clients immediately — store disappears from customer screens
+      emitStoreChange('store_updated', id, storeData.store_type ?? storeData.type, 'Suspended');
 
       //  Then update Firestore ASYNC (don't wait for it)
       (async () => {
@@ -450,6 +466,11 @@ export class StoreController {
 
       const storeData = await Store.findById(id);
       const ownerUid = storeData?.owner_uid;
+
+      // Notify iOS BEFORE deleting so clients know which storeType to remove
+      if (storeData) {
+        emitStoreChange('store_deleted', id, storeData.store_type ?? storeData.type, null);
+      }
 
       // حذف المنتجات
       const connection = await pool.getConnection();

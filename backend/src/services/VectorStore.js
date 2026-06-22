@@ -158,7 +158,8 @@ export class VectorStore {
       scored.sort((a, b) => b.semanticScore - a.semanticScore || b.stock - a.stock || b.id - a.id);
       return scored.slice(0, topK);
     } catch (err) {
-      logger.error(`[VectorStore] personalizedSearch error: ${err?.stack || err?.message || String(err)}`);
+      // Embedding failure is non-fatal — BM25 lexical search covers the gap
+      logger.warn(`[VectorStore] semantic search unavailable (${err?.message || String(err)}) — falling back to lexical`);
       return products.map(p => ({ ...p, semanticScore: 0 }));
     }
   }

@@ -10,6 +10,13 @@ import { getIO } from '../utils/socketInstance.js';
 import pool from '../config/database.js';
 import admin from '../config/firebase.js';
 import { getEmailService, renderDeliveryConfirmationHTML } from '../utils/emailService.js';
+import { pushLiveActivityUpdate } from '../utils/apnsService.js';
+import { buildLiveActivityState } from '../utils/liveActivityUtils.js';
+
+// Throttle Live Activity APNs location pushes to ≤ 1 per 15 s per order.
+// Driver location updates can arrive every 2-5 s — pushing every one would
+// drain Apple's per-app daily budget and flood the network.
+const _laPushThrottle = new Map(); // orderId (string) → last push timestamp (ms)
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONFIGURATION
@@ -104,18 +111,41 @@ class DeliveryController {
         );
         if (orderRows.length > 0) {
           const orderId = String(orderRows[0].id);
+
+          // 1. WebSocket — instant update for users with the app open
           const io = getIO();
           if (io) {
-            const locationEvent = {
+            io.emit('data:delta', {
               type: 'driver_location',
               orderId,
               id: orderId,
               driverLocation: { latitude: lat, longitude: lng },
               driver_location: JSON.stringify({ latitude: lat, longitude: lng }),
-              timestamp: new Date().toISOString()
-            };
-            io.emit('data:delta', locationEvent);
+              timestamp: new Date().toISOString(),
+            });
             logger.info(`📡 Emitted driver_location for order ${orderId}`);
+          }
+
+          // 2. APNs Live Activity push — updates Lock Screen even when app is closed.
+          //    Throttled: at most one push every 15 seconds per order to stay within
+          //    Apple's daily push budget and avoid flooding APNs.
+          const now = Date.now();
+          if (now - (_laPushThrottle.get(orderId) ?? 0) >= 15_000) {
+            _laPushThrottle.set(orderId, now);
+            setImmediate(async () => {
+              try {
+                const token = await Order.getLiveActivityToken(orderId);
+                if (!token) return;
+                const fullOrder = await Order.findById(orderId);
+                if (!fullOrder) return;
+                // Pass fresh driver coords so proximity is always accurate
+                const state = buildLiveActivityState(fullOrder, lat, lng);
+                await pushLiveActivityUpdate(token, state, null, null);
+                logger.debug(`[APNs] location push sent for order ${orderId}`);
+              } catch (laErr) {
+                logger.warn(`[APNs] location push failed for order ${orderId}: ${laErr.message}`);
+              }
+            });
           }
         }
       } catch (socketErr) {
