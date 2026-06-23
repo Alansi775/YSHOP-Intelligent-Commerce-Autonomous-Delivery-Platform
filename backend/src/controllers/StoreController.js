@@ -6,8 +6,16 @@ import { getIO } from '../utils/socketInstance.js';
 
 function emitStoreChange(type, storeId, storeType, status = null) {
   try {
-    getIO()?.emit('data:delta', { type, store_id: String(storeId), store_type: storeType, status });
-  } catch {}
+    const io = getIO();
+    if (!io) {
+      logger.warn(`[Socket] emitStoreChange skipped — no IO instance (${type} store ${storeId})`);
+      return;
+    }
+    io.emit('data:delta', { type, store_id: String(storeId), store_type: storeType, status });
+    logger.info(`[Socket] emitStoreChange → type=${type} storeId=${storeId} storeType=${storeType} status=${status}`);
+  } catch (err) {
+    logger.error(`[Socket] emitStoreChange error: ${err.message}`);
+  }
 }
 
 export class StoreController {
@@ -370,12 +378,15 @@ export class StoreController {
 
           const cnt = orderItemCountRows[0]?.cnt || 0;
           if (cnt > 0) {
-            // لا نحذف لأن هناك طلبات تعتمد على هذه المنتجات — أعد رسالة مفيدة
+            // Can't hard-delete: existing orders reference these products.
+            // Soft-reject instead: update status so store disappears from customer screens.
             connection.release();
-            return res.status(400).json({
-              success: false,
-              message: 'Cannot delete store because existing orders reference its products. Consider suspending the store instead.',
-              details: { orderItemsCount: cnt },
+            await Store.update(id, { status: 'rejected' });
+            emitStoreChange('store_updated', id, storeData.store_type ?? storeData.type, 'rejected');
+            return res.json({
+              success: true,
+              message: 'Store rejected (preserved due to existing orders)',
+              data: { ...storeData, status: 'rejected' },
             });
           }
         }

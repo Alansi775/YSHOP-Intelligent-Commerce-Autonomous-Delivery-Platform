@@ -11,7 +11,10 @@ import { buildLiveActivityState, TERMINAL_STATUSES } from '../utils/liveActivity
 function emitOrderUpdate(orderId, order) {
   try {
     const io = getIO();
-    if (!io) return;
+    if (!io) {
+      logger.warn(`[Socket] ⚠️ No IO instance — order_updated NOT emitted for order ${orderId}`);
+      return;
+    }
     io.emit('data:delta', {
       type: 'order_updated',
       orderId: String(orderId),
@@ -20,23 +23,29 @@ function emitOrderUpdate(orderId, order) {
       data: order,
       timestamp: new Date().toISOString(),
     });
+    logger.info(`[Socket] 📡 Emitted order_updated for order ${orderId} status=${order.status}`);
   } catch (err) {
-    logger.warn(`[Socket] emit failed for order ${orderId}: ${err.message}`);
+    logger.warn(`[Socket] ❌ emit failed for order ${orderId}: ${err.message}`);
   }
 }
 
 async function pushLiveActivity(orderId, order, alertTitle, alertBody) {
   try {
     const token = await Order.getLiveActivityToken(orderId);
-    if (!token) return;
+    if (!token) {
+      logger.warn(`[APNs] ⚠️ No Live Activity token for order ${orderId} — push skipped (user never opened tracking view or pushType:.token failed on iOS)`);
+      return;
+    }
+    logger.info(`[APNs] 📡 Sending Live Activity push for order ${orderId} status=${order.status} isTerminal=${TERMINAL_STATUSES.has(order.status)} alertTitle=${alertTitle ?? 'none'}`);
     const state = buildLiveActivityState(order);
     if (TERMINAL_STATUSES.has(order.status)) {
-      await pushLiveActivityEnd(token, state);
+      await pushLiveActivityEnd(token, state, alertTitle, alertBody);
     } else {
       await pushLiveActivityUpdate(token, state, alertTitle, alertBody);
     }
+    logger.info(`[APNs] ✅ Live Activity push delivered for order ${orderId}`);
   } catch (err) {
-    logger.warn(`[APNs] push failed for order ${orderId}: ${err.message}`);
+    logger.warn(`[APNs] ❌ push failed for order ${orderId}: ${err.message}`);
   }
 }
 
@@ -279,13 +288,15 @@ export class OrderController {
       const updatedOrder = await Order.findById(id).catch(() => null);
       if (updatedOrder) {
         emitOrderUpdate(id, updatedOrder);
-        const alertTitles = {
-          confirmed: 'Order Confirmed!',
-          shipped:   '🛵 Driver is on the way!',
-          delivered: '✅ Order Delivered!',
-          cancelled: 'Order Cancelled',
+        const alerts = {
+          confirmed: { title: '✅ Order Confirmed!',      body: 'Your order is being prepared.' },
+          shipped:   { title: '🛵 Driver is on the way!', body: 'Your order has been picked up.' },
+          delivered: { title: '🎉 Order Delivered!',      body: 'Your order has arrived. Enjoy!' },
+          cancelled: { title: '❌ Order Cancelled',       body: 'Your order has been cancelled.' },
+          failed:    { title: '⚠️ Order Issue',           body: 'There was a problem with your order.' },
         };
-        await pushLiveActivity(id, updatedOrder, alertTitles[status], null);
+        const alert = alerts[status];
+        await pushLiveActivity(id, updatedOrder, alert?.title ?? null, alert?.body ?? null);
       }
 
       // Set cache-busting headers after update

@@ -18,6 +18,16 @@ import { buildLiveActivityState } from '../utils/liveActivityUtils.js';
 // drain Apple's per-app daily budget and flood the network.
 const _laPushThrottle = new Map(); // orderId (string) → last push timestamp (ms)
 
+// Send proximity alert once per order when driver is < 500 m from customer.
+const _proximityAlertSent = new Set(); // orderId strings
+
+function _metersApart(lat1, lon1, lat2, lon2) {
+  const R = 6_371_000, t = d => d * Math.PI / 180;
+  const dLat = t(lat2 - lat1), dLon = t(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(t(lat1)) * Math.cos(t(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,9 +148,27 @@ class DeliveryController {
                 if (!token) return;
                 const fullOrder = await Order.findById(orderId);
                 if (!fullOrder) return;
+
                 // Pass fresh driver coords so proximity is always accurate
                 const state = buildLiveActivityState(fullOrder, lat, lng);
-                await pushLiveActivityUpdate(token, state, null, null);
+
+                // Proximity alert: fire once when driver enters 500 m radius.
+                // Gives customer a banner notification even when app is in background.
+                const cLat = parseFloat(fullOrder.customer_latitude ?? fullOrder.location_Latitude);
+                const cLon = parseFloat(fullOrder.customer_longitude ?? fullOrder.location_Longitude);
+                let alertTitle = null, alertBody = null;
+
+                if (!_proximityAlertSent.has(orderId) && !isNaN(cLat) && !isNaN(cLon)) {
+                  const meters = _metersApart(lat, lng, cLat, cLon);
+                  if (meters < 500) {
+                    _proximityAlertSent.add(orderId);
+                    alertTitle = '📍 Driver is almost there!';
+                    alertBody  = `Your driver is ${Math.round(meters)} m away.`;
+                    logger.info(`[APNs] proximity alert sent for order ${orderId} (${Math.round(meters)} m)`);
+                  }
+                }
+
+                await pushLiveActivityUpdate(token, state, alertTitle, alertBody);
                 logger.debug(`[APNs] location push sent for order ${orderId}`);
               } catch (laErr) {
                 logger.warn(`[APNs] location push failed for order ${orderId}: ${laErr.message}`);

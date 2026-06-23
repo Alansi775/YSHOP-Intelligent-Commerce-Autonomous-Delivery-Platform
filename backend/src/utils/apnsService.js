@@ -36,12 +36,15 @@ function getJWT() {
 
 async function sendAPNs(deviceToken, payload, apnsTopic) {
   if (!KEY_ID || !TEAM_ID || !PRIVATE_KEY || !BUNDLE_ID) {
-    logger.warn('[APNs] Missing credentials — skipping push');
+    logger.warn('[APNs] ⚠️ Missing credentials (APNS_KEY_ID/APNS_TEAM_ID/APNS_PRIVATE_KEY/APNS_BUNDLE_ID) — skipping push');
     return;
   }
 
   const body = JSON.stringify(payload);
   const topic = apnsTopic ?? `${BUNDLE_ID}.push-type.liveactivity`;
+  const tokenSnippet = deviceToken ? `${deviceToken.substring(0, 8)}...` : 'null';
+
+  logger.info(`[APNs] → host=${APNS_HOST} topic=${topic} token=${tokenSnippet} event=${payload?.aps?.event ?? 'alert'}`);
 
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -64,16 +67,17 @@ async function sendAPNs(deviceToken, payload, apnsTopic) {
         res.on('data', (chunk) => (data += chunk));
         res.on('end', () => {
           if (res.statusCode === 200) {
+            logger.info(`[APNs] ✅ Push delivered (200 OK) token=${tokenSnippet}`);
             resolve();
           } else {
-            logger.warn(`[APNs] HTTP ${res.statusCode}: ${data}`);
+            logger.warn(`[APNs] ❌ Push failed HTTP ${res.statusCode}: ${data} token=${tokenSnippet}`);
             resolve();
           }
         });
       }
     );
     req.on('error', (err) => {
-      logger.error('[APNs] request error:', err.message);
+      logger.error(`[APNs] ❌ Network error: ${err.message}`);
       resolve();
     });
     req.write(body);
@@ -102,14 +106,19 @@ export async function pushLiveActivityUpdate(pushToken, contentState, alertTitle
 
 /**
  * End a Live Activity via push.
+ * Optionally shows a banner alert so the user sees the final status.
  */
-export async function pushLiveActivityEnd(pushToken, contentState) {
+export async function pushLiveActivityEnd(pushToken, contentState, alertTitle = null, alertBody = null) {
   const payload = {
     aps: {
       timestamp: Math.floor(Date.now() / 1000),
       event: 'end',
       'content-state': contentState,
       'dismissal-date': Math.floor(Date.now() / 1000) + 7200,
+      ...(alertTitle && {
+        alert: { title: alertTitle, body: alertBody ?? '' },
+        sound: 'default',
+      }),
     },
   };
   await sendAPNs(pushToken, payload);
