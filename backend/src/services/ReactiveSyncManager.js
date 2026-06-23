@@ -65,15 +65,18 @@ class ReactiveSyncManager extends EventEmitter {
       return;
     }
 
-    // Parse channel: 'returns:502' → { type: 'returns', id: '502' }
-    const [type, id] = channel.split(':');
-    
-    logger.info(`▶️ STARTING WATCHER`, { channel, type, id });
+    // Parse channel: 'returns:502' → type='returns', entityId='502'
+    // 'customer:orders:7' → type='customer', entityId='7' (3-part channels)
+    const parts = channel.split(':');
+    const type = parts[0];
+    const entityId = parts.length >= 3 ? parts[parts.length - 1] : parts[1];
+
+    logger.info(`▶️ STARTING WATCHER`, { channel, type, entityId });
 
     const checkInterval = setInterval(async () => {
       try {
         // 🔥 Check for changes without logging
-        await this._checkAndEmitChanges(channel, type, id);
+        await this._checkAndEmitChanges(channel, type, entityId);
       } catch (error) {
         logger.error(`❌ Watcher error for ${channel}`, { error: error.message });
       }
@@ -97,7 +100,7 @@ class ReactiveSyncManager extends EventEmitter {
   /**
    *  Check database for changes and emit delta
    */
-  async _checkAndEmitChanges(channel, type, storeId) {
+  async _checkAndEmitChanges(channel, type, entityId) {
     let connection;
     try {
       connection = await pool.getConnection();
@@ -115,7 +118,7 @@ class ReactiveSyncManager extends EventEmitter {
            WHERE rp.store_id = ? AND rp.admin_accepted = 1
            ORDER BY rp.return_requested_at DESC 
            LIMIT 500`,
-          [storeId]
+          [entityId]
         );
 
         const hash = JSON.stringify(returns);
@@ -163,7 +166,7 @@ class ReactiveSyncManager extends EventEmitter {
            WHERE o.store_id = ? AND o.status != 'return'
            ORDER BY o.updated_at DESC 
            LIMIT 500`,
-          [storeId]
+          [entityId]
         );
 
         // 🔥 GET ITEMS FOR EACH ORDER (with product images!)
@@ -347,16 +350,16 @@ class ReactiveSyncManager extends EventEmitter {
         }
       }
 
-      if (type === 'customer' && id) {
+      if (type === 'customer' && entityId) {
         // Customer orders (customer:orders:123)
         const [orders] = await connection.execute(
           `SELECT o.id, o.store_id, o.status, o.total_price, o.user_id,
-           o.currency, o.created_at, o.updated_at 
+           o.currency, o.created_at, o.updated_at
            FROM orders o
            WHERE o.user_id = ?
-           ORDER BY o.updated_at DESC 
+           ORDER BY o.updated_at DESC
            LIMIT 500`,
-          [id]
+          [entityId]
         );
 
         // 🔥 GET ITEMS FOR EACH ORDER (with product images!)
@@ -397,6 +400,22 @@ class ReactiveSyncManager extends EventEmitter {
           const lastTime = this.lastSync.get(channel) || 0;
           const now = Date.now();
 
+          // Log status changes for each order to help trace UI update issues
+          const changedOrders = orders.filter(o => {
+            try {
+              const prev = JSON.parse(lastHash || '[]');
+              const prevOrder = prev.find(p => p.id === o.id);
+              return !prevOrder || prevOrder.status !== o.status;
+            } catch { return false; }
+          });
+          if (changedOrders.length > 0) {
+            logger.info(`[ReactiveSync] 🔔 ORDER STATUS CHANGE DETECTED → pushing to clients`, {
+              channel,
+              customerId: entityId,
+              changes: changedOrders.map(o => ({ orderId: o.id, status: o.status })),
+            });
+          }
+
           if (now - lastTime >= this.BACKPRESSURE_MIN) {
             this._broadcastToChannel(channel, {
               type: 'customer:orders:delta',
@@ -409,25 +428,21 @@ class ReactiveSyncManager extends EventEmitter {
             this.lastHashes.set(channel, hash);
             this.lastSync.set(channel, now);
 
-            logger.debug(` CUSTOMER ORDERS DELTA EMITTED`, {
-              channel,
-              customerId: id,
-              dataRows: orders.length,
-            });
+            logger.info(`[ReactiveSync] 📡 DELTA PUSHED to channel ${channel} (${orders.length} orders)`);
           }
         }
       }
 
-      if (type === 'delivery' && id) {
+      if (type === 'delivery' && entityId) {
         // Delivery requests (delivery:requests:driverId)
         const [requests] = await connection.execute(
-          `SELECT id, driver_id, status, from_location, to_location, 
-           order_id, created_at, updated_at 
-           FROM delivery_requests 
+          `SELECT id, driver_id, status, from_location, to_location,
+           order_id, created_at, updated_at
+           FROM delivery_requests
            WHERE driver_id = ?
-           ORDER BY updated_at DESC 
+           ORDER BY updated_at DESC
            LIMIT 500`,
-          [id]
+          [entityId]
         );
 
         const hash = JSON.stringify(requests);
@@ -451,7 +466,7 @@ class ReactiveSyncManager extends EventEmitter {
 
             logger.debug(` DELIVERY REQUESTS DELTA EMITTED`, {
               channel,
-              driverId: id,
+              driverId: entityId,
               dataRows: requests.length,
             });
           }

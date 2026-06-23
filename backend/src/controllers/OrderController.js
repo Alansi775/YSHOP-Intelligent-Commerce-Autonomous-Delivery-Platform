@@ -7,7 +7,7 @@ import { getIO } from '../utils/socketInstance.js';
 import { pushLiveActivityUpdate, pushLiveActivityEnd } from '../utils/apnsService.js';
 import { buildLiveActivityState, TERMINAL_STATUSES } from '../utils/liveActivityUtils.js';
 
-// Emit a real-time order update to all connected clients
+// Emit a real-time order update to the customer's private channel
 function emitOrderUpdate(orderId, order) {
   try {
     const io = getIO();
@@ -15,15 +15,28 @@ function emitOrderUpdate(orderId, order) {
       logger.warn(`[Socket] ⚠️ No IO instance — order_updated NOT emitted for order ${orderId}`);
       return;
     }
-    io.emit('data:delta', {
-      type: 'order_updated',
-      orderId: String(orderId),
-      id: String(orderId),
-      order,
-      data: order,
-      timestamp: new Date().toISOString(),
-    });
-    logger.info(`[Socket] 📡 Emitted order_updated for order ${orderId} status=${order.status}`);
+
+    // Target the customer's room — only they receive this update
+    const userId = order.user_id ?? order.userId;
+    if (userId) {
+      const channel = `customer:orders:${userId}`;
+      io.to(channel).emit('data:delta', {
+        channel,
+        data: [{ ...order, id: String(orderId) }],
+        timestamp: new Date().toISOString(),
+      });
+      logger.info(`[Socket] 📡 Emitted to ${channel} — order ${orderId} status=${order.status}`);
+    }
+
+    // Also emit to any store/driver/admin rooms watching this order
+    const storeChannel = order.store_id ? `store:orders:${order.store_id}` : null;
+    if (storeChannel) {
+      io.to(storeChannel).emit('data:delta', {
+        channel: storeChannel,
+        data: [{ ...order, id: String(orderId) }],
+        timestamp: new Date().toISOString(),
+      });
+    }
   } catch (err) {
     logger.warn(`[Socket] ❌ emit failed for order ${orderId}: ${err.message}`);
   }

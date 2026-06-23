@@ -14,7 +14,8 @@ import 'services/navigation_service.dart';
 import 'state_management/cart_manager.dart';
 import 'state_management/auth_manager.dart';
 import 'state_management/theme_manager.dart';
-import 'providers/ai_chat_provider.dart'; //  YSHOP AI Chat 
+import 'providers/ai_chat_provider.dart'; //  YSHOP AI Chat
+import 'services/order_notification_service.dart';
 
 // Global ValueNotifier for tracking hero section scroll position
 final isAboveHeroNotifier = ValueNotifier<bool>(true); 
@@ -100,6 +101,10 @@ void main() async {
 
   //  CRITICAL: Initialize SharedPreferences before anything else
   await SharedPreferences.getInstance();
+
+  // Android Live Activity: initialize notification service + request permission
+  await orderNotificationService.init();
+  await orderNotificationService.requestPermission();
 
   // Create AuthManager and load cached token BEFORE running app
   final authManager = AuthManager();

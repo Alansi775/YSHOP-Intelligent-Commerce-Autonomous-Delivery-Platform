@@ -45,26 +45,18 @@ class Product {
 
   // Factory for backend API (MySQL)
   factory Product.fromJson(Map<String, dynamic> json) {
-    // تحويل المسار النسبي إلى URL كامل
-    String imageUrl = json['image_url'] as String? ?? '';
-    if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
-      imageUrl = '${ApiService.baseHost}$imageUrl';
-    }
+    // Always run through getFullImageUrl — rewrites .local hostnames for Android
+    String imageUrl = getFullImageUrl(json['image_url'] as String? ?? '');
 
-    // تحويل الفيديو
     String? videoUrl = json['video_url'] as String?;
-    if (videoUrl != null && videoUrl.isNotEmpty && !videoUrl.startsWith('http')) {
-      videoUrl = '${ApiService.baseHost}$videoUrl';
+    if (videoUrl != null && videoUrl.isNotEmpty) {
+      videoUrl = getFullImageUrl(videoUrl);
     }
 
-    //  معالجة قائمة الصور المتعددة
     List<String> imageUrls = [];
     if (json['image_urls'] != null) {
       imageUrls = (json['image_urls'] as List).map((url) {
-        if (url is String && url.isNotEmpty && !url.startsWith('http')) {
-          return '${ApiService.baseHost}$url';
-        }
-        return url.toString();
+        return getFullImageUrl(url?.toString() ?? '');
       }).toList();
     }
     
@@ -109,27 +101,32 @@ class Product {
   //  Helper method لتحويل أي مسار نسبي إلى URL كامل
   static String getFullImageUrl(String? path) {
     if (path == null || path.isEmpty) return '';
+
+    // Strip file:// prefix (backend sometimes stores absolute local paths)
+    if (path.startsWith('file://')) {
+      path = path.replaceFirst(RegExp(r'^file://'), '');
+    }
+
     try {
-      // If already absolute URL, verify host. For LAN IP mismatches (e.g. old IP),
-      // replace host with the configured ApiService.baseHost so the client can load the image.
       if (path.startsWith('http')) {
         final uri = Uri.parse(path);
         final base = Uri.parse(ApiService.baseHost);
         final srcHost = uri.host;
         final baseHost = base.host;
 
-        // If the source host looks like a private LAN address but doesn't match our base host,
-        // rewrite the URL to use the base host (preserve path and query).
-        if (srcHost != baseHost && (
+        // Rewrite if the URL's host is a dev machine hostname/IP that differs from our base.
+        // Covers: LAN IPs, loopback, and mDNS .local hostnames (not resolvable on Android).
+        final needsRewrite = srcHost != baseHost && (
             srcHost.startsWith('192.168.') ||
             srcHost.startsWith('10.') ||
             srcHost == '127.0.0.1' ||
-            srcHost == 'localhost')) {
+            srcHost == 'localhost' ||
+            srcHost.endsWith('.local'));
+        if (needsRewrite) {
           final replaced = base.replace(path: uri.path, query: uri.hasQuery ? uri.query : null);
           return replaced.toString();
         }
 
-        // otherwise return unchanged absolute URL
         return path;
       }
     } catch (_) {

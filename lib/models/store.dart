@@ -1,5 +1,6 @@
 // lib/models/store.dart
 import '../services/api_service.dart';
+import 'product.dart';
 
 class Store {
   final String id;
@@ -30,11 +31,8 @@ class Store {
 
   // Factory for backend API (MySQL)
   factory Store.fromJson(Map<String, dynamic> json) {
-    // تحويل المسار النسبي إلى URL كامل
-    String iconUrl = json['icon_url'] as String? ?? '';
-    if (iconUrl.isNotEmpty && !iconUrl.startsWith('http')) {
-      iconUrl = '${ApiService.baseHost}$iconUrl';
-    }
+    // Always run through Product.getFullImageUrl — rewrites .local hostnames for Android
+    String iconUrl = Product.getFullImageUrl(json['icon_url'] as String? ?? '');
 
     //  تحديد الـ status من قاعدة البيانات مباشرة
     String status = json['status'] ?? 'Pending';

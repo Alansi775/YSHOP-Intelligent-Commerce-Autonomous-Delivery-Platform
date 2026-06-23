@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/navigation_service.dart';
+import '../services/order_notification_service.dart';
+import '../services/reactive_sync_service.dart';
+import '../config/api_config.dart';
 import 'package:intl/intl.dart';
 import '../state_management/cart_manager.dart';
 import '../state_management/auth_manager.dart';
@@ -65,16 +68,44 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
   DateTime? _lastCheckTime;
   int _consecutiveAuthErrors = 0;
 
+  // Socket-based live tracking
+  StreamSubscription<Map<String, dynamic>>? _socketSubscription;
+  String? _subscribedChannel;
+  bool _wasSocketConnected = false;
+
   @override
   void initState() {
     super.initState();
+    reactiveSyncService.addListener(_onSocketStateChanged);
+    _wasSocketConnected = reactiveSyncService.isConnected;
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
     _pollingTimer = null;
+    _socketSubscription?.cancel();
+    _socketSubscription = null;
+    reactiveSyncService.removeListener(_onSocketStateChanged);
+    if (_subscribedChannel != null) {
+      reactiveSyncService.unsubscribe(_subscribedChannel!);
+      _subscribedChannel = null;
+    }
     super.dispose();
+  }
+
+  void _onSocketStateChanged() {
+    final connected = reactiveSyncService.isConnected;
+    final wasConnected = _wasSocketConnected;
+    _wasSocketConnected = connected; // update FIRST — prevents re-entrant infinite loop via notifyListeners
+    if (connected && !wasConnected && _subscribedChannel != null) {
+      final ch = _subscribedChannel!;
+      Future.microtask(() {
+        if (!mounted || _subscribedChannel != ch) return;
+        reactiveSyncService.unsubscribe(ch);
+        reactiveSyncService.subscribe(ch);
+      });
+    }
   }
 
   @override
@@ -107,6 +138,12 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
 
   void _clearOrderData() {
     _pollingTimer?.cancel();
+    _socketSubscription?.cancel();
+    _socketSubscription = null;
+    if (_subscribedChannel != null) {
+      reactiveSyncService.unsubscribe(_subscribedChannel!);
+      _subscribedChannel = null;
+    }
     if (mounted) {
       setState(() {
         _cachedOrder = null;
@@ -115,6 +152,7 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
         _isCheckingLatestOrder = false;
       });
     }
+    orderNotificationService.dismissNotification();
     Future.microtask(() {
       if (mounted) {
         try {
@@ -204,7 +242,15 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
               _currentOrderId = orderId;
             });
             Provider.of<CartManager>(context, listen: false).setLastOrderId(orderId);
-            _startLightPolling(orderId);
+            _startTracking(orderId);
+            // Android Live Activity: start persistent notification
+            orderNotificationService.startTracking(
+              orderId: orderId,
+              storeName: latestPendingOrder['store_name']?.toString() ?? 'Your Store',
+              status: latestPendingOrder['status']?.toString() ?? 'pending',
+              totalPrice: _toDouble(latestPendingOrder['total_price'] ?? latestPendingOrder['total']),
+              currency: latestPendingOrder['currency']?.toString() ?? 'USD',
+            );
           }
         }
       }
@@ -223,39 +269,72 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     }
   }
 
-  void _startLightPolling(String orderId) {
+  // Unified socket-first tracking — replaces legacy light/smart polling
+  void _startTracking(String orderId) {
+    // Only skip if already tracking this order AND both subscription and timer are alive.
+    // If the timer was cancelled (e.g. by a build() race), restart regardless.
+    final timerAlive = _pollingTimer?.isActive ?? false;
+    if (_currentOrderId == orderId && _socketSubscription != null && timerAlive) return;
+    _currentOrderId = orderId;
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 90), (_) async {
-      final authManager = Provider.of<AuthManager>(context, listen: false);
-      if (!authManager.isAuthenticated) {
-        _clearOrderData();
-        return;
-      }
+    _socketSubscription?.cancel();
+
+    // 1. Fetch initial state immediately
+    _fetchOrder(orderId, isInitial: true);
+
+    // 2. Subscribe to socket for instant updates
+    final authManager = Provider.of<AuthManager>(context, listen: false);
+    final userId = authManager.userProfile?['id']?.toString();
+    if (userId != null) {
+      _subscribeSocket(userId, orderId); // async — fire and forget; socket init handled inside
+    }
+
+    // 3. Fallback polling every 15 seconds (primary driver when socket disconnected)
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!mounted) return;
-      try {
-        final orders = await ApiService.getUserOrders();
-        if (orders != null) {
-          for (final order in orders) {
-            if ((order['id']?.toString() ?? order['order_id']?.toString()) == orderId) {
-              if (mounted) {
-                setState(() => _cachedOrder!['status'] = order['status']);
-              }
-              return;
-            }
-          }
+      final auth = Provider.of<AuthManager>(context, listen: false);
+      if (!auth.isAuthenticated) { _clearOrderData(); return; }
+      _fetchOrder(orderId, isInitial: false);
+    });
+  }
+
+  Future<void> _subscribeSocket(String userId, String orderId) async {
+    final channel = 'customer:orders:$userId';
+    if (_subscribedChannel != channel) {
+      if (_subscribedChannel != null) reactiveSyncService.unsubscribe(_subscribedChannel!);
+      _subscribedChannel = channel;
+      // Initialize socket connection if it hasn't been opened yet
+      if (!reactiveSyncService.isConnected) {
+        reactiveSyncService.initialize(serverUrl: ApiConfig.baseHost);
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      reactiveSyncService.subscribe(channel);
+    }
+
+    _socketSubscription?.cancel();
+    _socketSubscription = reactiveSyncService.dataStream.listen((event) {
+      if (event['channel'] != channel || !mounted) return;
+      final data = (event['data'] as List?) ?? [];
+      for (final raw in data) {
+        final item = Map<String, dynamic>.from(raw as Map);
+        final id = item['id']?.toString() ?? item['order_id']?.toString();
+        if (id != orderId) continue;
+
+        final prevStatus = _cachedOrder?['status']?.toString();
+        final newStatus = item['status']?.toString() ?? prevStatus ?? 'pending';
+        debugPrint('[OrderTracker] ⚡ Socket update — order=$orderId status=$newStatus');
+        setState(() => _cachedOrder = item);
+
+        if (prevStatus != newStatus) {
+          orderNotificationService.updateStatus(
+            orderId: orderId,
+            storeName: item['store_name']?.toString() ?? 'Your Store',
+            status: newStatus,
+            totalPrice: _toDouble(item['total_price'] ?? item['total']),
+            currency: item['currency']?.toString() ?? 'USD',
+          );
         }
-      } catch (e) {
-        if (e is ApiException && e.isUnauthorized) {
-          _pollingTimer?.cancel();
-          _clearOrderData();
-        } else if (e is ApiException && e.isRateLimited) {
-          _pollingTimer?.cancel();
-          Future.delayed(const Duration(minutes: 10), () {
-            if (mounted && _currentOrderId == orderId) {
-              _startLightPolling(orderId);
-            }
-          });
-        }
+        break;
       }
     });
   }
@@ -286,7 +365,9 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
         }
 
         if (orderId == null) {
-          _pollingTimer?.cancel();
+          // Do NOT cancel timer here — the timer runs independently of display state.
+          // Cancelling here kills the timer during CartManager's async notify cycle,
+          // and _startTracking's early-return then prevents it from ever restarting.
           return const SizedBox.shrink();
         }
 
@@ -308,26 +389,31 @@ class _OrderTrackerWidgetState extends State<OrderTrackerWidget> {
     );
   }
 
-  void _startSmartPolling(String orderId) {
-    if (_currentOrderId == orderId && _pollingTimer != null) return;
-    _currentOrderId = orderId;
-    _pollingTimer?.cancel();
-    _fetchOrder(orderId, isInitial: true);
-    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _fetchOrder(orderId, isInitial: false);
-    });
-  }
+  // Legacy alias kept so build() microtask still compiles — delegates to _startTracking
+  void _startSmartPolling(String orderId) => _startTracking(orderId);
 
   Future<void> _fetchOrder(String orderId, {bool isInitial = false}) async {
     if (_isLoading && !isInitial) return;
     try {
       if (isInitial) setState(() => _isLoading = true);
-      final order = await ApiService.getOrderById(orderId);
+      final order = await ApiService.getOrderById(orderId, requiresAuth: true);
       if (order != null && mounted) {
+        final prevStatus = _cachedOrder?['status']?.toString();
+        final newStatus  = order['status']?.toString() ?? 'pending';
         setState(() {
           _cachedOrder = Map<String, dynamic>.from(order);
           _isLoading = false;
         });
+        // Android Live Activity: update notification whenever status changes
+        if (prevStatus != newStatus || isInitial) {
+          orderNotificationService.updateStatus(
+            orderId: orderId,
+            storeName: order['store_name']?.toString() ?? 'Your Store',
+            status: newStatus,
+            totalPrice: _toDouble(order['total_price'] ?? order['total']),
+            currency: order['currency']?.toString() ?? 'USD',
+          );
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
