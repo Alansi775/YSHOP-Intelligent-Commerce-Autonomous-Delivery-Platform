@@ -309,6 +309,32 @@ class ApiService {
     }
   }
 
+  /// Generic DELETE request with JWT authentication
+  static Future<dynamic> deleteRequest(String endpoint) async {
+    try {
+      final token = await _getJwtToken();
+      final url = Uri.parse('$_baseUrl$endpoint');
+      final response = await _httpClient
+          .delete(url, headers: {
+            'Content-Type': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          })
+          .timeout(_timeout);
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        if (response.body.isEmpty) return {'success': true};
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('Unauthorized: Invalid or expired token');
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Error: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('DELETE $endpoint error: $e');
+      rethrow;
+    }
+  }
+
   // Admin/staff login - tries admin then staff automatically when role='auto'
   static Future<dynamic> adminLogin(String email, String password, {String role = 'auto'}) async {
     final List<String> endpoints;
@@ -438,6 +464,14 @@ class ApiService {
       }
     }
   }
+
+  // Public wrapper for external services that need raw API access
+  static Future<dynamic> request(
+    String method,
+    String endpoint, {
+    Map<String, dynamic>? body,
+    bool requiresAuth = true,
+  }) => _request(method, endpoint, body: body, requiresAuth: requiresAuth);
 
   static Future<dynamic> _request(
     String method,

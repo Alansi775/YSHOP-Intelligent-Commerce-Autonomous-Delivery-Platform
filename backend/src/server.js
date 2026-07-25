@@ -14,6 +14,7 @@ import { errorHandler, notFound } from './middleware/errorHandler.js';
 import ReactiveSyncManager from './services/ReactiveSyncManager.js';
 import { runAITablesMigration } from '../database/migrations/20260712_add_ai_tables.js';
 import { runImageEmbeddingMigration } from '../database/migrations/20260712_add_image_embedding.js';
+import { runPOSMigration } from '../database/migrations/20260719_add_pos_system.js';
 import { VectorStore } from './services/VectorStore.js';
 
 // Routes
@@ -31,6 +32,9 @@ import categoryRoutes from './routes/categoryRoutes.js'; //  Categories
 import returnsRoutes from './routes/returnsRoutes.js'; // 📦 Returns Management
 import complaintRoutes from './routes/complaintRoutes.js'; // 🚨 Complaints
 import aiRoutes from './routes/aiRoutes.js'; //  YSHOP AI Conversational Shopping
+import analyticsRoutes from './routes/analyticsRoutes.js'; // 📊 Store Analytics
+import posRoutes from './routes/posRoutes.js'; // 🍽️ Local POS System
+import POSController from './controllers/POSController.js';
 
 dotenv.config();
 
@@ -72,8 +76,10 @@ app.use(compression());
 //  Smart caching: Admin endpoints should NOT be cached, public endpoints can be
 app.use((req, res, next) => {
   if (req.method === 'GET') {
-    //  CRITICAL: Admin endpoints must NOT be cached to prevent stale data
-    if (req.path.includes('/admin') || req.path.includes('/admins') || req.path.includes('/dashboard')) {
+    //  CRITICAL: Admin + POS endpoints must NOT be cached to prevent stale data
+    // POS (cashier/kitchen/tables) is real-time — a 5min public cache here means
+    // deleted/updated rows silently keep showing on screen until the cache expires.
+    if (req.path.includes('/admin') || req.path.includes('/admins') || req.path.includes('/dashboard') || req.path.includes('/pos')) {
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
       res.set('Pragma', 'no-cache');
       res.set('Expires', '0');
@@ -140,6 +146,11 @@ app.use('/api/v1/stores', categoryRoutes); //  Categories under stores
 app.use('/api/v1/categories', categoryRoutes); //  Categories direct access
 app.use('/api/v1', categoryRoutes); //  Products category assignment
 app.use('/api/v1/ai', aiRoutes); //  YSHOP AI Conversational Shopping
+app.use('/api/v1/analytics', analyticsRoutes); // 📊 Store Analytics
+app.use('/api/v1/pos', posRoutes); // 🍽️ Local POS System
+
+// Public customer tracking page (no auth — scanned from QR on table)
+app.get('/pos/track/:token', POSController.customerTrack);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -195,6 +206,17 @@ io.on('connection', (socket) => {
     logger.info(`>>> UNSUBSCRIBE REQUEST`, { socketId: socket.id, channel });
     socket.leave(channel);
     ReactiveSyncManager.unsubscribe(channel, socket.id);
+  });
+
+  // 🍽️ POS room subscription (kitchen, cashier, customer tracking)
+  // Room name: `pos:{storeId}` — all POS events for a store go here
+  socket.on('pos:join', (storeId) => {
+    const room = `pos:${storeId}`;
+    socket.join(room);
+    logger.info(`[POS] ${socket.id} joined ${room}`);
+  });
+  socket.on('pos:leave', (storeId) => {
+    socket.leave(`pos:${storeId}`);
   });
 
   // 💻 Get sync stats
@@ -320,6 +342,13 @@ const server = httpServer.listen(PORT, '0.0.0.0', async () => {
       await runImageEmbeddingMigration(); // adds image_embedding column if missing
     } catch (e) {
       logger.warn('⚠ AI tables migration warning:', e.message);
+    }
+
+    // Run POS system migration
+    try {
+      await runPOSMigration();
+    } catch (e) {
+      logger.warn('⚠ POS migration warning:', e.message);
     }
 
     // Backfill product embeddings in background — non-blocking

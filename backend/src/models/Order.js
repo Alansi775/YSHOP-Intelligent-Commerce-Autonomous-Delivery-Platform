@@ -418,7 +418,7 @@ export class Order {
         FROM orders o
         LEFT JOIN users u ON o.user_id = u.uid COLLATE utf8mb4_unicode_ci
         LEFT JOIN delivery_requests dr ON o.driver_id = CAST(dr.uid AS CHAR) COLLATE utf8mb4_unicode_ci
-        WHERE o.store_id = ?
+        WHERE o.store_id = ? AND (o.order_type IS NULL OR o.order_type = 'online')
         ORDER BY o.created_at DESC
         LIMIT ${l} OFFSET ${offset}`;
 

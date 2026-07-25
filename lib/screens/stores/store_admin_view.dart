@@ -23,6 +23,9 @@ import '../../services/api_service.dart';
 import '../../services/reactive_sync_service.dart';
 import '../../state_management/auth_manager.dart';
 import '../admin/complaints_view.dart';
+import 'store_analytics_view.dart';
+import '../pos/pos_cashier_view.dart';
+import '../pos/pos_kitchen_view.dart';
 
 class StoreAdminView extends StatefulWidget {
   final String initialStoreName;
@@ -38,7 +41,14 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
   String _storeIconUrl = "";
   String _storeType = "";
   String _storeOwnerUid = "";
+  String _storeCurrency = "SAR";
   int _storeId = 0;
+
+  // POS: only food/restaurant/cafe/bakery stores show POS features
+  bool get _isFoodStore {
+    const foodTypes = ['food', 'restaurant', 'cafe', 'bakery'];
+    return foodTypes.contains(_storeType.toLowerCase().trim());
+  }
   List<ProductS> _products = [];
   List<ProductS> _filteredProducts = [];
   List<Category> _categories = [];
@@ -185,6 +195,7 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
           _storeOwnerUid = ownerUid;
           _storeId = storeId;
           _storeType = storeType;
+          _storeCurrency = storeDataMap['currency'] as String? ?? 'SAR';
         });
         
         if (storeId > 0) {
@@ -818,6 +829,39 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                             badgeCount: _pendingComplaintsCount,
                             alerting: _pendingComplaintsCount > 0,
                           ),
+                          _buildHeroButton(
+                            'Analytics',
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => StoreAnalyticsView(
+                                storeId: _storeId.toString(),
+                                storeName: _storeName,
+                              )),
+                            ),
+                            isPrimary: false,
+                          ),
+                          // POS System — FOOD stores only
+                          if (_isFoodStore) ...[
+                            _buildHeroButton(
+                              'Cashier',
+                              () => Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => POSCashierView(
+                                  storeId: _storeId,
+                                  storeName: _storeName,
+                                  currency: _storeCurrency,
+                                  storeOwnerUid: _storeOwnerUid,
+                                ),
+                              )),
+                              isPrimary: true,
+                            ),
+                            _buildHeroButton(
+                              'Kitchen',
+                              () => Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => POSKitchenView(storeId: _storeId, storeName: _storeName),
+                              )),
+                              isPrimary: false,
+                            ),
+                          ],
                         ],
                       ),
                     ],
