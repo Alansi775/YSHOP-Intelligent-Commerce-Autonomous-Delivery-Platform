@@ -5,14 +5,22 @@ import 'dart:io' show Platform;
 /// Update base URLs here and all endpoints will use them automatically
 class ApiConfig {
   // ================== ENVIRONMENT DETECTION ==================
+  /// Production API host, baked in at build time via:
+  ///   flutter build web --dart-define=API_BASE_URL=https://<host>
+  /// Falls back to the stable production backend so a plain `flutter build web`
+  /// still produces a working release build.
+  static const String _prodApiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://yshop-imac.tail11c7de.ts.net',
+  );
+
   /// Detects platform and returns appropriate base URL
   static String get baseUrl {
     if (kIsWeb) {
-      // Use the current page host for web builds so images and sockets
-      // resolve correctly when the backend IP changes (avoids hardcoding).
-      final host = Uri.base.host;
-      final scheme = Uri.base.scheme.isNotEmpty ? Uri.base.scheme : 'http';
-      return '$scheme://$host:3000/api/v1';
+      // Never derive the backend host from the page's own host — Flutter Web
+      // is served from Firebase Hosting, which is a completely different
+      // origin from the API server. Always use the fixed production API host.
+      return '$_prodApiBaseUrl/api/v1';
     }
     try {
       if (Platform.isAndroid) {
