@@ -44,11 +44,19 @@ const PORT = process.env.PORT || 3000;
 // Security Middleware
 app.use(helmet());
 
+// CORS Configuration — CORS_ORIGIN accepts a comma-separated list so both
+// Firebase Hosting domains (and any future custom domain) can be allowed
+// without another code change, just an env var update.
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 // CORS Configuration
 app.use(
   cors({
-    origin: process.env.NODE_ENV === 'production' 
-      ? [process.env.CORS_ORIGIN || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000']
+    origin: process.env.NODE_ENV === 'production'
+      ? allowedOrigins
       : '*',
     credentials: true,
   })
@@ -179,8 +187,8 @@ import { setIO } from './utils/socketInstance.js';
 
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? [process.env.CORS_ORIGIN || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000']
+    origin: process.env.NODE_ENV === 'production'
+      ? allowedOrigins
       : ['*'],
     credentials: true,
   },
