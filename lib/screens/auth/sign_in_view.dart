@@ -68,6 +68,40 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
     );
   }
 
+  void _showSuccess(String message, {VoidCallback? onDismiss}) {
+    if (!mounted) return;
+    SignInUIComponents.showMessageDialog(
+      context,
+      message: message,
+      isDark: LuxuryTheme.isDark(context),
+      isSuccess: true,
+      onDismiss: onDismiss,
+    );
+  }
+
+  /// Clears everything except email/password, so after a signup that lands
+  /// back on the login form the user doesn't have to retype credentials
+  /// they just typed seconds ago.
+  void _resetFormFieldsKeepCredentials() {
+    if (!mounted) return;
+    setState(() {
+      _confirmPasswordController.clear();
+      _nameController.clear();
+      _surnameController.clear();
+      _storeNameController.clear();
+      _storeTypeController.clear();
+      _addressController.clear();
+      _customerAddressController.clear();
+      _contactNumberController.clear();
+      _nationalIDController.clear();
+      _storePhoneNumberController.clear();
+      _buildingInfoController.clear();
+      _apartmentNumberController.clear();
+      _deliveryInstructionsController.clear();
+      _message = "";
+    });
+  }
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -289,15 +323,9 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
       );
 
       if (mounted) {
-        setState(() => _message = "✓ Account created. Verify your email.");
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _showSignUp = false;
-              _resetFormFields();
-            });
-          }
-        });
+        setState(() => _showSignUp = false);
+        _resetFormFieldsKeepCredentials();
+        _showSuccess("✓ Account created!\n\nGo check your email now to verify before logging in.");
       }
     } catch (e) {
       if (mounted) _showError(e.toString().replaceAll('Exception: ', ''));
@@ -368,15 +396,18 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
       );
 
       if (mounted) {
-        setState(() => _message = "✓ Store application submitted. Verify your email and wait for admin approval.");
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _isNewStoreOwner = false;
-              _resetFormFields();
-            });
-          }
+        // Reset loading immediately — leaving it true here is what made the
+        // login button spin forever once the view switched back to login.
+        setState(() {
+          _isLoading = false;
+          _isNewStoreOwner = false;
         });
+        // Keep email/password so the user isn't forced to retype them on
+        // the login form they're about to land on.
+        _resetFormFieldsKeepCredentials();
+        _showSuccess(
+          "✓ Account created!\n\nGo check your email now to verify your store before logging in.",
+        );
       }
     } catch (e) {
       if (mounted) {

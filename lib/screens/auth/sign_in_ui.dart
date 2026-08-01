@@ -481,13 +481,19 @@ class SignInUIComponents {
     BuildContext context, {
     required String message,
     required bool isDark,
+    bool isSuccess = false,
+    VoidCallback? onDismiss,
   }) {
     return showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: isDark ? LuxuryTheme.kDarkSurface : LuxuryTheme.kLightSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        icon: Icon(Icons.error_outline, color: Colors.redAccent, size: 32),
+        icon: Icon(
+          isSuccess ? Icons.mark_email_read_outlined : Icons.error_outline,
+          color: isSuccess ? Colors.greenAccent : Colors.redAccent,
+          size: 32,
+        ),
         content: Text(
           message,
           textAlign: TextAlign.center,
@@ -500,9 +506,12 @@ class SignInUIComponents {
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              onDismiss?.call();
+            },
             style: TextButton.styleFrom(
-              backgroundColor: LuxuryTheme.kLightBlueAccent,
+              backgroundColor: isSuccess ? Colors.greenAccent.shade700 : LuxuryTheme.kLightBlueAccent,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),

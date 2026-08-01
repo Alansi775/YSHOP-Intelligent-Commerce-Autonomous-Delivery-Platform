@@ -69,16 +69,16 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
   void _requestDriverAccount() async {
     if (_isLoading) return;
     
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || 
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty ||
         _nameController.text.isEmpty || _phoneController.text.isEmpty ||
         _latitude == 0.0 || _longitude == 0.0) {
-      setState(() => _message = "Please fill in all required fields including location.");
+      _showDriverMessage("Please fill in all required fields including location.");
       return;
     }
 
     // تحقق من تطابق كلمة المرور
     if (_passwordController.text != _confirmPasswordController.text) {
-      setState(() => _message = "Passwords do not match.");
+      _showDriverMessage("Passwords do not match.");
       return;
     }
 
@@ -95,26 +95,39 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
         phone: _phoneController.text.trim(),
       );
 
-      if (mounted) { 
-        setState(() {
-          _message = response['message'] ?? "Your request has been sent! Please check your email to verify and wait for admin approval.";
-          _isLoading = false;
-        });
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted && Navigator.canPop(context)) {
-            Navigator.pop(context); 
-          }
-        });
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showDriverMessage(
+          "✓ Account created!\n\nGo check your email now to verify before you can log in.",
+          isSuccess: true,
+          onDismiss: () {
+            if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+          },
+        );
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _message = "Error: ${e.toString()}");
+        setState(() => _isLoading = false);
+        _showDriverMessage("Error: ${e.toString()}");
       }
     } finally {
-      if (mounted && _isLoading) { 
+      if (mounted && _isLoading) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Centered dialog instead of the old bottom-of-form text, which required
+  /// scrolling to see on this long form.
+  void _showDriverMessage(String message, {bool isSuccess = false, VoidCallback? onDismiss}) {
+    if (!mounted) return;
+    SignInUIComponents.showMessageDialog(
+      context,
+      message: message,
+      isDark: LuxuryTheme.isDark(context),
+      isSuccess: isSuccess,
+      onDismiss: onDismiss,
+    );
   }
 
   @override
