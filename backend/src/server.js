@@ -134,6 +134,13 @@ app.use(userLimiter);
 // Static files for uploads
 app.use('/uploads', express.static('uploads'));
 
+// Any /uploads/* path that isn't an actual file on disk (missing/never
+// migrated image) falls back to a placeholder instead of a broken-image
+// icon in Flutter/SwiftUI — express.static() above calls next() on a miss.
+app.use('/uploads', (req, res) => {
+  res.sendFile('placeholder.png', { root: 'public' });
+});
+
 // Static files for verification emails
 app.use(express.static('public'));
 
