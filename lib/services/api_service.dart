@@ -484,8 +484,13 @@ class ApiService {
     int cacheTtl = 120,
     bool skipDedup = false,
   }) async {
-    final cacheKey = useCache ? '${method}_$endpoint' : null;
-    final requestKey = '${method}_$endpoint${body?.toString() ?? ''}';
+    // Scope cache/dedup keys to the current session's token so a request
+    // still in flight (or cached) from a previous login can never be
+    // returned to a different, newly-logged-in user/role after a fast
+    // logout->login switch (e.g. customer -> store owner).
+    final sessionScope = _cachedToken ?? 'anon';
+    final cacheKey = useCache ? '${sessionScope}_${method}_$endpoint' : null;
+    final requestKey = '${sessionScope}_${method}_$endpoint${body?.toString() ?? ''}';
 
     // Check cache first
     if (useCache && method == 'GET') {

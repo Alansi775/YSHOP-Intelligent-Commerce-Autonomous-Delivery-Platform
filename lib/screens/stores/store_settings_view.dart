@@ -241,7 +241,10 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
         backgroundColor: const Color(0xFF0A0A0A),
         elevation: 0,
         leading: IconButton(
-          onPressed: () => Navigator.pop(context),
+          // Pass the current icon URL back so StoreAdminView can update
+          // instantly without a refetch (and without needing another
+          // /auth/me round trip just to redraw one image).
+          onPressed: () => Navigator.pop(context, _storeIconUrl),
           icon: Icon(
             Icons.arrow_back,
             color: Colors.white.withOpacity(0.7),

@@ -56,6 +56,18 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
   bool _showSignUp = false;
   String _message = "";
 
+  /// Shows errors as a centered dialog instead of the old bottom-of-form
+  /// text, which required scrolling past long forms (store signup) to see,
+  /// especially on small Android screens.
+  void _showError(String message) {
+    if (!mounted) return;
+    SignInUIComponents.showMessageDialog(
+      context,
+      message: message,
+      isDark: LuxuryTheme.isDark(context),
+    );
+  }
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -251,7 +263,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
       
       if (mounted) _navigateToHomeScreen();
     } catch (e) {
-      if (mounted) setState(() => _message = e.toString().replaceAll('Exception: ', ''));
+      if (mounted) _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -262,7 +274,8 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
     setState(() { _isLoading = true; _message = ""; });
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      setState(() { _message = "Passwords do not match."; _isLoading = false; });
+      setState(() => _isLoading = false);
+      _showError("Passwords do not match.");
       return;
     }
 
@@ -287,7 +300,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _message = e.toString().replaceAll('Exception: ', ''));
+      if (mounted) _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -307,7 +320,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
       
       if (mounted) _navigateToHomeScreen();
     } catch (e) {
-      if (mounted) setState(() => _message = e.toString().replaceAll('Exception: ', ''));
+      if (mounted) _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -318,22 +331,26 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
     setState(() { _isLoading = true; _message = ""; });
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      setState(() { _message = "Passwords do not match."; _isLoading = false; });
+      setState(() => _isLoading = false);
+      _showError("Passwords do not match.");
       return;
     }
 
     if (_storeNameController.text.isEmpty) {
-      setState(() { _message = "Store name is required."; _isLoading = false; });
+      setState(() => _isLoading = false);
+      _showError("Store name is required.");
       return;
     }
 
     if (_storeTypeController.text.isEmpty) {
-      setState(() { _message = "Store type is required."; _isLoading = false; });
+      setState(() => _isLoading = false);
+      _showError("Store type is required.");
       return;
     }
 
     if (_addressController.text.isEmpty || _latitude == 0.0 || _longitude == 0.0) {
-      setState(() { _message = "Store location is required."; _isLoading = false; });
+      setState(() => _isLoading = false);
+      _showError("Store location is required.");
       return;
     }
 
@@ -362,7 +379,10 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _message = e.toString().replaceAll('Exception: ', ''); _isLoading = false; });
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showError(e.toString().replaceAll('Exception: ', ''));
+      }
     }
   }
 

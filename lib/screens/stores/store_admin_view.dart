@@ -709,8 +709,15 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
                       const Spacer(),
                       // Settings Icon
                       IconButton(
-                        onPressed: () => Navigator.push(context, 
-                          MaterialPageRoute(builder: (_) => const StoreSettingsView())),
+                        onPressed: () async {
+                          final updatedIconUrl = await Navigator.push<String?>(
+                            context,
+                            MaterialPageRoute(builder: (_) => const StoreSettingsView()),
+                          );
+                          if (updatedIconUrl != null && updatedIconUrl.isNotEmpty && mounted) {
+                            setState(() => _storeIconUrl = updatedIconUrl);
+                          }
+                        },
                         icon: Icon(
                           Icons.settings_outlined,
                           color: Colors.white.withOpacity(0.7),

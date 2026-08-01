@@ -19,6 +19,93 @@ class LuxuryTheme {
       Theme.of(context).brightness == Brightness.dark;
 }
 
+/// Password field with a working show/hide toggle. Split out as a
+/// StatefulWidget (rather than inline in the static luxuryInput builder)
+/// because each field needs its own independent obscure/visible state.
+class _ObscurableLuxuryInput extends StatefulWidget {
+  final String placeholder;
+  final TextEditingController controller;
+  final Function(String)? onSubmitted;
+  final bool readOnly;
+  final bool isDark;
+
+  const _ObscurableLuxuryInput({
+    required this.placeholder,
+    required this.controller,
+    required this.isDark,
+    this.onSubmitted,
+    this.readOnly = false,
+  });
+
+  @override
+  State<_ObscurableLuxuryInput> createState() => _ObscurableLuxuryInputState();
+}
+
+class _ObscurableLuxuryInputState extends State<_ObscurableLuxuryInput> {
+  bool _obscure = true;
+
+  @override
+  Widget build(BuildContext context) {
+    const double inputRadius = 18;
+    final isDark = widget.isDark;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.grey.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(inputRadius),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(inputRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: TextFormField(
+            controller: widget.controller,
+            obscureText: _obscure,
+            readOnly: widget.readOnly,
+            style: TextStyle(
+              color: isDark ? LuxuryTheme.kPlatinum : Colors.black87,
+              fontFamily: 'Didot',
+              fontSize: 16,
+              letterSpacing: 0.5,
+            ),
+            cursorColor: LuxuryTheme.kLightBlueAccent,
+            decoration: InputDecoration(
+              labelText: widget.placeholder,
+              labelStyle: TextStyle(
+                color: isDark ? Colors.white38 : Colors.black54,
+                fontSize: 14,
+                letterSpacing: 1,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              border: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              filled: true,
+              fillColor: Colors.transparent,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 18,
+                  color: isDark ? Colors.white30 : Colors.black.withOpacity(0.3),
+                ),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+            ),
+            onFieldSubmitted: widget.onSubmitted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 ///  REINVENTED UI COMPONENTS
 /// These are not widgets; they are architectural elements.
 class SignInUIComponents {
@@ -34,12 +121,22 @@ class SignInUIComponents {
     bool readOnly = false,
     required bool isDark,
   }) {
+    if (isSecure) {
+      return _ObscurableLuxuryInput(
+        placeholder: placeholder,
+        controller: controller,
+        onSubmitted: onSubmitted,
+        readOnly: readOnly,
+        isDark: isDark,
+      );
+    }
+
     const double inputRadius = 18;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
-        color: isDark 
+        color: isDark
             ? Colors.white.withOpacity(0.05)
             : Colors.grey.withOpacity(0.15), // رمادي واضح في Light Mode
         borderRadius: BorderRadius.circular(inputRadius),
@@ -54,7 +151,7 @@ class SignInUIComponents {
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Frosted Glass Effect
           child: TextFormField(
             controller: controller,
-            obscureText: isSecure,
+            obscureText: false,
             keyboardType: keyboardType,
             readOnly: readOnly,
             style: TextStyle(
@@ -77,9 +174,6 @@ class SignInUIComponents {
               enabledBorder: InputBorder.none,
               filled: true,
               fillColor: Colors.transparent,
-              suffixIcon: isSecure 
-                  ? Icon(Icons.lock_outline, size: 18, color: isDark ? Colors.white30 : Colors.black.withOpacity(0.3))
-                  : null,
             ),
             onFieldSubmitted: onSubmitted,
           ),
@@ -374,6 +468,46 @@ class SignInUIComponents {
                 fontFamily: 'Courier', // Tech feel
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Centered error dialog — replaces the old bottom-of-form message that
+  /// required scrolling to see, especially on long forms (store signup) and
+  /// small Android screens.
+  static Future<void> showMessageDialog(
+    BuildContext context, {
+    required String message,
+    required bool isDark,
+  }) {
+    return showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: isDark ? LuxuryTheme.kDarkSurface : LuxuryTheme.kLightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        icon: Icon(Icons.error_outline, color: Colors.redAccent, size: 32),
+        content: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isDark ? Colors.white70 : Colors.black87,
+            fontSize: 15,
+            fontFamily: 'Courier',
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            style: TextButton.styleFrom(
+              backgroundColor: LuxuryTheme.kLightBlueAccent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+            ),
+            child: const Text('OK'),
           ),
         ],
       ),
