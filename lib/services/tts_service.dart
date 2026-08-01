@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'api_service.dart';
 import 'speech_fallback_stub.dart'
   if (dart.library.html) 'speech_fallback_web.dart';
 import 'tts_player_stub.dart'
@@ -29,11 +30,9 @@ class VoicePersonality {
 }
 
 class TTSService {
-  static String get _apiKey => dotenv.env['YSHOP_TTS_API_KEY'] ?? '';
+  static bool _serverAvailable = true; // flips false after a 503 from our own backend
   static bool get _allowBrowserFallback =>
       (dotenv.env['YSHOP_TTS_ALLOW_BROWSER_FALLBACK'] ?? 'false').toLowerCase() == 'true';
-
-  static const String _baseUrl = 'https://api.elevenlabs.io/v1';
 
   // ── Voice personality pool ────────────────────────────────────────────────
   // ElevenLabs pre-made voice IDs paired with international character names.
@@ -47,7 +46,7 @@ class TTSService {
   static final TTSService _instance = TTSService._internal();
   factory TTSService() => _instance;
   TTSService._internal() {
-    debugPrint('[TTS] API Key loaded at init: ${_apiKey.isEmpty ? "EMPTY" : "EXISTS (${_apiKey.substring(0,5)}...)"}');
+    debugPrint('[TTS] Using server-side voice synthesis proxy');
   }
 
   final TTSPlayer _player = TTSPlayer();
@@ -276,7 +275,7 @@ class TTSService {
     final intensity = _clamp((voiceProfile?['energy'] as num?)?.toDouble() ?? voiceIntensity, 0.0, 1.0);
     final cue = (voiceProfile?['cue'] as String? ?? voiceCue).trim();
     final pause = _normalizePause(voiceProfile?['pause'] as String?);
-    debugPrint('[TTS] API Key loaded: ${_apiKey.isEmpty ? "EMPTY" : "EXISTS (${_apiKey.substring(0, 5)}...)"} | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | pause=$pause | cue=${cue.isEmpty ? "none" : cue} | rawText="${text.substring(0, text.length.clamp(0, 140))}"');
+    debugPrint('[TTS] speak() | mood=$mood | intensity=${intensity.toStringAsFixed(2)} | pause=$pause | cue=${cue.isEmpty ? "none" : cue} | rawText="${text.substring(0, text.length.clamp(0, 140))}"');
     if (text.trim().isEmpty) return false;
 
     final pace = _clamp((voiceProfile?['pace'] as num?)?.toDouble() ?? 1.0, 0.75, 1.35);
@@ -301,8 +300,8 @@ class TTSService {
       _isLoading = true;
       _currentHash = h;
 
-      if (_apiKey.isEmpty) {
-        debugPrint('[TTS] Missing YSHOP_TTS_API_KEY - ElevenLabs is disabled');
+      if (!_serverAvailable) {
+        debugPrint('[TTS] Server-side voice synthesis unavailable');
         if (_allowBrowserFallback && kIsWeb) {
           debugPrint('[TTS] Browser fallback is enabled explicitly');
           _isLoading = false;
@@ -389,8 +388,9 @@ class TTSService {
 
   Future<Uint8List?> _callAPI(String text, {String voiceMood = 'neutral', double voiceIntensity = 0.65, Map<String, dynamic>? voiceProfile}) async {
     try {
-      if (_apiKey.isEmpty) {
-        debugPrint('[TTS] No API key');
+      final token = await ApiService.getAuthToken();
+      if (token == null) {
+        debugPrint('[TTS] No auth token — not logged in');
         return null;
       }
 
@@ -404,13 +404,14 @@ class TTSService {
       const String _freeVoiceId = 'JBFqnCBsd6RMkjVDRZzb';
 
       Future<http.Response> _doRequest(String voiceId) => http.post(
-        Uri.parse('$_baseUrl/text-to-speech/$voiceId'),
+        Uri.parse('${ApiService.baseHost}/api/v1/ai/speak'),
         headers: {
-          'xi-api-key': _apiKey,
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
           'Accept': 'audio/mpeg',
         },
         body: jsonEncode({
+          'voiceId': voiceId,
           'text': text,
           'model_id': 'eleven_turbo_v2_5',
           'voice_settings': {
@@ -422,9 +423,15 @@ class TTSService {
         }),
       ).timeout(const Duration(seconds: 15));
 
-      debugPrint('[TTS] ElevenLabs profile | mood=$profileMood | pace=${pace?.toStringAsFixed(2) ?? "default"} | volume=${volume?.toStringAsFixed(2) ?? "default"} | pitch=${pitch?.toStringAsFixed(2) ?? "default"}');
+      debugPrint('[TTS] voice profile | mood=$profileMood | pace=${pace?.toStringAsFixed(2) ?? "default"} | volume=${volume?.toStringAsFixed(2) ?? "default"} | pitch=${pitch?.toStringAsFixed(2) ?? "default"}');
 
       var r = await _doRequest(_activePersonality.voiceId);
+
+      if (r.statusCode == 503) {
+        debugPrint('[TTS] Server has no TTS configured');
+        _serverAvailable = false;
+        return null;
+      }
 
       // 402 = library voice needs paid plan → retry with free fallback voice
       if (r.statusCode == 402 && _activePersonality.voiceId != _freeVoiceId) {

@@ -1,6 +1,7 @@
 import { YShopAIService } from '../services/YShopAIService.js';
 import { UserInteractionService } from '../services/UserInteractionService.js';
 import { EmbeddingPipeline } from '../services/EmbeddingPipeline.js';
+import { isTTSAvailable, synthesizeSpeech } from '../services/TTSProxyService.js';
 import logger from '../config/logger.js';
 
 export class AIController {
@@ -137,6 +138,35 @@ export class AIController {
     } catch (error) {
       logger.error('[AIController] getStatus error:', error.message);
       return res.status(500).json({ success: false, operational: false });
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // POST /api/v1/ai/speak
+  // Server-side voice synthesis proxy — the provider key never reaches the
+  // client (public web builds and decompiled apps can't extract it).
+  // ─────────────────────────────────────────────
+  static async speak(req, res) {
+    try {
+      const { voiceId, text, modelId, voiceSettings } = req.body || {};
+
+      if (!isTTSAvailable()) {
+        return res.status(503).json({ success: false, error: 'TTS not configured' });
+      }
+      if (!voiceId || !text || typeof text !== 'string' || !text.trim()) {
+        return res.status(400).json({ success: false, error: 'voiceId and text are required' });
+      }
+      if (text.length > 1000) {
+        return res.status(400).json({ success: false, error: 'text too long' });
+      }
+
+      const audio = await synthesizeSpeech({ voiceId, text, modelId, voiceSettings });
+      res.set('Content-Type', 'audio/mpeg');
+      return res.status(200).send(audio);
+    } catch (error) {
+      logger.error('[AIController] speak error:', error.message);
+      const status = error.status && error.status < 500 ? error.status : 502;
+      return res.status(status).json({ success: false, error: 'Speech synthesis failed' });
     }
   }
 

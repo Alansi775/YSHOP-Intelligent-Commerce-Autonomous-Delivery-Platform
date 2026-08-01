@@ -137,6 +137,10 @@ class ApiService {
     }
   }
 
+  /// Public wrapper for services (e.g. TTSService) that need the raw auth
+  /// token for a request ApiService itself doesn't wrap (binary responses).
+  static Future<String?> getAuthToken() => _getJwtToken();
+
   /// Get JWT token from cache or SharedPreferences
   static Future<String?> _getJwtToken() async {
     try {

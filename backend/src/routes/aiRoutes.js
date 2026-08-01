@@ -43,6 +43,12 @@ const router = express.Router();
 router.post('/chat', verifyJWTToken, AIController.chat);
 
 /**
+ * POST /api/v1/ai/speak
+ * Server-side text-to-speech proxy — keeps the provider key server-only.
+ */
+router.post('/speak', verifyJWTToken, AIController.speak);
+
+/**
  * POST /api/v1/ai/interact
  * Record a user interaction with a product surfaced by AI.
  * eventType: 'view' | 'add_to_cart' | 'purchase'
