@@ -1,4 +1,5 @@
-// EmbeddingPipeline.js — Real semantic embeddings via Gemini REST API
+// EmbeddingPipeline.js — Real semantic embeddings, Gemini preferred with a
+// Groq fallback so semantic search still works with only a Groq key.
 //
 // Model selection: tries candidates in order, permanently switches on first success.
 // text-embedding-004 → supports taskType (better retrieval quality)
@@ -7,10 +8,14 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import logger from '../config/logger.js';
 
+const GROQ_EMBEDDING_MODEL = 'nomic-embed-text-v1_5';
+const GROQ_EMBEDDING_URL = 'https://api.groq.com/openai/v1/embeddings';
+
 export class EmbeddingPipeline {
   static apiKey = null;
   static client = null; // kept for ImageEmbeddingService (Gemini Vision)
-  static EMBEDDING_DIM = 3072; // gemini-embedding-001 = 3072-dim
+  static provider = null; // 'gemini' | 'groq' | null
+  static EMBEDDING_DIM = 3072; // gemini-embedding-001 = 3072-dim; Groq fallback is 768-dim
   static BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
   // Models tried in order; _modelIndex advances on 404 until one works
@@ -21,23 +26,60 @@ export class EmbeddingPipeline {
   static _modelIndex = 0;
 
   static get EMBEDDING_MODEL() {
+    if (this.provider === 'groq') return GROQ_EMBEDDING_MODEL;
     return this._models[this._modelIndex]?.name ?? null;
   }
 
   static initialize() {
-    const apiKey = process.env.YSHOP_AI_API_KEY;
-    if (!apiKey) {
-      logger.warn('[EmbeddingPipeline] YSHOP_AI_API_KEY not set — real embeddings disabled');
-      return false;
+    const geminiKey = process.env.YSHOP_AI_API_KEY;
+    const groqKey = process.env.GROQ_API_KEY;
+
+    if (geminiKey) {
+      this.apiKey = geminiKey;
+      this.provider = 'gemini';
+      this.client = new GoogleGenerativeAI(geminiKey); // used by ImageEmbeddingService
+      logger.info('[EmbeddingPipeline] initialized with Gemini — will auto-detect embedding model');
+      return true;
     }
-    this.apiKey = apiKey;
-    this.client = new GoogleGenerativeAI(apiKey); // used by ImageEmbeddingService
-    logger.info('[EmbeddingPipeline] initialized — will auto-detect embedding model');
-    return true;
+
+    if (groqKey) {
+      this.apiKey = groqKey;
+      this.provider = 'groq';
+      this.EMBEDDING_DIM = 768;
+      logger.info(`[EmbeddingPipeline] no Gemini key — using Groq (${GROQ_EMBEDDING_MODEL})`);
+      return true;
+    }
+
+    logger.warn('[EmbeddingPipeline] no YSHOP_AI_API_KEY or GROQ_API_KEY — real embeddings disabled');
+    return false;
   }
 
   static isAvailable() {
     return Boolean(this.apiKey);
+  }
+
+  static async _embedViaGroq(text) {
+    const response = await fetch(GROQ_EMBEDDING_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model: GROQ_EMBEDDING_MODEL, input: text }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => response.statusText);
+      throw new Error(`Groq embedding API ${response.status}: ${errBody.slice(0, 300)}`);
+    }
+
+    const data = await response.json();
+    const values = data?.data?.[0]?.embedding;
+    if (!Array.isArray(values) || values.length === 0) {
+      throw new Error('Groq returned empty embedding');
+    }
+    return values;
   }
 
   // Build rich text document for a product
@@ -62,6 +104,10 @@ export class EmbeddingPipeline {
     if (!this.apiKey) throw new Error('EmbeddingPipeline not initialized');
     const clean = String(text || '').trim().slice(0, 2000);
     if (!clean) throw new Error('embedText received empty string');
+
+    if (this.provider === 'groq') {
+      return this._embedViaGroq(clean);
+    }
 
     while (this._modelIndex < this._models.length) {
       const { name, taskType: supportsTaskType } = this._models[this._modelIndex];

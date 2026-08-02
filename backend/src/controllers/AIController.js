@@ -123,7 +123,9 @@ export class AIController {
           operational: YShopAIService.isOperational(),
           service: 'YSHOP AI',
           provider: YShopAIService.provider || (YShopAIService.model ? 'gemini' : 'groq'),
-          embeddings: EmbeddingPipeline.isAvailable() ? 'gemini/text-embedding-004' : 'disabled',
+          embeddings: EmbeddingPipeline.isAvailable()
+            ? `${EmbeddingPipeline.provider}/${EmbeddingPipeline.EMBEDDING_MODEL}`
+            : 'disabled',
           features: [
             'Conversational shopping',
             'Semantic retrieval — Gemini text-embedding-004 (768-dim)',
