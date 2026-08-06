@@ -88,6 +88,12 @@ function groupOrders(rows) {
   const byOrder = new Map();
   for (const r of rows) {
     if (!byOrder.has(r.order_id)) {
+      const isLocal = r.order_type === 'local';
+      // Cancelled orders were never actually charged, so there's no real
+      // split to show — just null it out rather than reporting a phantom cut.
+      const split = r.status === 'cancelled'
+        ? null
+        : splitFromCharged(Number(r.total_price), { isLocal });
       byOrder.set(r.order_id, {
         order_id: r.order_id,
         order_type: r.order_type,
@@ -96,6 +102,9 @@ function groupOrders(rows) {
         currency: r.currency,
         total_price: Number(r.total_price),
         table_name: r.table_name,
+        platform_share: split?.platform ?? null,
+        driver_share: isLocal ? null : (split?.driver ?? null),
+        store_share: split?.base ?? null,
         items: [],
       });
     }
@@ -380,6 +389,12 @@ export class AdminSalesController {
           `#${order.order_id} · ${order.order_type === 'local' ? `Table ${order.table_name || '—'}` : 'Online'} · ${new Date(order.created_at).toLocaleString()} · ${order.status}${order.status === 'cancelled' ? ' (CANCELLED — excluded from totals)' : ''}`
         );
         doc.fillColor('black');
+        if (order.status !== 'cancelled') {
+          const shareParts = [`Platform: ${order.platform_share}`, `Store: ${order.store_share}`];
+          if (order.order_type !== 'local') shareParts.push(`Driver: ${order.driver_share}`);
+          doc.fontSize(8).fillColor('gray').text(`   ${shareParts.join(' · ')}`);
+          doc.fillColor('black');
+        }
         for (const item of order.items) {
           doc.fontSize(9).text(`   ${item.quantity}x ${item.product_name || 'Product #' + item.product_id} — ${item.price} ${order.currency}`);
         }
