@@ -15,6 +15,7 @@ import ReactiveSyncManager from './services/ReactiveSyncManager.js';
 import { runAITablesMigration } from '../database/migrations/20260712_add_ai_tables.js';
 import { runImageEmbeddingMigration } from '../database/migrations/20260712_add_image_embedding.js';
 import { runPOSMigration } from '../database/migrations/20260719_add_pos_system.js';
+import { runStoreSettlementsMigration } from '../database/migrations/20260802_add_store_settlements.js';
 import { VectorStore } from './services/VectorStore.js';
 
 // Routes
@@ -33,6 +34,7 @@ import returnsRoutes from './routes/returnsRoutes.js'; // 📦 Returns Managemen
 import complaintRoutes from './routes/complaintRoutes.js'; // 🚨 Complaints
 import aiRoutes from './routes/aiRoutes.js'; //  YSHOP AI Conversational Shopping
 import analyticsRoutes from './routes/analyticsRoutes.js'; // 📊 Store Analytics
+import adminSalesRoutes from './routes/adminSalesRoutes.js'; // 💰 Admin Sales/Settlements
 import posRoutes from './routes/posRoutes.js'; // 🍽️ Local POS System
 import POSController from './controllers/POSController.js';
 
@@ -162,6 +164,7 @@ app.use('/api/v1/categories', categoryRoutes); //  Categories direct access
 app.use('/api/v1', categoryRoutes); //  Products category assignment
 app.use('/api/v1/ai', aiRoutes); //  YSHOP AI Conversational Shopping
 app.use('/api/v1/analytics', analyticsRoutes); // 📊 Store Analytics
+app.use('/api/v1/admin/sales', adminSalesRoutes); // 💰 Admin Sales/Settlements
 app.use('/api/v1/pos', posRoutes); // 🍽️ Local POS System
 
 // Public customer tracking page (no auth — scanned from QR on table)
@@ -364,6 +367,13 @@ const server = httpServer.listen(PORT, '0.0.0.0', async () => {
       await runPOSMigration();
     } catch (e) {
       logger.warn('⚠ POS migration warning:', e.message);
+    }
+
+    // Run store settlements migration
+    try {
+      await runStoreSettlementsMigration();
+    } catch (e) {
+      logger.warn('⚠ Store settlements migration warning:', e.message);
     }
 
     // Backfill product embeddings in background — non-blocking
