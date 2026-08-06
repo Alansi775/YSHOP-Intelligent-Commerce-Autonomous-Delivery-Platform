@@ -1,7 +1,7 @@
 // lib/widgets/ai_home_conversation_box.dart
 //
 // FIXES: RenderFlex overflow during expand animation
-// NEW: Voice button with STT + ElevenLabs TTS
+// NEW: Voice button with STT + TTS
 //
 // Usage in category_home_view.dart — replace the old _buildAISearchBar() Positioned with:
 //

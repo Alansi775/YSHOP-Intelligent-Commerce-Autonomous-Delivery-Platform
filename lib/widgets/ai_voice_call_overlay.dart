@@ -383,7 +383,7 @@ class _CallScreenState extends State<_CallScreen> with TickerProviderStateMixin 
 
     if (ok) {
       _animateSpeech();
-      // Open mic concurrently so user can interrupt — like ElevenLabs ConvAI
+      // Open mic concurrently so user can interrupt — like real-time voice AI
       if (autoListen) _openInterruptMic();
       await _tts.waitForCompletion();
       await _stt.stopListening();

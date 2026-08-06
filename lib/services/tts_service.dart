@@ -14,7 +14,7 @@ import 'tts_player_stub.dart'
     if (dart.library.html) 'tts_player_web.dart'
     if (dart.library.io) 'tts_player_mobile.dart';
 
-/// A distinct AI voice personality from the ElevenLabs pre-made library.
+/// A distinct AI voice personality from the TTS provider's pre-made library.
 class VoicePersonality {
   final String voiceId;
   final String name;   // shown in overlay ("Aria", "George", …)
@@ -35,8 +35,8 @@ class TTSService {
       (dotenv.env['YSHOP_TTS_ALLOW_BROWSER_FALLBACK'] ?? 'false').toLowerCase() == 'true';
 
   // ── Voice personality pool ────────────────────────────────────────────────
-  // ElevenLabs pre-made voice IDs paired with international character names.
-  // Only confirmed free-tier ElevenLabs voices — others return 402.
+  // TTS provider pre-made voice IDs paired with international character names.
+  // Only confirmed free-tier voices — others return 402.
   static const List<VoicePersonality> personalities = [
     VoicePersonality(voiceId: 'JBFqnCBsd6RMkjVDRZzb', name: 'Karim', gender: 'male',   age: 'mature'),
     VoicePersonality(voiceId: 'EXAVITQu4vr4xnSDxMaL', name: 'Sara',  gender: 'female', age: 'young'),
@@ -192,8 +192,8 @@ class TTSService {
         .trim();
   }
 
-  /// Convert AI expression tags to natural text for ElevenLabs.
-  /// ElevenLabs does NOT support SSML — we drive emotion through text cues and punctuation.
+  /// Convert AI expression tags to natural text for the TTS provider.
+  /// The provider does NOT support SSML — we drive emotion through text cues and punctuation.
   static String _prepareForTTS(String text, {String voiceCue = '', String pause = 'normal', double pace = 1.0, String mood = 'neutral', double energy = 0.65}) {
     var t = text;
 
@@ -330,7 +330,7 @@ class TTSService {
         debugPrint('[TTS] Cache hit: $h');
         bytes = _cache[h];
       } else {
-        debugPrint('[TTS] Calling ElevenLabs...');
+        debugPrint('[TTS] Calling TTS provider...');
         bytes = await _callAPI(t, voiceMood: mood, voiceIntensity: intensity, voiceProfile: voiceProfile);
         if (bytes != null && bytes.length > 1000) {
           debugPrint('[TTS] Audio received | bytes=${bytes.length} | hash=$h');
