@@ -587,38 +587,49 @@ class _OrderCard extends StatelessWidget {
                   value: order.paymentMethod,
                 ),
               ),
+              // Local/POS orders have no delivery at all — showing "Delivery:
+              // Standard" on a dine-in ticket is meaningless (deliveryOption
+              // just defaults to "Standard" when the field is null). Show
+              // the order type instead so it's obvious at a glance.
               Expanded(
-                child: _OrderInfoItem(
-                  icon: Icons.local_shipping_rounded,
-                  label: 'Delivery',
-                  value: order.deliveryOption,
-                ),
+                child: order.isLocalOrder
+                    ? const _OrderInfoItem(
+                        icon: Icons.storefront_rounded,
+                        label: 'Type',
+                        value: 'In-Store',
+                      )
+                    : _OrderInfoItem(
+                        icon: Icons.local_shipping_rounded,
+                        label: 'Delivery',
+                        value: order.deliveryOption,
+                      ),
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
-          
-          // Address
-          Row(
-            children: [
-              const Icon(Icons.location_on_rounded, size: 16, color: kTertiaryTextColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  order.shippingAddress.isEmpty ? 'N/A' : order.shippingAddress,
-                  style: const TextStyle(color: kSecondaryTextColor, fontSize: 13),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+
+          // Address — only meaningful for online/delivered orders
+          if (!order.isLocalOrder)
+            Row(
+              children: [
+                const Icon(Icons.location_on_rounded, size: 16, color: kTertiaryTextColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    order.shippingAddress.isEmpty ? 'N/A' : order.shippingAddress,
+                    style: const TextStyle(color: kSecondaryTextColor, fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Driver info
-          if (order.driverName != null && order.driverName!.isNotEmpty)
+              ],
+            ),
+
+          if (!order.isLocalOrder) const SizedBox(height: 12),
+
+          // Driver info — never applies to local/POS orders
+          if (!order.isLocalOrder && order.driverName != null && order.driverName!.isNotEmpty)
             Row(
               children: [
                 const Icon(Icons.delivery_dining_rounded, size: 16, color: kAccentBlue),
@@ -706,29 +717,33 @@ class _OrderCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.delivery_dining_rounded, color: Colors.orange, size: 16),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Driver: ${getCurrencySymbol(order.currency)}${driverEarning.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: Colors.orange,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+              // No driver at all on local/POS orders — showing "Driver:
+              // 0.00" is just noise.
+              if (!order.isLocalOrder) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delivery_dining_rounded, color: Colors.orange, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Driver: ${getCurrencySymbol(order.currency)}${driverEarning.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -939,26 +954,29 @@ class _OrderDetailsDialog extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Container(width: 1, height: 60, color: kSeparatorColor),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            const Text(
-                              'Driver Earning',
-                              style: TextStyle(color: Colors.orange, fontSize: 13),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '$currencySymbol${driverEarning.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Colors.orange,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
+                      // No driver at all on local/POS orders.
+                      if (!order.isLocalOrder) ...[
+                        Container(width: 1, height: 60, color: kSeparatorColor),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text(
+                                'Driver Earning',
+                                style: TextStyle(color: Colors.orange, fontSize: 13),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              Text(
+                                '$currencySymbol${driverEarning.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -981,12 +999,16 @@ class _OrderDetailsDialog extends StatelessWidget {
                 _DetailItem(label: 'User ID', value: order.oderId, icon: Icons.person_rounded),
                 _DetailItem(label: 'Store', value: order.storeName.isNotEmpty ? order.storeName : order.storeId, icon: Icons.storefront_rounded),
                 _DetailItem(label: 'Payment Method', value: order.paymentMethod, icon: Icons.payment_rounded),
-                _DetailItem(label: 'Delivery Option', value: order.deliveryOption, icon: Icons.local_shipping_rounded),
-                if (order.driverName != null && order.driverName!.isNotEmpty) ...[
-                  _DetailItem(label: 'Driver Name', value: order.driverName!, icon: Icons.person_pin_rounded),
-                  _DetailItem(label: 'Driver Phone', value: order.driverPhone ?? 'N/A', icon: Icons.phone_rounded),
+                if (order.isLocalOrder)
+                  const _DetailItem(label: 'Order Type', value: 'In-Store / Dine-in', icon: Icons.storefront_rounded)
+                else ...[
+                  _DetailItem(label: 'Delivery Option', value: order.deliveryOption, icon: Icons.local_shipping_rounded),
+                  if (order.driverName != null && order.driverName!.isNotEmpty) ...[
+                    _DetailItem(label: 'Driver Name', value: order.driverName!, icon: Icons.person_pin_rounded),
+                    _DetailItem(label: 'Driver Phone', value: order.driverPhone ?? 'N/A', icon: Icons.phone_rounded),
+                  ],
+                  _DriverStatusCard(order: order),
                 ],
-                _DriverStatusCard(order: order),
                 _DetailItem(
                   label: 'Created At',
                   value: order.createdAt != null
