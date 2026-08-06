@@ -444,28 +444,70 @@ class _AddProductViewState extends State<AddProductView> {
   // 💰 Revenue Breakdown Widget
   Widget _buildRevenueBreakdown() {
     final double price = double.tryParse(_priceController.text) ?? 0.0;
-    
-    // Revenue calculation constants
-    const double STORE_RATE = 0.65;        // 65% for store owner
-    const double APP_DRIVER_RATE = 0.35;   // 35% for YSHOP + Driver combined
-    
-    final storeEarning = price * STORE_RATE;
-    final appDriverEarning = price * APP_DRIVER_RATE;
+
+    // This is your price exactly as entered — fees are added ON TOP for
+    // the customer, never deducted from what you typed. Must match
+    // backend src/utils/pricing.js.
+    const double platformFeeRate = 0.25; // always
+    const double deliveryFeeRate = 0.10; // online orders only
+
+    final inStorePrice = price * (1 + platformFeeRate);
+    final onlinePrice = price * (1 + platformFeeRate + deliveryFeeRate);
     final symbol = _selectedCurrency?.symbol ?? '';
-    
+
     if (price <= 0) {
       return Container(
         decoration: _modernBoxDecoration(),
         padding: const EdgeInsets.all(16),
         child: Center(
           child: Text(
-            "Enter a price to see revenue breakdown",
+            "Enter a price to see what customers will pay",
             style: TextStyle(color: _textSecondary, fontSize: 13, fontStyle: FontStyle.italic),
           ),
         ),
       );
     }
-    
+
+    Widget row({required Color color, required String title, required String subtitle, required double amount}) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 20,
+                  decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(color: _textSecondary, fontSize: 12)),
+                    Text(subtitle, style: TextStyle(color: _textSecondary.withOpacity(0.7), fontSize: 11)),
+                  ],
+                ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: color.withOpacity(0.5)),
+              ),
+              child: Text(
+                "$symbol${amount.toStringAsFixed(2)}",
+                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       decoration: _modernBoxDecoration(),
       padding: const EdgeInsets.all(16),
@@ -473,134 +515,35 @@ class _AddProductViewState extends State<AddProductView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "Revenue Breakdown",
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            "What customers will pay",
+            style: TextStyle(color: _textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 16),
-          
-          // Store Owner Earning
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade500,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Your Earning",
-                        style: TextStyle(color: _textSecondary, fontSize: 12),
-                      ),
-                      Text(
-                        "65% of price",
-                        style: TextStyle(color: _textSecondary.withOpacity(0.7), fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade500.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade500.withOpacity(0.5)),
-                ),
-                child: Text(
-                  "$symbol${storeEarning.toStringAsFixed(2)}",
-                  style: TextStyle(
-                    color: Colors.green.shade500,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
+          row(
+            color: Colors.green.shade500,
+            title: "Your earning",
+            subtitle: "Exactly what you entered — always yours",
+            amount: price,
           ),
-          
-          const SizedBox(height: 12),
-          
-          // YSHOP + Driver Combined
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade500,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "YSHOP + Delivery",
-                        style: TextStyle(color: _textSecondary, fontSize: 12),
-                      ),
-                      Text(
-                        "35% of price (25% + 10%)",
-                        style: TextStyle(color: _textSecondary.withOpacity(0.7), fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade500.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade500.withOpacity(0.5)),
-                ),
-                child: Text(
-                  "$symbol${appDriverEarning.toStringAsFixed(2)}",
-                  style: TextStyle(
-                    color: Colors.blue.shade500,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
+          row(
+            color: Colors.blue.shade500,
+            title: "In-store / dine-in price",
+            subtitle: "No delivery fee — no driver involved",
+            amount: inStorePrice,
           ),
-          
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           Divider(color: _textSecondary.withOpacity(0.2)),
           const SizedBox(height: 12),
-          
-          // Total Price
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Total Price",
+                "Online price (delivery)",
                 style: TextStyle(color: _textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
               ),
               Text(
-                "$symbol${price.toStringAsFixed(2)}",
-                style: TextStyle(
-                  color: _textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                "$symbol${onlinePrice.toStringAsFixed(2)}",
+                style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ],
           ),
