@@ -372,7 +372,7 @@ export class AdminSalesController {
         { align: 'center' }
       );
       doc.fillColor('black').moveDown();
-      doc.fontSize(10).text(`Period: ${new Date(periodStart).toLocaleString()} → ${new Date(periodEnd).toLocaleString()}`);
+      doc.fontSize(10).text(`Period: ${new Date(periodStart).toLocaleString()} - ${new Date(periodEnd).toLocaleString()}`);
       doc.text(`Status: ${label}`);
       doc.moveDown();
 
