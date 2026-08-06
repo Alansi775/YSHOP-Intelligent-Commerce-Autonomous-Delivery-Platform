@@ -5,6 +5,7 @@
 
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
+import { chargedPrice } from '../utils/pricing.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITY FUNCTIONS
@@ -98,27 +99,49 @@ export class Order {
         finalCurrency = 'USD';
       }
 
+      // Never trust client-sent prices — look up each product's real base
+      // price and compute the charged (base + platform + delivery) price
+      // server-side. This is the online checkout path, so the delivery fee
+      // always applies here (isLocal: false); POS/dine-in orders go
+      // through POSController instead.
+      let serverTotalPrice = 0;
+      const pricedItems = [];
+      if (items && items.length > 0) {
+        for (const item of items) {
+          const [[product]] = await connection.execute(
+            `SELECT price FROM products WHERE id = ?`,
+            [item.productId]
+          );
+          if (!product) {
+            throw new Error(`Product ${item.productId} not found`);
+          }
+          const unitPrice = chargedPrice(product.price, { isLocal: false });
+          const quantity = Number(item.quantity) || 0;
+          serverTotalPrice += unitPrice * quantity;
+          pricedItems.push({ ...item, price: unitPrice, quantity });
+        }
+        serverTotalPrice = Math.round(serverTotalPrice * 100) / 100;
+      }
+
       const [result] = await connection.execute(
-        `INSERT INTO orders 
-         (user_id, store_id, total_price, currency, status, shipping_address, payment_method, delivery_option, created_at) 
+        `INSERT INTO orders
+         (user_id, store_id, total_price, currency, status, shipping_address, payment_method, delivery_option, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [userId, storeId, totalPrice, finalCurrency, status || 'pending', shippingAddress, paymentMethod || null, deliveryOption || null]
+        [userId, storeId, serverTotalPrice, finalCurrency, status || 'pending', shippingAddress, paymentMethod || null, deliveryOption || null]
       );
 
       const orderId = result.insertId;
 
-      if (items && items.length > 0) {
-        for (const item of items) {
-          await connection.execute(
-            `INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)`,
-            [orderId, item.productId, item.quantity, item.price]
-          );
+      for (const item of pricedItems) {
+        await connection.execute(
+          `INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)`,
+          [orderId, item.productId, item.quantity, item.price]
+        );
 
-          await connection.execute(
-            `UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id = ?`,
-            [item.quantity, item.productId]
-          );
-        }
+        await connection.execute(
+          `UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id = ?`,
+          [item.quantity, item.productId]
+        );
       }
 
       await connection.commit();
@@ -128,14 +151,14 @@ export class Order {
         id: orderId,
         user_id: userId,
         store_id: storeId,
-        total_price: totalPrice,
+        total_price: serverTotalPrice,
         currency: finalCurrency,
         status: status || 'pending',
         shipping_address: shippingAddress,
         payment_method: paymentMethod,
         delivery_option: deliveryOption,
         created_at: new Date().toISOString(),
-        items: items || [],
+        items: pricedItems,
       };
     } catch (err) {
       try { await connection.rollback(); } catch (e) {}

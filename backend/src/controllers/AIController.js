@@ -2,6 +2,7 @@ import { YShopAIService } from '../services/YShopAIService.js';
 import { UserInteractionService } from '../services/UserInteractionService.js';
 import { EmbeddingPipeline } from '../services/EmbeddingPipeline.js';
 import { isTTSAvailable, synthesizeSpeech } from '../services/TTSProxyService.js';
+import { chargedPrice } from '../utils/pricing.js';
 import logger from '../config/logger.js';
 
 export class AIController {
@@ -55,7 +56,8 @@ export class AIController {
             id:                p.id,
             name:              p.name,
             description:       p.description || '',
-            price:             p.price,
+            // Customer-facing — final online price, never the store owner's raw base price.
+            price:             chargedPrice(p.price, { isLocal: false }),
             currency:          p.currency || 'TRY',
             image_url:         p.image_url,
             image:             p.image_url,

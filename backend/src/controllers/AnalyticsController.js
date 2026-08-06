@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
+import { splitFromCharged } from '../utils/pricing.js';
 
 const PERIOD_SQL = {
   hour:  `AND o.created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
@@ -28,12 +29,12 @@ const RETURNS_PERIOD_SQL = {
 
 const fmtDate = (d) => d instanceof Date ? d.toISOString().split('T')[0] : String(d || '');
 
-// Dine-in/POS orders (order_type = 'local') never involve a driver, so the
-// store keeps 75% (just the 25% platform cut). Online/delivered orders keep
-// the original 65% (25% platform + 10% driver).
-const STORE_RATE_LOCAL = 0.75;
-const STORE_RATE_ONLINE = 0.65;
-const storeShare = (local, online) => (Number(local) || 0) * STORE_RATE_LOCAL + (Number(online) || 0) * STORE_RATE_ONLINE;
+// Charged totals already have the fee baked in on top of the store's base
+// price (see utils/pricing.js) — reverse each bucket back to the store's
+// share rather than assuming a flat percentage of the charged total.
+const storeShare = (localCharged, onlineCharged) =>
+  splitFromCharged(localCharged, { isLocal: true }).base +
+  splitFromCharged(onlineCharged, { isLocal: false }).base;
 
 export class AnalyticsController {
 

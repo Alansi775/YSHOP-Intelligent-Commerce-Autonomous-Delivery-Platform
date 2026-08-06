@@ -294,12 +294,12 @@ class _SummaryGrid extends StatelessWidget {
         const SizedBox(height: 10),
         Row(children: [
           Expanded(child: _StatTile(
-            _fmtAmount(grossOnline, currency), 'Online (65% yours)',
+            _fmtAmount(grossOnline, currency), 'Online (delivery fee applies)',
             Icons.delivery_dining_outlined, const Color(0xFFFBBF24), text, sub, card,
           )),
           const SizedBox(width: 10),
           Expanded(child: _StatTile(
-            _fmtAmount(grossLocal, currency), 'In-Store (75% yours)',
+            _fmtAmount(grossLocal, currency), 'In-Store (no delivery fee)',
             Icons.storefront_outlined, const Color(0xFF38BDF8), text, sub, card,
           )),
         ]),

@@ -8,6 +8,7 @@ import { getIO } from '../utils/socketInstance.js';
 import { v4 as uuidv4 } from 'uuid';
 import PDFDocument from 'pdfkit';
 import path from 'path';
+import { chargedPrice } from '../utils/pricing.js';
 import fs from 'fs';
 
 // ─── WebSocket helper ───────────────────────────────────────────────────────
@@ -327,7 +328,19 @@ class POSController {
       );
       if (cRows.length) currency = cRows[0].currency;
 
-      const totalPrice = items.reduce((s, it) => s + (Number(it.price) * Number(it.quantity)), 0);
+      // Never trust client-sent prices — look up each product's real base
+      // price and add the platform fee only (dine-in has no driver).
+      const pricedItems = [];
+      for (const it of items) {
+        const [[product]] = await connection.execute(`SELECT price FROM products WHERE id = ?`, [it.productId]);
+        if (!product) {
+          await connection.rollback();
+          connection.release();
+          return res.status(400).json({ success: false, message: `Product ${it.productId} not found` });
+        }
+        pricedItems.push({ ...it, price: chargedPrice(product.price, { isLocal: true }) });
+      }
+      const totalPrice = pricedItems.reduce((s, it) => s + (Number(it.price) * Number(it.quantity)), 0);
 
       await connection.beginTransaction();
 
@@ -346,7 +359,7 @@ class POSController {
       );
       const orderId = res1.insertId;
 
-      for (const item of items) {
+      for (const item of pricedItems) {
         await connection.execute(
           `INSERT INTO order_items (order_id, product_id, quantity, price, notes)
            VALUES (?, ?, ?, ?, ?)
@@ -520,9 +533,21 @@ class POSController {
         );
       }
 
-      const totalPrice = items.reduce((s, it) => s + (Number(it.price) * Number(it.quantity)), 0);
+      // Never trust client-sent prices here either — same server-side
+      // lookup as order creation.
+      const pricedItems = [];
+      for (const it of items) {
+        const [[product]] = await connection.execute(`SELECT price FROM products WHERE id = ?`, [it.productId]);
+        if (!product) {
+          await connection.rollback();
+          connection.release();
+          return res.status(400).json({ success: false, message: `Product ${it.productId} not found` });
+        }
+        pricedItems.push({ ...it, price: chargedPrice(product.price, { isLocal: true }) });
+      }
+      const totalPrice = pricedItems.reduce((s, it) => s + (Number(it.price) * Number(it.quantity)), 0);
 
-      for (const item of items) {
+      for (const item of pricedItems) {
         if (existingProductIds.has(Number(item.productId))) {
           await connection.execute(
             `UPDATE order_items SET quantity = ?, price = ?, notes = ? WHERE order_id = ? AND product_id = ?`,

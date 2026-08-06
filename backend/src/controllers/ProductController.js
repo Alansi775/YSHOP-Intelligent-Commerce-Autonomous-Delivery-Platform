@@ -3,6 +3,17 @@ import logger from '../config/logger.js';
 import { ProductRetrievalService } from '../services/ProductRetrievalService.js';
 import { VectorStore } from '../services/VectorStore.js';
 import { getIO } from '../utils/socketInstance.js';
+import { chargedPrice } from '../utils/pricing.js';
+
+// Customers never see the store owner's raw base price or a fee
+// breakdown — only the final online price (base + platform + delivery),
+// applied here at the API boundary so every customer-facing screen gets
+// it automatically. Store owners see their real entered price when
+// listing their own products (storeOwnerUid present) or when editing.
+function withCustomerPrice(product) {
+  if (!product) return product;
+  return { ...product, price: chargedPrice(product.price, { isLocal: false }) };
+}
 
 function emitProductChange(type, productId, storeId, status = null) {
   try {
@@ -26,9 +37,14 @@ export class ProductController {
         parseInt(limit)
       );
 
+      // storeOwnerUid present = the store owner viewing/managing their own
+      // catalog (e.g. getStoreProducts) — show their real entered price.
+      // Otherwise this is a customer browsing — show the final online price.
+      const responseProducts = storeOwnerUid ? products : products.map(withCustomerPrice);
+
       res.json({
         success: true,
-        data: products,
+        data: responseProducts,
         pagination: { page: parseInt(page), limit: parseInt(limit) },
       });
     } catch (error) {
@@ -52,7 +68,7 @@ export class ProductController {
 
       res.json({
         success: true,
-        data: product,
+        data: withCustomerPrice(product),
       });
     } catch (error) {
       logger.error('Error in getById:', error);

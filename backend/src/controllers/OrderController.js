@@ -6,6 +6,7 @@ import { Store } from '../models/Store.js';
 import { getIO } from '../utils/socketInstance.js';
 import { pushLiveActivityUpdate, pushLiveActivityEnd } from '../utils/apnsService.js';
 import { buildLiveActivityState, TERMINAL_STATUSES } from '../utils/liveActivityUtils.js';
+import { splitFromCharged } from '../utils/pricing.js';
 
 // Emit a real-time order update to the customer's private channel
 function emitOrderUpdate(orderId, order) {
@@ -105,12 +106,15 @@ export class OrderController {
         
         if (emailService && userInfo && store) {
           // Prepare order object for email templates
+          // Use the server-computed total/items from `order`, not the
+          // client-sent req.body values — Order.create() recalculates the
+          // real charged price from each product's current base price.
           const orderForEmail = {
             id: order.id,
-            total_price: totalPrice,
-            total: totalPrice,
+            total_price: order.total_price,
+            total: order.total_price,
             created_at: new Date().toISOString(),
-            items: items,
+            items: order.items,
             customer: {
               name: userInfo.displayName || userInfo.email || 'Customer',
               email: userInfo.email,
@@ -441,16 +445,13 @@ export class OrderController {
       const store = await Store.findById(order.store_id);
       const storeEmail = store && (store.email || null);
 
-      // Compute splits (configurable via env vars). Dine-in/POS orders
-      // (order_type === 'local') never involve a driver — the platform
-      // still takes its cut, but the driver percentage does not apply.
+      // The charged total already has the platform (+ delivery, if online)
+      // fee baked in on top of the store's base price — reverse it back
+      // into its components for the receipt breakdown.
       const total = parseFloat(order.total_price || order.total || 0) || 0;
       const isLocalOrder = (order.order_type || 'online') === 'local';
-      const platformPercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || '0.25');
-      const driverPercent = isLocalOrder ? 0 : parseFloat(process.env.DRIVER_FEE_PERCENT || '0.10');
-      const platformAmount = +(total * platformPercent).toFixed(2);
-      const driverAmount = +(total * driverPercent).toFixed(2);
-      const storeAmount = +(total - platformAmount - driverAmount).toFixed(2);
+      const { base: storeAmount, platform: platformAmount, driver: driverAmount } =
+        splitFromCharged(total, { isLocal: isLocalOrder });
 
       const attachments = [
         { filename: file.originalname || `receipt_${id}.pdf`, content: file.buffer }

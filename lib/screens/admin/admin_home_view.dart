@@ -108,8 +108,9 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       
       for (final o in orders) {
         final price = double.tryParse((o['total_price'] ?? '0').toString()) ?? 0.0;
+        final isLocal = (o['order_type']?.toString().toLowerCase() ?? 'online') == 'local';
         totalRevenue += price;
-        appRevenue += RevenueCalculator.calculateAppRevenue(price);
+        appRevenue += RevenueCalculator.calculateAppRevenue(price, isLocal: isLocal);
 
         final orderCurrency = (o['currency']?.toString() ?? '').trim().toUpperCase();
         if (dashboardCurrency == 'USD' && orderCurrency.isNotEmpty && orderCurrency != 'USD') {

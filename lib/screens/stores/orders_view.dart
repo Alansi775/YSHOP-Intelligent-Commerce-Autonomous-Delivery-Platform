@@ -410,7 +410,9 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       // Count all orders (they all have real payment)
       if (status != 'return' && total > 0) {
         totalRevenue += total;
-        totalProfit += total * (isLocal ? 0.75 : 0.65);
+        // total already has the fee baked in on top of the store's base
+        // price — divide it back out rather than taking a flat percentage.
+        totalProfit += total / (isLocal ? 1.25 : 1.35);
         debugPrint('   Order total: $total (${isLocal ? "local" : "online"})');
       }
     }
@@ -1271,10 +1273,10 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       storeSubtotal += price * qty;
     }
 
-    // Store owner gets 75% of dine-in/POS orders (no driver), 65% of
-    // online/delivered orders (25% platform + 10% driver).
+    // storeSubtotal is the charged total (base + fees already baked in) —
+    // divide the fee back out rather than taking a flat percentage.
     final orderIsLocal = (orderData['order_type']?.toString().toLowerCase() ?? 'online') == 'local';
-    final netStoreProfit = storeSubtotal * (orderIsLocal ? 0.75 : 0.65);
+    final netStoreProfit = storeSubtotal / (orderIsLocal ? 1.25 : 1.35);
     final statusColor = _getStatusColor(status);
 
     // 🔥 Get images for MULTIPLE items (first 2-3) for preview grid
@@ -2601,19 +2603,16 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Builder(builder: (context) {
-                            final isLocal = (orderData['order_type']?.toString().toLowerCase() ?? 'online') == 'local';
-                            return Text(
-                              isLocal ? 'Your Profit (75%):' : 'Your Profit (65%):',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : Colors.black,
-                              ),
-                            );
-                          }),
                           Text(
-                            '${_getCurrencySymbol(orderData['currency'])}${((double.tryParse(orderData['total_price']?.toString() ?? '0') ?? 0) * ((orderData['order_type']?.toString().toLowerCase() ?? 'online') == 'local' ? 0.75 : 0.65)).toStringAsFixed(2)}',
+                            'Your Profit:',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          Text(
+                            '${_getCurrencySymbol(orderData['currency'])}${((double.tryParse(orderData['total_price']?.toString() ?? '0') ?? 0) / ((orderData['order_type']?.toString().toLowerCase() ?? 'online') == 'local' ? 1.25 : 1.35)).toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,

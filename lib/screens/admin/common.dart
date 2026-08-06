@@ -520,28 +520,36 @@ class UserModel {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class RevenueCalculator {
-  static const double APP_COMMISSION_RATE = 0.25;  // 25% of total price goes to app/admin — applies to every order
-  static const double DRIVER_RATE = 0.10;           // 10% of total price goes to driver — online/delivered orders only
-  static const double STORE_OWNER_RATE = 0.65;      // online: 75% - 10% driver = 65%
-  static const double STORE_OWNER_RATE_LOCAL = 0.75; // local/dine-in: no driver cut, store keeps the full 75%
+  // The store owner's entered product price is their guaranteed take-home
+  // (base price). Fees are added ON TOP to arrive at what the customer is
+  // actually charged — not deducted from a gross total. See backend
+  // src/utils/pricing.js, which is the authoritative version of this same
+  // formula (used at order-creation time); this mirrors it for display.
+  static const double PLATFORM_FEE_RATE = 0.25; // always, on top of base
+  static const double DELIVERY_FEE_RATE = 0.10; // online/delivered orders only, on top of base
 
-  static double calculateAppRevenue(double totalPrice) {
-    return totalPrice * APP_COMMISSION_RATE;
+  static double _multiplier({required bool isLocal}) =>
+      1 + PLATFORM_FEE_RATE + (isLocal ? 0 : DELIVERY_FEE_RATE);
+
+  /// Reverses an already-charged total back into the store's base-price
+  /// share. [totalPrice] here is what the customer was actually charged
+  /// (orders.total_price), which already has the fee baked in.
+  static double calculateStoreOwnerRevenue(double totalPrice, {bool isLocal = false}) {
+    return totalPrice / _multiplier(isLocal: isLocal);
   }
 
-  /// [isLocal] = true for dine-in/POS orders, which never involve a driver.
-  static double calculateStoreOwnerRevenue(double totalPrice, {bool isLocal = false}) {
-    return totalPrice * (isLocal ? STORE_OWNER_RATE_LOCAL : STORE_OWNER_RATE);
+  static double calculateAppRevenue(double totalPrice, {bool isLocal = false}) {
+    return calculateStoreOwnerRevenue(totalPrice, isLocal: isLocal) * PLATFORM_FEE_RATE;
   }
 
   /// Local/dine-in orders have no driver at all — always 0.
   static double calculateDriverRevenue(double totalPrice, {bool isLocal = false}) {
-    return isLocal ? 0.0 : totalPrice * DRIVER_RATE;
+    return isLocal ? 0.0 : calculateStoreOwnerRevenue(totalPrice, isLocal: isLocal) * DELIVERY_FEE_RATE;
   }
 
   static Map<String, double> calculateOrderRevenue(double totalPrice, {bool isLocal = false}) {
     return {
-      'app': calculateAppRevenue(totalPrice),
+      'app': calculateAppRevenue(totalPrice, isLocal: isLocal),
       'store': calculateStoreOwnerRevenue(totalPrice, isLocal: isLocal),
       'driver': calculateDriverRevenue(totalPrice, isLocal: isLocal),
       'total': totalPrice,
@@ -564,7 +572,7 @@ class RevenueCalculator {
     for (final order in orders) {
       final isLocal = order.isLocalOrder;
       totalOrdersValue += order.totalPrice;
-      totalAppRevenue += calculateAppRevenue(order.totalPrice);
+      totalAppRevenue += calculateAppRevenue(order.totalPrice, isLocal: isLocal);
       totalStoreRevenue += calculateStoreOwnerRevenue(order.totalPrice, isLocal: isLocal);
       totalDriverRevenue += calculateDriverRevenue(order.totalPrice, isLocal: isLocal);
       if (isLocal) {

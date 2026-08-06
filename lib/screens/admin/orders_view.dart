@@ -71,7 +71,7 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
     // store keeps the full 75% instead of 65%.
     for (final order in _orders) {
       total += order.totalPrice;
-      app += RevenueCalculator.calculateAppRevenue(order.totalPrice);
+      app += RevenueCalculator.calculateAppRevenue(order.totalPrice, isLocal: order.isLocalOrder);
       driver += RevenueCalculator.calculateDriverRevenue(order.totalPrice, isLocal: order.isLocalOrder);
       store += RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     }
@@ -510,7 +510,7 @@ class _OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appEarning = RevenueCalculator.calculateAppRevenue(order.totalPrice);
+    final appEarning = RevenueCalculator.calculateAppRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final storeEarning = RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final driverEarning = RevenueCalculator.calculateDriverRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final currencySymbol = getCurrencySymbol(order.currency);
@@ -821,7 +821,7 @@ class _OrderDetailsDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appEarning = RevenueCalculator.calculateAppRevenue(order.totalPrice);
+    final appEarning = RevenueCalculator.calculateAppRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final storeEarning = RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final driverEarning = RevenueCalculator.calculateDriverRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final currencySymbol = getCurrencySymbol(order.currency);
