@@ -20,6 +20,7 @@ import 'admins_view.dart';
 import 'users_view.dart';
 import 'returns_view.dart';
 import 'complaints_view.dart';
+import 'store_finance_view.dart';
 import '../customers/settings_view.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -747,6 +748,14 @@ class _AdminHomeViewState extends State<AdminHomeView> {
           label: 'View Orders',
           gradient: AppGradients.purple,
           onTap: () => _onSelectMenu(6),
+        ),
+        _QuickActionCard(
+          icon: Icons.account_balance_wallet_rounded,
+          label: 'Store Finances',
+          gradient: AppGradients.success,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const StoreFinanceView()),
+          ),
         ),
         _QuickActionCard(
           icon: Icons.assignment_return_rounded,

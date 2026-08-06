@@ -243,4 +243,107 @@ export class AnalyticsController {
       if (connection) connection.release();
     }
   }
+
+  // ── Admin: per-store financial breakdown ──────────────────────────────
+  // GET /api/v1/analytics/admin/stores-summary?period=today|week|month|year
+  //
+  // For every store: online (delivered) vs in-store (dine-in/POS) revenue,
+  // in that store's own currency, with the platform/driver/store split
+  // reversed out of each charged total — plus a per-table breakdown of
+  // in-store sales so the admin can reconcile against a specific ticket.
+  static async getAdminStoresSummary(req, res) {
+    const period = req.query.period || 'month';
+    const periodFilter = PERIOD_SQL[period] || PERIOD_SQL.month;
+
+    let connection;
+    try {
+      connection = await pool.getConnection();
+
+      const [rows] = await connection.execute(`
+        SELECT
+          s.id                        AS store_id,
+          s.name                      AS store_name,
+          s.store_type,
+          o.order_type,
+          t.name                      AS table_name,
+          COUNT(DISTINCT o.id)        AS order_count,
+          COALESCE(SUM(oi.quantity * oi.price), 0) AS gross_charged,
+          MIN(o.currency)             AS currency
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN stores s       ON s.id = o.store_id
+        LEFT JOIN pos_tables t ON t.id = o.table_id
+        WHERE o.status NOT IN ('cancelled')
+          ${periodFilter}
+        GROUP BY s.id, s.name, s.store_type, o.order_type, t.name
+        ORDER BY s.name
+      `);
+
+      const storesByid = new Map();
+      for (const r of rows) {
+        if (!storesByid.has(r.store_id)) {
+          storesByid.set(r.store_id, {
+            store_id: r.store_id,
+            store_name: r.store_name,
+            store_type: r.store_type,
+            currency: r.currency || 'USD',
+            online: { order_count: 0, gross_charged: 0 },
+            local: { order_count: 0, gross_charged: 0 },
+            local_by_table: [],
+          });
+        }
+        const entry = storesByid.get(r.store_id);
+        const isLocal = r.order_type === 'local';
+        const bucket = isLocal ? entry.local : entry.online;
+        bucket.order_count += Number(r.order_count);
+        bucket.gross_charged += Number(r.gross_charged);
+        if (isLocal) {
+          entry.local_by_table.push({
+            table_name: r.table_name || 'Unassigned table',
+            order_count: Number(r.order_count),
+            gross_charged: Number(r.gross_charged),
+          });
+        }
+      }
+
+      const stores = Array.from(storesByid.values()).map((entry) => {
+        const onlineSplit = splitFromCharged(entry.online.gross_charged, { isLocal: false });
+        const localSplit = splitFromCharged(entry.local.gross_charged, { isLocal: true });
+        return {
+          store_id: entry.store_id,
+          store_name: entry.store_name,
+          store_type: entry.store_type,
+          currency: entry.currency,
+          online: {
+            order_count: entry.online.order_count,
+            gross_charged: Math.round(entry.online.gross_charged * 100) / 100,
+            store_owes_platform: onlineSplit.platform,
+            store_owes_driver: onlineSplit.driver,
+            store_keeps: onlineSplit.base,
+          },
+          local: {
+            order_count: entry.local.order_count,
+            gross_charged: Math.round(entry.local.gross_charged * 100) / 100,
+            store_owes_platform: localSplit.platform,
+            store_keeps: localSplit.base,
+            by_table: entry.local_by_table,
+          },
+          totals: {
+            order_count: entry.online.order_count + entry.local.order_count,
+            gross_charged: Math.round((entry.online.gross_charged + entry.local.gross_charged) * 100) / 100,
+            owed_to_platform: Math.round((onlineSplit.platform + localSplit.platform) * 100) / 100,
+            owed_to_drivers: onlineSplit.driver,
+            store_keeps: Math.round((onlineSplit.base + localSplit.base) * 100) / 100,
+          },
+        };
+      });
+
+      return res.status(200).json({ success: true, period, data: { stores } });
+    } catch (err) {
+      logger.error('[Analytics] getAdminStoresSummary fatal error', { error: err.message, period });
+      return res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  }
 }
