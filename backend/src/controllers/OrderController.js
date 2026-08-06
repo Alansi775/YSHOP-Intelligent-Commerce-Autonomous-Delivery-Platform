@@ -441,11 +441,13 @@ export class OrderController {
       const store = await Store.findById(order.store_id);
       const storeEmail = store && (store.email || null);
 
-      // Compute simple splits (configurable via env vars)
+      // Compute splits (configurable via env vars). Dine-in/POS orders
+      // (order_type === 'local') never involve a driver — the platform
+      // still takes its cut, but the driver percentage does not apply.
       const total = parseFloat(order.total_price || order.total || 0) || 0;
-      // Default splits: platform 25% (APP_COMMISSION_RATE in Flutter), driver 10%, store gets remaining 65%
+      const isLocalOrder = (order.order_type || 'online') === 'local';
       const platformPercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || '0.25');
-      const driverPercent = parseFloat(process.env.DRIVER_FEE_PERCENT || '0.10');
+      const driverPercent = isLocalOrder ? 0 : parseFloat(process.env.DRIVER_FEE_PERCENT || '0.10');
       const platformAmount = +(total * platformPercent).toFixed(2);
       const driverAmount = +(total * driverPercent).toFixed(2);
       const storeAmount = +(total - platformAmount - driverAmount).toFixed(2);

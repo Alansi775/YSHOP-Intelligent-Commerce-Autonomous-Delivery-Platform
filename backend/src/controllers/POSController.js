@@ -371,7 +371,16 @@ class POSController {
       await connection.commit();
       connection.release();
 
-      const [oRows] = await pool.execute(`SELECT SQL_NO_CACHE * FROM orders WHERE id = ?`, [orderId]);
+      // Join table_name here too — this response goes straight into the
+      // cashier's and kitchen's live order lists via the socket event
+      // below, and without it the table was blank until the next full
+      // refresh replaced it with the (correctly joined) list query.
+      const [oRows] = await pool.execute(
+        `SELECT SQL_NO_CACHE o.*, t.name AS table_name FROM orders o
+         LEFT JOIN pos_tables t ON t.id = o.table_id
+         WHERE o.id = ?`,
+        [orderId]
+      );
       const [iRows] = await pool.execute(
         `SELECT SQL_NO_CACHE oi.*, p.name AS product_name, p.image_url FROM order_items oi
          JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?`,

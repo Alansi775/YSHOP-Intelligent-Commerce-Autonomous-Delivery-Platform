@@ -235,11 +235,20 @@ class _POSKitchenViewState extends State<POSKitchenView> {
                     mainAxisSpacing: 12,
                   ),
                   itemCount: _orders.length,
-                  itemBuilder: (_, i) => _KitchenCard(
-                    order:       _orders[i],
-                    isDeparting: _departing.contains(_orders[i].id),
-                    onAdvance:   () => _advance(_orders[i]),
-                  ),
+                  itemBuilder: (_, i) {
+                    // Capture this specific order by value, not by index —
+                    // a socket-driven refresh can reorder/insert into
+                    // _orders between build and tap, which made the button
+                    // fire on whatever order was *currently* at position i
+                    // rather than the one actually shown/tapped.
+                    final order = _orders[i];
+                    return _KitchenCard(
+                      key:         ValueKey(order.id),
+                      order:       order,
+                      isDeparting: _departing.contains(order.id),
+                      onAdvance:   () => _advance(order),
+                    );
+                  },
                 ),
     );
   }
@@ -250,7 +259,7 @@ class _KitchenCard extends StatelessWidget {
   final POSOrder order;
   final bool isDeparting;
   final VoidCallback onAdvance;
-  const _KitchenCard({required this.order, required this.isDeparting, required this.onAdvance});
+  const _KitchenCard({super.key, required this.order, required this.isDeparting, required this.onAdvance});
 
   String _elapsed() {
     final diff = DateTime.now().difference(order.createdAt);
@@ -323,7 +332,13 @@ class _KitchenCard extends StatelessWidget {
                 style: TextStyle(color: sc, fontSize: 12,
                     fontWeight: FontWeight.w800, letterSpacing: 0.8)),
             const Spacer(),
-            if (order.tableName != null)
+            // Always show the order number, and the table too when this is
+            // a dine-in order — kitchen staff need both to avoid mixing up
+            // orders when several arrive close together.
+            Text('#${order.id}',
+                style: const TextStyle(color: _kSoft, fontWeight: FontWeight.w700, fontSize: 14)),
+            if (order.tableName != null) ...[
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
@@ -333,10 +348,8 @@ class _KitchenCard extends StatelessWidget {
                 ),
                 child: Text(order.tableName!,
                     style: TextStyle(color: sc, fontSize: 12, fontWeight: FontWeight.w700)),
-              )
-            else
-              Text('#${order.id}',
-                  style: const TextStyle(color: _kSoft, fontWeight: FontWeight.w700, fontSize: 14)),
+              ),
+            ],
             const SizedBox(width: 10),
             Row(children: [
               const Icon(Icons.schedule_rounded, color: _kDim, size: 12),

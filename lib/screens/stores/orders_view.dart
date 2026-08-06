@@ -395,24 +395,27 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
     debugPrint('💰 CALCULATING PROFIT: ${orders.length} orders, store currency=$storeCurrency');
     
     double totalRevenue = 0;
-    
+    // Store keeps 75% of dine-in/POS orders (no driver at all) vs 65% of
+    // online/delivered orders (25% platform + 10% driver) — computed
+    // separately per order so mixing the two never uses the wrong rate.
+    double totalProfit = 0;
+
     // Calculate revenue from ALL orders (except 'return' status)
     for (var order in orders) {
       final status = (order['status'] ?? '').toString().toLowerCase();
       // Try both 'total_price' (from backend) and 'total' (legacy)
       final total = double.tryParse(order['total_price']?.toString() ?? order['total']?.toString() ?? '0') ?? 0;
-      
+      final isLocal = (order['order_type']?.toString().toLowerCase() ?? 'online') == 'local';
+
       // Count all orders (they all have real payment)
       if (status != 'return' && total > 0) {
         totalRevenue += total;
-        debugPrint('   Order total: $total');
+        totalProfit += total * (isLocal ? 0.75 : 0.65);
+        debugPrint('   Order total: $total (${isLocal ? "local" : "online"})');
       }
     }
-    
+
     debugPrint('💵 Total revenue: $totalRevenue $storeCurrency');
-    
-    // Calculate profit at 65% (Store owner share)
-    double totalProfit = totalRevenue * 0.65;
     
     // Deduct returns
     double returnsDeduction = 0;
@@ -1268,8 +1271,10 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       storeSubtotal += price * qty;
     }
 
-    // Store owner gets 65% of total
-    final netStoreProfit = storeSubtotal * 0.65;
+    // Store owner gets 75% of dine-in/POS orders (no driver), 65% of
+    // online/delivered orders (25% platform + 10% driver).
+    final orderIsLocal = (orderData['order_type']?.toString().toLowerCase() ?? 'online') == 'local';
+    final netStoreProfit = storeSubtotal * (orderIsLocal ? 0.75 : 0.65);
     final statusColor = _getStatusColor(status);
 
     // 🔥 Get images for MULTIPLE items (first 2-3) for preview grid
@@ -2596,16 +2601,19 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          Builder(builder: (context) {
+                            final isLocal = (orderData['order_type']?.toString().toLowerCase() ?? 'online') == 'local';
+                            return Text(
+                              isLocal ? 'Your Profit (75%):' : 'Your Profit (65%):',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            );
+                          }),
                           Text(
-                            'Your Profit (65%):',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : Colors.black,
-                            ),
-                          ),
-                          Text(
-                            '${_getCurrencySymbol(orderData['currency'])}${((double.tryParse(orderData['total_price']?.toString() ?? '0') ?? 0) * 0.65).toStringAsFixed(2)}',
+                            '${_getCurrencySymbol(orderData['currency'])}${((double.tryParse(orderData['total_price']?.toString() ?? '0') ?? 0) * ((orderData['order_type']?.toString().toLowerCase() ?? 'online') == 'local' ? 0.75 : 0.65)).toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,

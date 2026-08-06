@@ -338,6 +338,9 @@ class OrderModel {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final List<OrderItem> items;
+  /// 'online' (delivered by a driver) or 'local' (dine-in / POS, no driver
+  /// involved at all — the driver commission must never apply to these).
+  final String orderType;
 
   OrderModel({
     required this.id,
@@ -358,7 +361,10 @@ class OrderModel {
     this.createdAt,
     this.updatedAt,
     this.items = const [],
+    this.orderType = 'online',
   });
+
+  bool get isLocalOrder => orderType == 'local';
 
   factory OrderModel.fromMap(Map<String, dynamic> m) {
     List<OrderItem> orderItems = [];
@@ -396,6 +402,7 @@ class OrderModel {
       createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'].toString()) : null,
       updatedAt: m['updated_at'] != null ? DateTime.tryParse(m['updated_at'].toString()) : null,
       items: orderItems,
+      orderType: (m['order_type'] as String? ?? 'online').toLowerCase(),
     );
   }
 }
@@ -513,42 +520,58 @@ class UserModel {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class RevenueCalculator {
-  static const double APP_COMMISSION_RATE = 0.25;  // 25% of total price goes to app/admin
-  static const double DRIVER_RATE = 0.10;           // 10% of total price goes to driver
-  static const double STORE_OWNER_RATE = 0.65;      // 65% of total price goes to store owner (75% - 10% driver)
+  static const double APP_COMMISSION_RATE = 0.25;  // 25% of total price goes to app/admin — applies to every order
+  static const double DRIVER_RATE = 0.10;           // 10% of total price goes to driver — online/delivered orders only
+  static const double STORE_OWNER_RATE = 0.65;      // online: 75% - 10% driver = 65%
+  static const double STORE_OWNER_RATE_LOCAL = 0.75; // local/dine-in: no driver cut, store keeps the full 75%
 
   static double calculateAppRevenue(double totalPrice) {
     return totalPrice * APP_COMMISSION_RATE;
   }
 
-  static double calculateStoreOwnerRevenue(double totalPrice) {
-    return totalPrice * STORE_OWNER_RATE;
+  /// [isLocal] = true for dine-in/POS orders, which never involve a driver.
+  static double calculateStoreOwnerRevenue(double totalPrice, {bool isLocal = false}) {
+    return totalPrice * (isLocal ? STORE_OWNER_RATE_LOCAL : STORE_OWNER_RATE);
   }
 
-  static double calculateDriverRevenue(double totalPrice) {
-    return totalPrice * DRIVER_RATE;
+  /// Local/dine-in orders have no driver at all — always 0.
+  static double calculateDriverRevenue(double totalPrice, {bool isLocal = false}) {
+    return isLocal ? 0.0 : totalPrice * DRIVER_RATE;
   }
 
-  static Map<String, double> calculateOrderRevenue(double totalPrice) {
+  static Map<String, double> calculateOrderRevenue(double totalPrice, {bool isLocal = false}) {
     return {
       'app': calculateAppRevenue(totalPrice),
-      'store': calculateStoreOwnerRevenue(totalPrice),
-      'driver': calculateDriverRevenue(totalPrice),
+      'store': calculateStoreOwnerRevenue(totalPrice, isLocal: isLocal),
+      'driver': calculateDriverRevenue(totalPrice, isLocal: isLocal),
       'total': totalPrice,
     };
   }
+
+  /// Convenience overload driven directly by an [OrderModel] so callers
+  /// don't have to remember to pass isLocal themselves.
+  static Map<String, double> calculateOrderRevenueFor(OrderModel order) =>
+      calculateOrderRevenue(order.totalPrice, isLocal: order.isLocalOrder);
 
   static Map<String, double> calculateTotalRevenue(List<OrderModel> orders) {
     double totalOrdersValue = 0.0;
     double totalAppRevenue = 0.0;
     double totalStoreRevenue = 0.0;
     double totalDriverRevenue = 0.0;
+    double onlineOrdersValue = 0.0;
+    double localOrdersValue = 0.0;
 
     for (final order in orders) {
+      final isLocal = order.isLocalOrder;
       totalOrdersValue += order.totalPrice;
       totalAppRevenue += calculateAppRevenue(order.totalPrice);
-      totalStoreRevenue += calculateStoreOwnerRevenue(order.totalPrice);
-      totalDriverRevenue += calculateDriverRevenue(order.totalPrice);
+      totalStoreRevenue += calculateStoreOwnerRevenue(order.totalPrice, isLocal: isLocal);
+      totalDriverRevenue += calculateDriverRevenue(order.totalPrice, isLocal: isLocal);
+      if (isLocal) {
+        localOrdersValue += order.totalPrice;
+      } else {
+        onlineOrdersValue += order.totalPrice;
+      }
     }
 
     return {
@@ -556,6 +579,8 @@ class RevenueCalculator {
       'appRevenue': totalAppRevenue,
       'storeRevenue': totalStoreRevenue,
       'driverRevenue': totalDriverRevenue,
+      'onlineOrders': onlineOrdersValue,
+      'localOrders': localOrdersValue,
     };
   }
 }

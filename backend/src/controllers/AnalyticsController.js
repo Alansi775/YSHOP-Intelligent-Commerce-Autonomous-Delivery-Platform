@@ -28,6 +28,13 @@ const RETURNS_PERIOD_SQL = {
 
 const fmtDate = (d) => d instanceof Date ? d.toISOString().split('T')[0] : String(d || '');
 
+// Dine-in/POS orders (order_type = 'local') never involve a driver, so the
+// store keeps 75% (just the 25% platform cut). Online/delivered orders keep
+// the original 65% (25% platform + 10% driver).
+const STORE_RATE_LOCAL = 0.75;
+const STORE_RATE_ONLINE = 0.65;
+const storeShare = (local, online) => (Number(local) || 0) * STORE_RATE_LOCAL + (Number(online) || 0) * STORE_RATE_ONLINE;
+
 export class AnalyticsController {
 
   static async getStoreAnalytics(req, res) {
@@ -53,7 +60,8 @@ export class AnalyticsController {
         storeCurrency = currRow?.c || 'USD';
       } catch (_) {}
 
-      // ── Q1: Summary ──────────────────────────────────────────────────────
+      // ── Q1: Summary — online vs local split so the driver cut only ever
+      // applies to online/delivered revenue ─────────────────────────────────
       let summary = null;
       try {
         [[summary]] = await connection.execute(`
@@ -65,6 +73,8 @@ export class AnalyticsController {
              FROM orders
              WHERE store_id = ? AND status = 'cancelled' ${periodFilterRaw})          AS cancelled_orders,
             COALESCE(SUM(oi.quantity * oi.price), 0)                               AS gross_revenue,
+            COALESCE(SUM(CASE WHEN o.order_type = 'local' THEN oi.quantity * oi.price ELSE 0 END), 0) AS gross_revenue_local,
+            COALESCE(SUM(CASE WHEN o.order_type != 'local' THEN oi.quantity * oi.price ELSE 0 END), 0) AS gross_revenue_online,
             COALESCE(SUM(oi.quantity), 0)                                          AS total_items_sold,
             MIN(o.currency)                                                         AS currency
           FROM orders o
@@ -75,19 +85,23 @@ export class AnalyticsController {
         `, [storeId, storeId, storeId]);
       } catch (e) { logger.error('[Analytics] Q1-summary failed', { error: e.message, period }); }
 
-      // ── Q2: Returns deduction ────────────────────────────────────────────
+      // ── Q2: Returns deduction — also split by order_type ─────────────────
       let returnsRow = null;
       try {
         [[returnsRow]] = await connection.execute(`
-          SELECT COALESCE(SUM(rp.product_price * rp.quantity), 0) AS returns_total
+          SELECT
+            COALESCE(SUM(rp.product_price * rp.quantity), 0) AS returns_total,
+            COALESCE(SUM(CASE WHEN o.order_type = 'local' THEN rp.product_price * rp.quantity ELSE 0 END), 0) AS returns_local,
+            COALESCE(SUM(CASE WHEN o.order_type != 'local' THEN rp.product_price * rp.quantity ELSE 0 END), 0) AS returns_online
           FROM returned_products rp
+          LEFT JOIN orders o ON o.id = rp.order_id
           WHERE rp.store_id = ?
             AND rp.admin_accepted = 1
             ${returnsPeriodFilter}
         `, [storeId]);
       } catch (e) { logger.error('[Analytics] Q2-returns failed', { error: e.message, period }); }
 
-      // ── Q3: Top products ─────────────────────────────────────────────────
+      // ── Q3: Top products — per-product online/local split ───────────────
       let topProducts = [];
       try {
         [topProducts] = await connection.execute(`
@@ -97,6 +111,8 @@ export class AnalyticsController {
             p.image_url,
             SUM(oi.quantity)                          AS total_sold,
             COALESCE(SUM(oi.quantity * oi.price), 0)  AS items_revenue,
+            COALESCE(SUM(CASE WHEN o.order_type = 'local' THEN oi.quantity * oi.price ELSE 0 END), 0) AS items_revenue_local,
+            COALESCE(SUM(CASE WHEN o.order_type != 'local' THEN oi.quantity * oi.price ELSE 0 END), 0) AS items_revenue_online,
             COUNT(DISTINCT o.id)                       AS order_count,
             MAX(o.created_at)             AS last_ordered_at,
             MIN(o.currency)               AS currency
@@ -137,14 +153,16 @@ export class AnalyticsController {
         `, [storeId]);
       } catch (e) { logger.error('[Analytics] Q4-returns failed', { error: e.message, period }); }
 
-      // ── Q5: Revenue trend (follows selected period) ──────────────────────
+      // ── Q5: Revenue trend (follows selected period) — online/local split ─
       let revenueTrend = [];
       try {
         [revenueTrend] = await connection.execute(`
           SELECT
             ${trend.expr}                             AS date,
             COUNT(DISTINCT o.id)                      AS orders,
-            COALESCE(SUM(oi.quantity * oi.price), 0)  AS revenue
+            COALESCE(SUM(oi.quantity * oi.price), 0)  AS revenue,
+            COALESCE(SUM(CASE WHEN o.order_type = 'local' THEN oi.quantity * oi.price ELSE 0 END), 0) AS revenue_local,
+            COALESCE(SUM(CASE WHEN o.order_type != 'local' THEN oi.quantity * oi.price ELSE 0 END), 0) AS revenue_online
           FROM orders o
           JOIN order_items oi ON oi.order_id = o.id
           WHERE o.store_id = ?
@@ -161,12 +179,17 @@ export class AnalyticsController {
         returnMap[String(r.product_id)] = Number(r.return_count);
       }
 
-      const STORE_RATE   = 0.65;
-      const grossRevenue = Number(summary?.gross_revenue  ?? 0);
+      const grossRevenue = Number(summary?.gross_revenue ?? 0);
+      const grossRevenueLocal = Number(summary?.gross_revenue_local ?? 0);
+      const grossRevenueOnline = Number(summary?.gross_revenue_online ?? 0);
       const returnsTotal = Number(returnsRow?.returns_total ?? 0);
-      // Store owner earns 65% of sales, loses 65% of approved returns
-      const storeRevenue = (grossRevenue - returnsTotal) * STORE_RATE;
-      const storeReturnsDeducted = returnsTotal * STORE_RATE;
+      const returnsLocal = Number(returnsRow?.returns_local ?? 0);
+      const returnsOnline = Number(returnsRow?.returns_online ?? 0);
+
+      // Store owner earns 75%/65% of sales (local/online), loses the same
+      // rate on approved returns of that same type.
+      const storeRevenue = storeShare(grossRevenueLocal - returnsLocal, grossRevenueOnline - returnsOnline);
+      const storeReturnsDeducted = storeShare(returnsLocal, returnsOnline);
 
       return res.status(200).json({
         success: true,
@@ -175,6 +198,8 @@ export class AnalyticsController {
           summary: {
             total_orders:     Number(summary?.total_orders    ?? 0),
             gross_revenue:    grossRevenue,
+            gross_revenue_local:  grossRevenueLocal,
+            gross_revenue_online: grossRevenueOnline,
             returns_deducted: storeReturnsDeducted,
             total_revenue:    storeRevenue,
             total_items_sold: Number(summary?.total_items_sold ?? 0),
@@ -186,7 +211,7 @@ export class AnalyticsController {
             product_name:    p.product_name,
             image_url:       p.image_url,
             total_sold:      Number(p.total_sold),
-            revenue:         Number(p.items_revenue) * STORE_RATE,
+            revenue:         storeShare(p.items_revenue_local, p.items_revenue_online),
             order_count:     Number(p.order_count),
             return_count:    returnMap[String(p.product_id)] || 0,
             last_ordered_at: fmtDate(p.last_ordered_at),
@@ -204,8 +229,8 @@ export class AnalyticsController {
           revenue_trend: revenueTrend.map(r => ({
             date:    r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
             orders:  Number(r.orders),
-            // trend also shows store's 65% share
-            revenue: Number(r.revenue) * STORE_RATE,
+            // store's share, correctly split between local (75%) and online (65%)
+            revenue: storeShare(r.revenue_local, r.revenue_online),
           })),
         },
       });

@@ -66,12 +66,14 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
   void _recalculateRevenue() {
     double total = 0.0, app = 0.0, driver = 0.0, store = 0.0;
     
-    // Start with all orders
+    // Start with all orders — dine-in/POS orders (order_type == 'local')
+    // never involve a driver, so the platform still takes its 25% but the
+    // store keeps the full 75% instead of 65%.
     for (final order in _orders) {
       total += order.totalPrice;
       app += RevenueCalculator.calculateAppRevenue(order.totalPrice);
-      driver += RevenueCalculator.calculateDriverRevenue(order.totalPrice);
-      store += RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice);
+      driver += RevenueCalculator.calculateDriverRevenue(order.totalPrice, isLocal: order.isLocalOrder);
+      store += RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     }
     
     // Deduct returns (app and store only, NOT driver)
@@ -509,8 +511,8 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appEarning = RevenueCalculator.calculateAppRevenue(order.totalPrice);
-    final storeEarning = RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice);
-    final driverEarning = RevenueCalculator.calculateDriverRevenue(order.totalPrice);
+    final storeEarning = RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice, isLocal: order.isLocalOrder);
+    final driverEarning = RevenueCalculator.calculateDriverRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final currencySymbol = getCurrencySymbol(order.currency);
     
     return w.GlassContainer(
@@ -820,8 +822,8 @@ class _OrderDetailsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appEarning = RevenueCalculator.calculateAppRevenue(order.totalPrice);
-    final storeEarning = RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice);
-    final driverEarning = RevenueCalculator.calculateDriverRevenue(order.totalPrice);
+    final storeEarning = RevenueCalculator.calculateStoreOwnerRevenue(order.totalPrice, isLocal: order.isLocalOrder);
+    final driverEarning = RevenueCalculator.calculateDriverRevenue(order.totalPrice, isLocal: order.isLocalOrder);
     final currencySymbol = getCurrencySymbol(order.currency);
     
     return Dialog(

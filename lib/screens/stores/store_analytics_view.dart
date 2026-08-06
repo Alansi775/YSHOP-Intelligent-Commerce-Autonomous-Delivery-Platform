@@ -268,11 +268,13 @@ class _SummaryGrid extends StatelessWidget {
     final orders    = (summary['total_orders']     as num?)?.toInt() ?? 0;
     final items     = (summary['total_items_sold'] as num?)?.toInt() ?? 0;
     final cancelled = (summary['cancelled_orders'] as num?)?.toInt() ?? 0;
+    final grossOnline = (summary['gross_revenue_online'] as num?)?.toDouble() ?? 0;
+    final grossLocal  = (summary['gross_revenue_local']  as num?)?.toDouble() ?? 0;
 
     return Column(children: [
       Row(children: [
         Expanded(child: _StatTile(
-          _fmtAmount(revenue, currency), 'Your Earnings (65%)',
+          _fmtAmount(revenue, currency), 'Your Earnings',
           Icons.payments_outlined, const Color(0xFF34D399), text, sub, card,
           sub2: returned > 0 ? '↩ - ${_fmtAmount(returned, currency)} deducted' : null,
         )),
@@ -285,6 +287,23 @@ class _SummaryGrid extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(child: _StatTile('$cancelled', 'Cancelled', Icons.cancel_outlined, const Color(0xFFF87171), text, sub, card)),
       ]),
+      // Online (delivery) vs in-store (dine-in/POS) split — different
+      // commission rates apply, so this needs to be visible: in-store
+      // sales never have a driver cut taken out.
+      if (grossOnline > 0 || grossLocal > 0) ...[
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: _StatTile(
+            _fmtAmount(grossOnline, currency), 'Online (65% yours)',
+            Icons.delivery_dining_outlined, const Color(0xFFFBBF24), text, sub, card,
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: _StatTile(
+            _fmtAmount(grossLocal, currency), 'In-Store (75% yours)',
+            Icons.storefront_outlined, const Color(0xFF38BDF8), text, sub, card,
+          )),
+        ]),
+      ],
     ]);
   }
 }
