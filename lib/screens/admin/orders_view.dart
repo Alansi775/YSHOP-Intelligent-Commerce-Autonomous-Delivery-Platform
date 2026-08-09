@@ -79,12 +79,13 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
     // Deduct returns (app and store only, NOT driver)
     for (final ret in _returns) {
       final orderPrice = double.tryParse(ret['order_total_price']?.toString() ?? '0') ?? 0.0;
+      final retIsLocal = (ret['order_type']?.toString() ?? 'online').toLowerCase() == 'local';
       if (orderPrice > 0) {
-        // App loses its 25% commission
-        app -= RevenueCalculator.calculateAppRevenue(orderPrice);
-        // Store loses its 65% share
-        store -= RevenueCalculator.calculateStoreOwnerRevenue(orderPrice);
-        // Driver KEEPS their 10% (no deduction)
+        // App loses its platform-fee share
+        app -= RevenueCalculator.calculateAppRevenue(orderPrice, isLocal: retIsLocal);
+        // Store loses its base-price share
+        store -= RevenueCalculator.calculateStoreOwnerRevenue(orderPrice, isLocal: retIsLocal);
+        // Driver KEEPS their delivery-fee share (no deduction) — moot for local returns anyway
       }
     }
     
@@ -310,21 +311,21 @@ class _OrdersManagementViewState extends State<OrdersManagementView> with Reacti
                     )),
                     const SizedBox(width: 16),
                     Expanded(child: _RevenueStatCard(
-                      title: 'Your Earnings (25%)',
+                      title: 'Your Earnings',
                       value: '$currencySymbol${_appRevenue.toStringAsFixed(2)}',
                       icon: Icons.trending_up_rounded,
                       gradient: AppGradients.success,
                     )),
                     const SizedBox(width: 16),
                     Expanded(child: _RevenueStatCard(
-                      title: 'Store Earnings (65%)',
+                      title: 'Store Earnings',
                       value: '$currencySymbol${_storeRevenue.toStringAsFixed(2)}',
                       icon: Icons.storefront_rounded,
                       gradient: AppGradients.purple,
                     )),
                     const SizedBox(width: 16),
                     Expanded(child: _RevenueStatCard(
-                      title: 'Driver Earnings (10%)',
+                      title: 'Driver Earnings',
                       value: '$currencySymbol${_driverRevenue.toStringAsFixed(2)}',
                       icon: Icons.delivery_dining_rounded,
                       gradient: AppGradients.warning,

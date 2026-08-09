@@ -206,7 +206,6 @@ class _SummaryGrid extends StatelessWidget {
     final grand = (online['gross_charged'] ?? 0) + (local['gross_charged'] ?? 0);
     final owePlatform = (net['store_owes_platform'] ?? 0) as num;
     final platformOwesYou = (net['platform_owes_store'] ?? 0) as num;
-    final owedToDriver = (net['platform_owes_driver'] ?? 0) as num;
 
     return Column(children: [
       Container(
@@ -227,12 +226,6 @@ class _SummaryGrid extends StatelessWidget {
         if (platformOwesYou > 0)
           Expanded(child: _NetTile(label: 'Platform owes you', value: _fmtMoney(platformOwesYou, currency), color: kAccentGreenish, icon: Icons.arrow_downward_rounded)),
       ]),
-      if (owedToDriver > 0) ...[
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: _NetTile(label: 'Platform owes driver (info)', value: _fmtMoney(owedToDriver, currency), color: kAccentAmberish, icon: Icons.delivery_dining_rounded)),
-        ]),
-      ],
     ]);
   }
 }
@@ -352,7 +345,6 @@ class _StoreOrderCard extends StatelessWidget {
             Text('Total ${_fmtMoney(order['total_price'], currency)}', style: TextStyle(fontFamily: 'TenorSans', fontSize: 11.5, fontWeight: FontWeight.w700, color: text)),
             Text(
               'Platform ${_fmtMoney(order['platform_share'], currency)}'
-              '${isLocal ? '' : ' · Driver ${_fmtMoney(order['driver_share'], currency)}'}'
               ' · You keep ${_fmtMoney(order['store_share'], currency)}',
               style: TextStyle(fontFamily: 'TenorSans', fontSize: 10, color: sub),
             ),

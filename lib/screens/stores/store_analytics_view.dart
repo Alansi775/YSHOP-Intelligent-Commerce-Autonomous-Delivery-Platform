@@ -285,48 +285,20 @@ class _SummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currency  = summary['currency']          as String?;
-    final revenue   = (summary['total_revenue']    as num?)?.toDouble() ?? 0;
-    final returned  = (summary['returns_deducted'] as num?)?.toDouble() ?? 0;
     final orders    = (summary['total_orders']     as num?)?.toInt() ?? 0;
     final items     = (summary['total_items_sold'] as num?)?.toInt() ?? 0;
     final cancelled = (summary['cancelled_orders'] as num?)?.toInt() ?? 0;
-    final grossOnline = (summary['gross_revenue_online'] as num?)?.toDouble() ?? 0;
-    final grossLocal  = (summary['gross_revenue_local']  as num?)?.toDouble() ?? 0;
 
-    return Column(children: [
-      Row(children: [
-        Expanded(child: _StatTile(
-          _fmtAmount(revenue, currency), 'Your Earnings',
-          Icons.payments_outlined, const Color(0xFF34D399), text, sub, card,
-          sub2: returned > 0 ? '↩ - ${_fmtAmount(returned, currency)} deducted' : null,
-        )),
-        const SizedBox(width: 10),
-        Expanded(child: _StatTile('$orders', 'Orders', Icons.receipt_long_outlined, const Color(0xFF60A5FA), text, sub, card)),
-      ]),
-      const SizedBox(height: 10),
-      Row(children: [
-        Expanded(child: _StatTile('$items', 'Items Sold', Icons.shopping_bag_outlined, const Color(0xFFA78BFA), text, sub, card)),
-        const SizedBox(width: 10),
-        Expanded(child: _StatTile('$cancelled', 'Cancelled', Icons.cancel_outlined, const Color(0xFFF87171), text, sub, card)),
-      ]),
-      // Online (delivery) vs in-store (dine-in/POS) split — different
-      // commission rates apply, so this needs to be visible: in-store
-      // sales never have a driver cut taken out.
-      if (grossOnline > 0 || grossLocal > 0) ...[
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: _StatTile(
-            _fmtAmount(grossOnline, currency), 'Online (delivery fee applies)',
-            Icons.delivery_dining_outlined, const Color(0xFFFBBF24), text, sub, card,
-          )),
-          const SizedBox(width: 10),
-          Expanded(child: _StatTile(
-            _fmtAmount(grossLocal, currency), 'In-Store (no delivery fee)',
-            Icons.storefront_outlined, const Color(0xFF38BDF8), text, sub, card,
-          )),
-        ]),
-      ],
+    // Money figures (earnings, what you owe/are owed) live only in the
+    // Sales screen now — showing them here too, on a different calendar
+    // window than Sales' settlement period, was producing two different
+    // numbers for "how much money" and confusing store owners.
+    return Row(children: [
+      Expanded(child: _StatTile('$orders', 'Orders', Icons.receipt_long_outlined, const Color(0xFF60A5FA), text, sub, card)),
+      const SizedBox(width: 10),
+      Expanded(child: _StatTile('$items', 'Items Sold', Icons.shopping_bag_outlined, const Color(0xFFA78BFA), text, sub, card)),
+      const SizedBox(width: 10),
+      Expanded(child: _StatTile('$cancelled', 'Cancelled', Icons.cancel_outlined, const Color(0xFFF87171), text, sub, card)),
     ]);
   }
 }
