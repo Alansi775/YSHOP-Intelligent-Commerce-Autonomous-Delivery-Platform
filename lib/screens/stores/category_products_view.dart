@@ -489,13 +489,7 @@ class CategoryProductCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '${getCurrencySymbol(product.currency)}${product.price}',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                      ),
-                    ),
+                    ProductPriceBreakdown(basePrice: double.tryParse(product.price) ?? 0, currency: product.currency),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,

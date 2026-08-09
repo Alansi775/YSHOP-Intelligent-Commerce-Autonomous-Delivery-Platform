@@ -15,6 +15,63 @@ String getCurrencySymbol(String? currencyCode) {
   return currency?.symbol ?? '';
 }
 
+// Store-owner-facing only — never show this breakdown to customers, who
+// must only ever see the single final price. The base price the owner
+// entered is their guaranteed net take-home; these two are what it
+// actually becomes at checkout once the platform's cut (and, for
+// delivery, the driver's cut) is added on top. Mirrors
+// backend/src/utils/pricing.js (PLATFORM_FEE_RATE=0.25, DELIVERY_FEE_RATE=0.10).
+class ProductPriceBreakdown extends StatelessWidget {
+  final double basePrice;
+  final String? currency;
+  const ProductPriceBreakdown({super.key, required this.basePrice, this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    final symbol = getCurrencySymbol(currency);
+    final inStore = basePrice * 1.25;
+    final online = basePrice * 1.35;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+          Text('$symbol${basePrice.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(width: 6),
+          const Text('your price', style: TextStyle(fontSize: 9, color: Colors.white38)),
+        ]),
+        const SizedBox(height: 6),
+        Row(children: [
+          Expanded(child: _MiniPriceChip(label: 'In-store', value: '$symbol${inStore.toStringAsFixed(2)}', color: const Color(0xFF38BDF8))),
+          const SizedBox(width: 6),
+          Expanded(child: _MiniPriceChip(label: 'Online', value: '$symbol${online.toStringAsFixed(2)}', color: const Color(0xFFFBBF24))),
+        ]),
+      ],
+    );
+  }
+}
+
+class _MiniPriceChip extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  const _MiniPriceChip({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 8, color: color, fontWeight: FontWeight.w600)),
+          Text(value, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+}
+
 String getFullImageUrl(String? url, {String? cacheBuster}) {
   if (url == null || url.isEmpty) return '';
   try {

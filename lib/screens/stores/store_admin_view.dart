@@ -1383,7 +1383,7 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
               children: [
                 Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 4),
-                Text('${product.currency} ${product.price}', style: const TextStyle(fontSize: 14, color: Colors.white70)),
+                ProductPriceBreakdown(basePrice: double.tryParse(product.price) ?? 0, currency: product.currency),
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
