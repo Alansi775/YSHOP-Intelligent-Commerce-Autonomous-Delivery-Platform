@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
 import '../../models/product.dart';
+import 'store_sales_view.dart';
 
 class StoreAnalyticsView extends StatefulWidget {
   final String storeId;
@@ -60,7 +61,16 @@ class _StoreAnalyticsViewState extends State<StoreAnalyticsView> {
       body: SafeArea(
         child: Column(
           children: [
-            _Header(storeName: widget.storeName, onBack: () => Navigator.pop(context), onRefresh: _load, text: text, sub: sub),
+            _Header(
+              storeName: widget.storeName,
+              onBack: () => Navigator.pop(context),
+              onRefresh: _load,
+              text: text,
+              sub: sub,
+              onOpenSales: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => StoreSalesView(storeId: widget.storeId, storeName: widget.storeName),
+              )),
+            ),
             _PeriodBar(selected: _period, onSelect: (p) { setState(() => _period = p); _load(); }, text: text, sub: sub),
             Expanded(
               child: _loading
@@ -80,9 +90,9 @@ class _StoreAnalyticsViewState extends State<StoreAnalyticsView> {
 
 class _Header extends StatelessWidget {
   final String storeName;
-  final VoidCallback onBack, onRefresh;
+  final VoidCallback onBack, onRefresh, onOpenSales;
   final Color text, sub;
-  const _Header({required this.storeName, required this.onBack, required this.onRefresh, required this.text, required this.sub});
+  const _Header({required this.storeName, required this.onBack, required this.onRefresh, required this.onOpenSales, required this.text, required this.sub});
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +105,19 @@ class _Header extends StatelessWidget {
           Text('Analytics', style: TextStyle(fontFamily: 'TenorSans', fontSize: 17, fontWeight: FontWeight.w700, color: text)),
           Text(storeName, style: TextStyle(fontFamily: 'TenorSans', fontSize: 11, color: sub)),
         ])),
+        GestureDetector(
+          onTap: onOpenSales,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(color: text.withOpacity(0.07), borderRadius: BorderRadius.circular(20)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.receipt_long_rounded, size: 15, color: text),
+              const SizedBox(width: 6),
+              Text('Sales', style: TextStyle(fontFamily: 'TenorSans', fontSize: 12, fontWeight: FontWeight.w600, color: text)),
+            ]),
+          ),
+        ),
         _CircleBtn(icon: Icons.refresh, size: 17, onTap: onRefresh, color: text),
       ]),
     );

@@ -282,14 +282,17 @@ class _SalesStoresViewState extends State<SalesStoresView> {
   Future<void> _settle(Map<String, dynamic> store) async {
     final storeId = store['store_id'] as int;
     final currency = store['currency'] as String? ?? 'USD';
-    final owed = store['owed_to_platform'];
+    final net = (store['totals'] as Map<String, dynamic>?)?['net'] as Map<String, dynamic>? ?? {};
+    final storeOwes = net['store_owes_platform'] ?? 0;
+    final platformOwes = net['platform_owes_store'] ?? 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: kSurfaceColor,
         title: const Text('Settle this period?', style: TextStyle(color: kPrimaryTextColor)),
         content: Text(
-          'This locks in the current totals (owed to platform: ${_fmtMoney(owed, currency)}) '
+          'This locks in the current totals (store owes platform: ${_fmtMoney(storeOwes, currency)} · '
+          'platform owes store: ${_fmtMoney(platformOwes, currency)}) '
           'as a permanent record and resets the running total to zero starting now. '
           'You can undo this from History if it was a mistake — nothing is ever deleted.',
           style: const TextStyle(color: kSecondaryTextColor),
@@ -400,7 +403,9 @@ class _StoreSalesCard extends StatelessWidget {
     final totals = store['totals'] as Map<String, dynamic>? ?? {};
     final online = totals['online'] as Map<String, dynamic>? ?? {};
     final local = totals['local'] as Map<String, dynamic>? ?? {};
-    final owed = store['owed_to_platform'];
+    final net = totals['net'] as Map<String, dynamic>? ?? {};
+    final storeOwesPlatform = (net['store_owes_platform'] ?? 0) as num;
+    final platformOwesStore = (net['platform_owes_store'] ?? 0) as num;
     final orderCount = (online['order_count'] ?? 0) + (local['order_count'] ?? 0);
 
     return Container(
@@ -428,9 +433,19 @@ class _StoreSalesCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text('Owed to platform', style: TextStyle(color: kTertiaryTextColor, fontSize: 10)),
-                Text(_fmtMoney(owed, currency),
-                    style: const TextStyle(color: kAccentGreen, fontWeight: FontWeight.bold, fontSize: 15)),
+                if (storeOwesPlatform > 0) ...[
+                  const Text('Store owes platform', style: TextStyle(color: kTertiaryTextColor, fontSize: 9)),
+                  Text(_fmtMoney(storeOwesPlatform, currency),
+                      style: const TextStyle(color: kAccentRed, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+                if (storeOwesPlatform > 0 && platformOwesStore > 0) const SizedBox(height: 4),
+                if (platformOwesStore > 0) ...[
+                  const Text('Platform owes store', style: TextStyle(color: kTertiaryTextColor, fontSize: 9)),
+                  Text(_fmtMoney(platformOwesStore, currency),
+                      style: const TextStyle(color: kAccentGreen, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+                if (storeOwesPlatform == 0 && platformOwesStore == 0)
+                  const Text('—', style: TextStyle(color: kTertiaryTextColor, fontSize: 13)),
               ],
             ),
           ),
@@ -752,25 +767,8 @@ class _SalesDetailViewState extends State<SalesDetailView> {
       final response = await ApiService.getRequest(endpoint);
       final data = response?['data'] as Map<String, dynamic>? ?? {};
       final orders = ((data['orders'] as List?) ?? []).cast<Map<String, dynamic>>();
-      final totals = widget.isCurrent
-          ? (data['totals'] as Map<String, dynamic>? ?? {})
-          : {
-              'online': {
-                'order_count': data['settlement']?['online_order_count'],
-                'gross_charged': data['settlement']?['online_gross_charged'],
-                'platform_share': data['settlement']?['online_platform_share'],
-                'driver_share': data['settlement']?['online_driver_share'],
-                'store_share': data['settlement']?['online_store_share'],
-              },
-              'local': {
-                'order_count': data['settlement']?['local_order_count'],
-                'gross_charged': data['settlement']?['local_gross_charged'],
-                'platform_share': data['settlement']?['local_platform_share'],
-                'store_share': data['settlement']?['local_store_share'],
-              },
-            };
       setState(() {
-        _totals = totals;
+        _totals = data['totals'] as Map<String, dynamic>? ?? {};
         _localOrders = orders.where((o) => o['order_type'] == 'local').toList();
         _onlineOrders = orders.where((o) => o['order_type'] == 'online').toList();
         _isLoading = false;
@@ -815,7 +813,9 @@ class _SalesDetailViewState extends State<SalesDetailView> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text('Error: $_error', style: const TextStyle(color: kSecondaryTextColor)))
-              : LayoutBuilder(builder: (context, constraints) {
+              : Column(children: [
+                  _NetSummaryBar(net: _totals['net'] as Map<String, dynamic>? ?? {}, currency: widget.currency),
+                  Expanded(child: LayoutBuilder(builder: (context, constraints) {
                   final wide = constraints.maxWidth > 900;
                   final localCol = _OrdersColumn(
                     title: 'In-store / dine-in',
@@ -856,7 +856,41 @@ class _SalesDetailViewState extends State<SalesDetailView> {
                       ],
                     ),
                   );
-                }),
+                })),
+                ]),
+    );
+  }
+}
+
+class _NetSummaryBar extends StatelessWidget {
+  final Map<String, dynamic> net;
+  final String currency;
+  const _NetSummaryBar({required this.net, required this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    final storeOwes = (net['store_owes_platform'] ?? 0) as num;
+    final platformOwes = (net['platform_owes_store'] ?? 0) as num;
+    final driverOwed = (net['platform_owes_driver'] ?? 0) as num;
+    if (storeOwes == 0 && platformOwes == 0 && driverOwed == 0) return const SizedBox.shrink();
+
+    Widget chip(String label, num value, Color color) => Container(
+          margin: const EdgeInsets.only(right: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+          child: Text('$label: ${value.toStringAsFixed(2)} $currency',
+              style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+        );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      color: kSurfaceDark,
+      child: Wrap(children: [
+        if (storeOwes > 0) chip('Store owes platform', storeOwes, kAccentRed),
+        if (platformOwes > 0) chip('Platform owes store', platformOwes, kAccentGreen),
+        if (driverOwed > 0) chip('Platform owes driver', driverOwed, kAccentOrange),
+      ]),
     );
   }
 }
@@ -959,6 +993,19 @@ class _OrderCard extends StatelessWidget {
                       BoxDecoration(color: kAccentBlue.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
                   child: Text('Table ${order['table_name']}',
                       style: const TextStyle(color: kAccentBlue, fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+              if (!isLocal && order['payment_type'] != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (order['payment_type'] == 'cod' ? kAccentOrange : kAccentGreen).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(order['payment_type'] == 'cod' ? 'Pay at Door' : 'Paid Online',
+                      style: TextStyle(
+                          color: order['payment_type'] == 'cod' ? kAccentOrange : kAccentGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600)),
                 ),
               const Spacer(),
               Container(
