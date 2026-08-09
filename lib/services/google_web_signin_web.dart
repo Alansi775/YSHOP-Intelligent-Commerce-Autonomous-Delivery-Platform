@@ -17,7 +17,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in_web/web_only.dart' as web_gis;
 
-Widget buildGoogleWebSignInButton({double width = 400}) {
+Widget buildGoogleWebSignInButton({double width = 300}) {
   return web_gis.renderButton(
     configuration: web_gis.GSIButtonConfiguration(
       type: web_gis.GSIButtonType.standard,
@@ -25,7 +25,12 @@ Widget buildGoogleWebSignInButton({double width = 400}) {
       size: web_gis.GSIButtonSize.large,
       text: web_gis.GSIButtonText.continueWith,
       shape: web_gis.GSIButtonShape.pill,
-      logoAlignment: web_gis.GSIButtonLogoAlignment.left,
+      // Centered (not left) — at 400px width (Google's own max) with a
+      // left-aligned logo, the icon+text cluster stayed pinned to the left
+      // edge with a big dead zone on the right, reading as "icon far away,
+      // button too wide". A narrower, centered button matches the rest of
+      // the form's compact luxury inputs much better.
+      logoAlignment: web_gis.GSIButtonLogoAlignment.center,
       minimumWidth: width,
     ),
   );
