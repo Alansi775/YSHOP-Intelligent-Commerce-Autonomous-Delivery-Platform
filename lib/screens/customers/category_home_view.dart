@@ -1223,9 +1223,9 @@ class _VideoSection extends StatefulWidget {
 
 class _VideoSectionState extends State<_VideoSection> {
   static const List<Map<String, String>> _videos = [
-    {'path': 'assets/videos/hero1.mp4', 'label': 'Featured Selection', 'sub': 'Handpicked for You'},
-    {'path': 'assets/videos/hero2.mp4', 'label': 'New Arrivals', 'sub': 'Fresh on YSHOP'},
-    {'path': 'assets/videos/hero3.mp4', 'label': 'Best Sellers', 'sub': 'Loved by Customers'},
+    {'path': 'assets/videos/hero1.mp4', 'title': 'Featured Selection', 'sub': 'HANDPICKED FOR YOU'},
+    {'path': 'assets/videos/hero2.mp4', 'title': 'New Arrivals', 'sub': 'FRESH ON YSHOP'},
+    {'path': 'assets/videos/hero3.mp4', 'title': 'Best Sellers', 'sub': 'LOVED BY CUSTOMERS'},
   ];
 
   static const int _virtualCount = 999999;
@@ -1236,7 +1236,10 @@ class _VideoSectionState extends State<_VideoSection> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.82, initialPage: _initialPage);
+    // 0.78 viewport fraction is what leaves the previous/next cards visibly
+    // peeking in on both sides — the actual "cover flow" look — rather than
+    // a single card floating alone with empty space around it.
+    _pageController = PageController(viewportFraction: 0.78, initialPage: _initialPage);
     _pageController.addListener(_onScroll);
   }
 
@@ -1249,7 +1252,7 @@ class _VideoSectionState extends State<_VideoSection> {
 
   void _go(int delta) {
     final current = _pageController.page?.round() ?? _initialPage;
-    _pageController.animateToPage(current + delta, duration: const Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+    _pageController.animateToPage(current + delta, duration: const Duration(milliseconds: 450), curve: Curves.easeOutCubic);
   }
 
   @override
@@ -1261,18 +1264,15 @@ class _VideoSectionState extends State<_VideoSection> {
 
   @override
   Widget build(BuildContext context) {
-    final screenW = MediaQuery.of(context).size.width;
-    final cardSize = (screenW * 0.45).clamp(280.0, 520.0);
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final sideGap = ((constraints.maxWidth - cardSize) / 2).clamp(0.0, double.infinity);
-        // Sit just inside the video's edge rather than out in the empty
-        // margin, so the arrows read as part of the video, not the page.
-        final arrowInset = (sideGap - 52).clamp(4.0, sideGap);
+        final cardWidth = constraints.maxWidth * 0.78;
+        final cardHeight = cardWidth * 9 / 16;
 
-        return SizedBox(
-          height: cardSize,
+        return Column(
+          children: [
+            SizedBox(
+          height: cardHeight,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -1281,31 +1281,64 @@ class _VideoSectionState extends State<_VideoSection> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
                   final data = _videos[index % _videos.length];
-                  final isActive = index == (_pageController.hasClients ? (_pageController.page?.round() ?? _initialPage) : _initialPage);
-                  return Center(
-                    child: SizedBox(
-                      width: cardSize,
-                      height: cardSize,
+                  return AnimatedBuilder(
+                    animation: _pageController,
+                    builder: (context, child) {
+                      double page = _initialPage.toDouble();
+                      if (_pageController.hasClients && _pageController.position.haveDimensions) {
+                        page = _pageController.page ?? _initialPage.toDouble();
+                      }
+                      final delta = (page - index).clamp(-1.0, 1.0);
+                      final scale = 1 - delta.abs() * 0.14;
+                      final opacity = 1 - delta.abs() * 0.65;
+                      return Center(
+                        child: Opacity(
+                          opacity: opacity.clamp(0.0, 1.0),
+                          child: Transform.scale(scale: scale, child: child),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: _VideoCard(
                         videoData: data,
-                        isActive: isActive,
-                        dotCount: _videos.length,
-                        activeDot: _realIndex,
+                        isActive: index == (_pageController.hasClients ? (_pageController.page?.round() ?? _initialPage) : _initialPage),
                       ),
                     ),
                   );
                 },
               ),
+              // Arrows float over the peeking side cards, at the outer
+              // edges of the whole carousel — not against the main card.
               Positioned(
-                left: arrowInset,
+                left: 4,
                 child: _CarouselArrow(icon: Icons.chevron_left_rounded, onTap: () => _go(-1)),
               ),
               Positioned(
-                right: arrowInset,
+                right: 4,
                 child: _CarouselArrow(icon: Icons.chevron_right_rounded, onTap: () => _go(1)),
               ),
             ],
           ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_videos.length, (i) {
+                final isActive = i == _realIndex;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: isActive ? 22 : 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: (widget.isDark ? Colors.white : Colors.black).withOpacity(isActive ? 0.9 : 0.25),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              }),
+            ),
+          ],
         );
       },
     );
@@ -1323,10 +1356,20 @@ class _CarouselArrow extends StatelessWidget {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          width: 44, height: 44,
-          decoration: BoxDecoration(color: Colors.black.withOpacity(0.35), shape: BoxShape.circle),
-          child: Icon(icon, size: 24, color: Colors.white),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.35),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.15)),
+              ),
+              child: Icon(icon, size: 26, color: Colors.white),
+            ),
+          ),
         ),
       ),
     );
@@ -1336,9 +1379,7 @@ class _CarouselArrow extends StatelessWidget {
 class _VideoCard extends StatefulWidget {
   final Map<String, String> videoData;
   final bool isActive;
-  final int dotCount;
-  final int activeDot;
-  const _VideoCard({required this.videoData, required this.isActive, required this.dotCount, required this.activeDot});
+  const _VideoCard({required this.videoData, required this.isActive});
 
   @override
   State<_VideoCard> createState() => _VideoCardState();
@@ -1389,7 +1430,7 @@ class _VideoCardState extends State<_VideoCard> {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(28),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -1403,65 +1444,74 @@ class _VideoCardState extends State<_VideoCard> {
                 child: VideoPlayer(_ctrl!),
               ),
             ),
-          if (!widget.isActive) Container(color: Colors.black.withOpacity(0.55)),
-          // Subtle top scrim so the label stays legible over bright footage.
+          if (!widget.isActive) Container(color: Colors.black.withOpacity(0.5)),
+          // Bottom scrim so the overlay text stays legible over bright footage.
           Positioned(
-            top: 0, left: 0, right: 0,
-            height: 90,
+            left: 0, right: 0, bottom: 0,
+            height: 140,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withOpacity(0.75), Colors.transparent],
                 ),
               ),
             ),
           ),
           Positioned(
-            top: 20,
-            left: 16,
-            right: 16,
+            left: 20,
+            right: 20,
+            bottom: 20,
             child: AnimatedOpacity(
               opacity: widget.isActive ? 1 : 0,
               duration: const Duration(milliseconds: 250),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    widget.videoData['label']!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 4),
                   Text(
                     widget.videoData['sub']!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12),
+                    style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 2),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.videoData['title']!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _VideoLink('Learn More'),
+                      const SizedBox(width: 20),
+                      _VideoLink('Shop Now'),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
-          if (widget.isActive)
-            Positioned(
-              bottom: 14,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(widget.dotCount, (i) => Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: i == widget.activeDot ? 18 : 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(i == widget.activeDot ? 0.95 : 0.4),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    )),
-              ),
-            ),
         ],
       ),
+    );
+  }
+}
+
+class _VideoLink extends StatelessWidget {
+  final String label;
+  const _VideoLink(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 3),
+        const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.white),
+      ],
     );
   }
 }
