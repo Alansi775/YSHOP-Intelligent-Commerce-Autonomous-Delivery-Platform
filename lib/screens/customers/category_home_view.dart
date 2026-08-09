@@ -388,7 +388,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
                       child: Column(
                         children: [
                           const SizedBox(height: 80),
-                          _VideoSection(isDark: isDark),
+                          _VideoSection(isDark: isDark, isMobile: isMobile),
                           const SizedBox(height: 80),
                           _buildBrandsSection(isDark),
                           const SizedBox(height: 100),
@@ -571,7 +571,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
               child: Column(
                 children: [
                   const SizedBox(height: 48),
-                  _VideoSection(isDark: isDark),
+                  _VideoSection(isDark: isDark, isMobile: true),
                   const SizedBox(height: 48),
                   _buildBrandsSection(isDark),
                   const SizedBox(height: 72),
@@ -1016,8 +1016,14 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
           right: isMobile ? 16 : 40,
           bottom: isMobile ? 10 : 16,
         ),
+        // Mobile (Android) gets no app-bar-style header at all — just the
+        // profile and cart icons floating over the hero, same as the
+        // native iOS app's toolbar-icon-only approach. Web keeps the full
+        // glass navbar (see _buildWebGlassNavbar) since that's a genuinely
+        // different, browser-appropriate navigation pattern.
         child: isMobile
             ? Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   GestureDetector(
                     onTap: () => ProfilePopupView.show(context),
@@ -1039,18 +1045,6 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
                       ),
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    'YSHOP',
-                    style: TextStyle(
-                      fontFamily: 'CinzelDecorative',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 3,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Spacer(),
                   CartIconWithBadge(iconColor: Colors.white),
                 ],
               )
@@ -1235,7 +1229,8 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
 // real product footage whenever it's ready, same widget/behavior either way.
 class _VideoSection extends StatefulWidget {
   final bool isDark;
-  const _VideoSection({required this.isDark});
+  final bool isMobile;
+  const _VideoSection({required this.isDark, required this.isMobile});
 
   @override
   State<_VideoSection> createState() => _VideoSectionState();
@@ -1256,10 +1251,15 @@ class _VideoSectionState extends State<_VideoSection> {
   @override
   void initState() {
     super.initState();
-    // 0.78 viewport fraction is what leaves the previous/next cards visibly
-    // peeking in on both sides — the actual "cover flow" look — rather than
-    // a single card floating alone with empty space around it.
-    _pageController = PageController(viewportFraction: 0.78, initialPage: _initialPage);
+    // Mobile matches the native iOS app exactly: a bigger 0.90 viewport
+    // (still peeking side cards, just a much more prominent centerpiece)
+    // and swipe-only navigation. Web keeps the original 0.78/arrow-only
+    // design — a mouse-driven browser benefits more from clickable arrows
+    // than an undiscoverable click-and-drag gesture.
+    _pageController = PageController(
+      viewportFraction: widget.isMobile ? 0.90 : 0.78,
+      initialPage: _initialPage,
+    );
     _pageController.addListener(_onScroll);
   }
 
@@ -1286,7 +1286,7 @@ class _VideoSectionState extends State<_VideoSection> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = constraints.maxWidth * 0.78;
+        final cardWidth = constraints.maxWidth * (widget.isMobile ? 0.90 : 0.78);
         final cardHeight = cardWidth * 9 / 16;
 
         return Column(
@@ -1298,7 +1298,7 @@ class _VideoSectionState extends State<_VideoSection> {
             children: [
               PageView.builder(
                 controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
+                physics: widget.isMobile ? const PageScrollPhysics() : const NeverScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
                   final data = _videos[index % _videos.length];
                   return AnimatedBuilder(
@@ -1328,16 +1328,18 @@ class _VideoSectionState extends State<_VideoSection> {
                   );
                 },
               ),
-              // Arrows float over the peeking side cards, at the outer
-              // edges of the whole carousel — not against the main card.
-              Positioned(
-                left: 4,
-                child: _CarouselArrow(icon: Icons.chevron_left_rounded, onTap: () => _go(-1)),
-              ),
-              Positioned(
-                right: 4,
-                child: _CarouselArrow(icon: Icons.chevron_right_rounded, onTap: () => _go(1)),
-              ),
+              // Arrows only on non-mobile (web/desktop) — mobile is
+              // swipe-only, matching the native iOS app.
+              if (!widget.isMobile) ...[
+                Positioned(
+                  left: 4,
+                  child: _CarouselArrow(icon: Icons.chevron_left_rounded, onTap: () => _go(-1)),
+                ),
+                Positioned(
+                  right: 4,
+                  child: _CarouselArrow(icon: Icons.chevron_right_rounded, onTap: () => _go(1)),
+                ),
+              ],
             ],
           ),
             ),
