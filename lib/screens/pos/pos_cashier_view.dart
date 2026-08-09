@@ -28,6 +28,14 @@ const _red = Color(0xFFFF453A);
 
 String _fmt(double v) => NumberFormat('#,##0.00').format(v);
 
+// The product list here is fetched via the store-management endpoint,
+// which returns the owner's raw base price (correct for editing a
+// product). Every order placed through POS is local/in-store, so the
+// customer owes base + the platform's 25% in-store fee — never the 35%
+// online rate, since no delivery is ever involved here. Mirrors
+// backend/src/utils/pricing.js PLATFORM_FEE_RATE.
+const kPosLocalPriceMultiplier = 1.25;
+
 Color _tableColor(String s) => switch (s) {
   'available' => _green,
   'occupied' => _orange,
@@ -1186,7 +1194,13 @@ class _OrderSheetState extends State<_OrderSheet> {
 
   void _add(ProductS p) {
     final pid = int.tryParse(p.id) ?? 0;
-    final price = double.tryParse(p.price) ?? 0.0;
+    // p.price is the store owner's raw base price (this screen reuses the
+    // same product-fetch endpoint as store management, which intentionally
+    // returns the unmarked-up price there). The customer at the register
+    // owes base + the platform's in-store fee, same as the server will
+    // actually charge — show that here so the cashier never quotes the
+    // wrong total.
+    final price = (double.tryParse(p.price) ?? 0.0) * kPosLocalPriceMultiplier;
     setState(() {
       final i = _cart.indexWhere((x) => x.productId == pid);
       if (i >= 0) {
@@ -1816,7 +1830,7 @@ class _ProductCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${_fmt(double.tryParse(product.price) ?? 0)} ${product.currency ?? ''}',
+                      '${_fmt((double.tryParse(product.price) ?? 0) * kPosLocalPriceMultiplier)} ${product.currency ?? ''}',
                       style: const TextStyle(color: _soft, fontSize: 11),
                     ),
                   ],
