@@ -1287,7 +1287,10 @@ class _VideoSectionState extends State<_VideoSection> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = constraints.maxWidth * (widget.isMobile ? 0.90 : 0.78);
-        final cardHeight = cardWidth * 9 / 16;
+        // Mobile is slightly taller than strict 16:9 — at 16:9 the bottom
+        // text overlay ate a large fraction of the card height, cramping
+        // the actual video. Width is unchanged. Matches the native iOS app.
+        final cardHeight = cardWidth * (widget.isMobile ? 0.66 : 9 / 16);
 
         return Column(
           children: [
@@ -1323,6 +1326,7 @@ class _VideoSectionState extends State<_VideoSection> {
                       child: _VideoCard(
                         videoData: data,
                         isActive: index == (_pageController.hasClients ? (_pageController.page?.round() ?? _initialPage) : _initialPage),
+                        isMobile: widget.isMobile,
                       ),
                     ),
                   );
@@ -1401,7 +1405,8 @@ class _CarouselArrow extends StatelessWidget {
 class _VideoCard extends StatefulWidget {
   final Map<String, String> videoData;
   final bool isActive;
-  const _VideoCard({required this.videoData, required this.isActive});
+  final bool isMobile;
+  const _VideoCard({required this.videoData, required this.isActive, required this.isMobile});
 
   @override
   State<_VideoCard> createState() => _VideoCardState();
@@ -1467,10 +1472,12 @@ class _VideoCardState extends State<_VideoCard> {
               ),
             ),
           if (!widget.isActive) Container(color: Colors.black.withOpacity(0.5)),
-          // Bottom scrim so the overlay text stays legible over bright footage.
+          // Bottom scrim so the overlay text stays legible over bright
+          // footage. Smaller on mobile — at the old size the text/gradient
+          // ate a large fraction of the card height, cramping the video.
           Positioned(
             left: 0, right: 0, bottom: 0,
-            height: 140,
+            height: widget.isMobile ? 100 : 140,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -1482,9 +1489,9 @@ class _VideoCardState extends State<_VideoCard> {
             ),
           ),
           Positioned(
-            left: 20,
-            right: 20,
-            bottom: 20,
+            left: widget.isMobile ? 16 : 20,
+            right: widget.isMobile ? 16 : 20,
+            bottom: widget.isMobile ? 14 : 20,
             child: AnimatedOpacity(
               opacity: widget.isActive ? 1 : 0,
               duration: const Duration(milliseconds: 250),
@@ -1494,21 +1501,21 @@ class _VideoCardState extends State<_VideoCard> {
                   Text(
                     widget.videoData['sub']!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 2),
+                    style: TextStyle(color: Colors.white70, fontSize: widget.isMobile ? 9.5 : 11, fontWeight: FontWeight.w600, letterSpacing: widget.isMobile ? 1.5 : 2),
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: widget.isMobile ? 4 : 6),
                   Text(
                     widget.videoData['title']!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: Colors.white, fontSize: widget.isMobile ? 20 : 26, fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: widget.isMobile ? 6 : 10),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _VideoLink('Learn More'),
-                      const SizedBox(width: 20),
-                      _VideoLink('Shop Now'),
+                      _VideoLink('Learn More', isMobile: widget.isMobile),
+                      SizedBox(width: widget.isMobile ? 16 : 20),
+                      _VideoLink('Shop Now', isMobile: widget.isMobile),
                     ],
                   ),
                 ],
@@ -1523,16 +1530,17 @@ class _VideoCardState extends State<_VideoCard> {
 
 class _VideoLink extends StatelessWidget {
   final String label;
-  const _VideoLink(this.label);
+  final bool isMobile;
+  const _VideoLink(this.label, {this.isMobile = false});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+        Text(label, style: TextStyle(color: Colors.white, fontSize: isMobile ? 11.5 : 13, fontWeight: FontWeight.w600)),
         const SizedBox(width: 3),
-        const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.white),
+        Icon(Icons.arrow_forward_rounded, size: isMobile ? 12 : 14, color: Colors.white),
       ],
     );
   }
