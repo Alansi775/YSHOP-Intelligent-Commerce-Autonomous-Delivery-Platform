@@ -150,6 +150,10 @@ class _ProfileDialogContent extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context, AuthManager authManager, bool isDark) {
+    if (!authManager.isAuthenticated) {
+      return _buildGuestContent(context, isDark);
+    }
+
     final profile = authManager.userProfile;
     final displayName = profile?['display_name'] ?? 'User';
     final email = profile?['email'] ?? 'user@email.com';
@@ -315,6 +319,78 @@ class _ProfileDialogContent extends StatelessWidget {
               ? Colors.white.withOpacity(0.35)  // كان 0.20 - أوضح
               : Colors.black.withOpacity(0.35), // كان 0.20 - أوضح
             letterSpacing: 0.8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGuestContent(BuildContext context, bool isDark) {
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          width: 110,
+          height: 110,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+          ),
+          child: Icon(
+            Icons.person_outline_rounded,
+            size: 48,
+            color: isDark ? Colors.white.withOpacity(0.5) : Colors.black.withOpacity(0.4),
+          ),
+        ),
+        const SizedBox(height: 28),
+        Text(
+          "You're browsing as a guest",
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 20,
+            fontWeight: FontWeight.w400,
+            color: isDark ? Colors.white : Colors.black,
+            letterSpacing: -0.2,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Sign in to check out and track your orders',
+          style: TextStyle(
+            fontFamily: 'TenorSans',
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            color: isDark ? Colors.white.withOpacity(0.55) : Colors.black.withOpacity(0.55),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 40),
+        GestureDetector(
+          onTap: () {
+            Navigator.of(context).pop();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SignInView()),
+            );
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white : Colors.black,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              'Sign In / Create Account',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.black : Colors.white,
+                letterSpacing: 0.2,
+              ),
+            ),
           ),
         ),
       ],

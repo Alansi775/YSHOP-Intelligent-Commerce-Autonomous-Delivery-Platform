@@ -1,6 +1,8 @@
 // lib/screens/customers/category_home_view.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:video_player/video_player.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:provider/provider.dart';
@@ -84,11 +86,18 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
   late AnimationController _aiExpandAnimation;
   late AnimationController _sendButtonAnimation;
 
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _onOpenCartSignal() {
+    if (mounted) _scaffoldKey.currentState?.openEndDrawer();
+  }
+
   @override
   void initState() {
     super.initState();
     ApiService.clearCache();
     categories = StoreCategories.all;
+    openCartDrawerSignal.addListener(_onOpenCartSignal);
 
     _fadeController = AnimationController(
       vsync: this,
@@ -291,6 +300,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
 
   @override
   void dispose() {
+    openCartDrawerSignal.removeListener(_onOpenCartSignal);
     _autoRotateTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -311,6 +321,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
     final bool isMobile = screenW < 700;
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: isDark ? Colors.black : Colors.white,
       endDrawer: const Drawer(child: SideCartViewContents()),
       body: Stack(
@@ -351,6 +362,8 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
                       child: Column(
                         children: [
                           const SizedBox(height: 80),
+                          _VideoSection(isDark: isDark),
+                          const SizedBox(height: 80),
                           _buildBrandsSection(isDark),
                           const SizedBox(height: 100),
                           _buildFooter(isDark),
@@ -364,7 +377,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
             ),
 
           // Floating Header
-          _buildFloatingHeader(isDark, isMobile),
+          kIsWeb ? _buildWebGlassNavbar(isDark) : _buildFloatingHeader(isDark, isMobile),
         ],
       ),
     );
@@ -534,6 +547,8 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
               color: isDark ? Colors.black : Colors.white,
               child: Column(
                 children: [
+                  const SizedBox(height: 48),
+                  _VideoSection(isDark: isDark),
                   const SizedBox(height: 48),
                   _buildBrandsSection(isDark),
                   const SizedBox(height: 72),
@@ -881,6 +896,88 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
     return widgets;
   }
 
+  // Web-only floating glass navbar — a frosted pill centered at the top of
+  // the viewport, matching the DroneHub reference design (logo left, nav
+  // links center, theme/cart/profile right), rather than the phone-style
+  // header used on the native mobile apps.
+  Widget _buildWebGlassNavbar(bool isDark) {
+    final authManager = Provider.of<AuthManager>(context);
+    final themeManager = Provider.of<ThemeManager>(context, listen: false);
+    final bgColor = isDark ? Colors.black.withOpacity(0.72) : Colors.white.withOpacity(0.88);
+    final borderColor = isDark ? Colors.white.withOpacity(0.09) : Colors.black.withOpacity(0.06);
+    final textColor = isDark ? Colors.white : Colors.black;
+
+    return Positioned(
+      top: 12,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 960),
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          height: 60,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      'YSHOP',
+                      style: TextStyle(
+                        fontFamily: 'CinzelDecorative',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        letterSpacing: 2,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(width: 28),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: categories.take(6).map((c) => _WebNavLink(
+                                label: c,
+                                color: textColor,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => StoresListView(categoryName: c)),
+                                ),
+                              )).toList(),
+                        ),
+                      ),
+                    ),
+                    _WebIconBtn(
+                      icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                      color: textColor,
+                      onTap: () => themeManager.setTheme(isDark ? ThemeMode.light : ThemeMode.dark),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: CartIconWithBadge(iconColor: textColor, iconSize: 22),
+                    ),
+                    _WebIconBtn(
+                      icon: authManager.isAuthenticated ? Icons.person_rounded : Icons.person_outline_rounded,
+                      color: authManager.isAuthenticated ? const Color(0xFF3B82F6) : textColor,
+                      onTap: () => ProfilePopupView.show(context),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFloatingHeader(bool isDark, bool isMobile) {
     return Positioned(
       top: 0,
@@ -1099,6 +1196,272 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Video showcase carousel ─────────────────────────────────────────────
+// Infinite-loop carousel of autoplaying, looping, muted videos — only the
+// centered ("active") card actually plays; the rest sit paused and dimmed.
+// Navigation is arrow-button only (no direct swipe), matching the reference
+// design. Placeholder video assets (assets/videos/hero1-3.mp4) — swap for
+// real product footage whenever it's ready, same widget/behavior either way.
+class _VideoSection extends StatefulWidget {
+  final bool isDark;
+  const _VideoSection({required this.isDark});
+
+  @override
+  State<_VideoSection> createState() => _VideoSectionState();
+}
+
+class _VideoSectionState extends State<_VideoSection> {
+  static const List<Map<String, String>> _videos = [
+    {'path': 'assets/videos/hero1.mp4', 'label': 'Featured Selection', 'sub': 'Handpicked for You'},
+    {'path': 'assets/videos/hero2.mp4', 'label': 'New Arrivals', 'sub': 'Fresh on YSHOP'},
+    {'path': 'assets/videos/hero3.mp4', 'label': 'Best Sellers', 'sub': 'Loved by Customers'},
+  ];
+
+  static const int _virtualCount = 999999;
+  static const int _initialPage = _virtualCount ~/ 2;
+  late final PageController _pageController;
+  int _realIndex = _initialPage % _videos.length;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(viewportFraction: 0.82, initialPage: _initialPage);
+    _pageController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_pageController.hasClients) return;
+    final virtual = _pageController.page?.round() ?? _initialPage;
+    final real = virtual % _videos.length;
+    if (real != _realIndex) setState(() => _realIndex = real);
+  }
+
+  void _go(int delta) {
+    final current = _pageController.page?.round() ?? _initialPage;
+    _pageController.animateToPage(current + delta, duration: const Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+  }
+
+  @override
+  void dispose() {
+    _pageController.removeListener(_onScroll);
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenW = MediaQuery.of(context).size.width;
+    final cardSize = (screenW * 0.45).clamp(220.0, 420.0);
+    final textColor = widget.isDark ? Colors.white : Colors.black;
+
+    return Column(
+      children: [
+        SizedBox(
+          height: cardSize,
+          child: PageView.builder(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, index) {
+              final data = _videos[index % _videos.length];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: _VideoCard(
+                  videoData: data,
+                  isActive: index == (_pageController.hasClients ? (_pageController.page?.round() ?? _initialPage) : _initialPage),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _CarouselArrow(icon: Icons.chevron_left_rounded, color: textColor, onTap: () => _go(-1)),
+            const SizedBox(width: 16),
+            ...List.generate(_videos.length, (i) => Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: i == _realIndex ? 18 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: (i == _realIndex ? textColor : textColor.withOpacity(0.25)),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                )),
+            const SizedBox(width: 16),
+            _CarouselArrow(icon: Icons.chevron_right_rounded, color: textColor, onTap: () => _go(1)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CarouselArrow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _CarouselArrow({required this.icon, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 34, height: 34,
+          decoration: BoxDecoration(color: color.withOpacity(0.08), shape: BoxShape.circle),
+          child: Icon(icon, size: 20, color: color),
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoCard extends StatefulWidget {
+  final Map<String, String> videoData;
+  final bool isActive;
+  const _VideoCard({required this.videoData, required this.isActive});
+
+  @override
+  State<_VideoCard> createState() => _VideoCardState();
+}
+
+class _VideoCardState extends State<_VideoCard> {
+  VideoPlayerController? _ctrl;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final ctrl = VideoPlayerController.asset(widget.videoData['path']!)
+      ..setLooping(true)
+      ..setVolume(0);
+    try {
+      await ctrl.initialize();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) {
+      ctrl.dispose();
+      return;
+    }
+    _ctrl = ctrl;
+    setState(() => _ready = true);
+    if (widget.isActive) _ctrl!.play();
+  }
+
+  @override
+  void didUpdateWidget(_VideoCard old) {
+    super.didUpdateWidget(old);
+    if (widget.isActive != old.isActive) {
+      widget.isActive ? _ctrl?.play() : _ctrl?.pause();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(color: Colors.black),
+          if (_ready && _ctrl != null)
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _ctrl!.value.size.width,
+                height: _ctrl!.value.size.height,
+                child: VideoPlayer(_ctrl!),
+              ),
+            ),
+          if (!widget.isActive) Container(color: Colors.black.withOpacity(0.55)),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: AnimatedOpacity(
+              opacity: widget.isActive ? 1 : 0,
+              duration: const Duration(milliseconds: 250),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.videoData['label']!,
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.videoData['sub']!,
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebNavLink extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _WebNavLink({required this.label, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color.withOpacity(0.85)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebIconBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _WebIconBtn({required this.icon, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Icon(icon, size: 20, color: color),
+        ),
       ),
     );
   }

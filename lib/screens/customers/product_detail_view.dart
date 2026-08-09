@@ -15,6 +15,8 @@ import '../../services/api_service.dart';
 import '../../widgets/centered_notification.dart';
 import '../../widgets/store_admin_widgets.dart';
 import '../stores/chat_view.dart';
+import '../auth/sign_in_view.dart';
+import '../../main.dart' show openCartDrawerSignal;
 
 // ─────────────────────────────────────────────────────────────
 // 💰 Currency Helper
@@ -348,6 +350,21 @@ class _ProductDetailViewState extends State<ProductDetailView>
   }
 
   Future<void> _handleAddToCart() async {
+    final authManager = Provider.of<AuthManager>(context, listen: false);
+    // Guests get a login detour here instead of a 401 from the backend
+    // (cart routes require auth). _quantity is this State's own field, so
+    // it survives the round trip untouched — the same quantity gets added
+    // the moment sign-in succeeds, and the user lands straight in the cart
+    // instead of having to tap Add to Cart a second time.
+    bool justAuthenticated = false;
+    if (!authManager.isAuthenticated) {
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const SignInView(popOnSuccess: true)),
+      );
+      if (result != true || !mounted || !authManager.isAuthenticated) return;
+      justAuthenticated = true;
+    }
+
     final int stock = widget.product.stock;
     if (_quantity > stock) {
       CenteredNotification.show(
@@ -359,6 +376,10 @@ class _ProductDetailViewState extends State<ProductDetailView>
     try {
       await Provider.of<CartManager>(context, listen: false)
           .addToCart(product: widget.product, quantity: _quantity);
+      if (justAuthenticated && mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        openCartDrawerSignal.value++;
+      }
     } catch (e) {
       if (mounted) {
         CenteredNotification.show(

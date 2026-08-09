@@ -33,6 +33,18 @@ class ApiConfig {
   /// Raw host without /api/v1
   static String get baseHost => baseUrl.replaceFirst(RegExp(r'/api/v1/?$'), '');
 
+  /// Google Sign-In OAuth 2.0 Web client ID (from Google Cloud Console →
+  /// APIs & Services → Credentials → OAuth client ID → Web application, tied
+  /// to the same GCP project as Firebase project `home-720ef`). Baked in at
+  /// build time via:
+  ///   flutter build web --dart-define=GOOGLE_WEB_CLIENT_ID=<id>.apps.googleusercontent.com
+  /// Empty until configured — Google Sign-In is disabled client-side when this
+  /// is blank rather than attempting a call that would fail cryptically.
+  static const String googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+    defaultValue: '',
+  );
+
   /// Server port (extracted from baseUrl)
   static const int serverPort = 3000;
 

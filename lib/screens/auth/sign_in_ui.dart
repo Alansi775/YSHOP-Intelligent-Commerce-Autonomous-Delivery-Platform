@@ -288,6 +288,64 @@ class SignInUIComponents {
     );
   }
 
+  static Widget googleSignInDivider({required bool isDark}) {
+    final line = (isDark ? Colors.white : Colors.black).withOpacity(0.12);
+    final label = (isDark ? Colors.white : Colors.black).withOpacity(0.4);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: line, thickness: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text('OR', style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: label, fontWeight: FontWeight.w600)),
+          ),
+          Expanded(child: Divider(color: line, thickness: 1)),
+        ],
+      ),
+    );
+  }
+
+  static Widget googleSignInButton({
+    required VoidCallback onTap,
+    required bool isLoading,
+    required bool isDark,
+  }) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: isLoading ? null : onTap,
+        child: Container(
+          height: 52,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: (isDark ? Colors.white : Colors.black).withOpacity(0.15)),
+          ),
+          child: isLoading
+              ? Center(
+                  child: SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: isDark ? Colors.white70 : Colors.black54),
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(width: 20, height: 20, child: CustomPaint(painter: _GooglePainter())),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Continue with Google',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
   static Widget signUpCustomerForm({
     required TextEditingController nameController,
     required TextEditingController surnameController,
@@ -715,4 +773,47 @@ class SignInUIComponents {
       ),
     );
   }
+}
+
+/// Hand-painted Google "G" mark (four-color arcs) — avoids bundling the
+/// official asset while still reading unmistakably as the Google logo.
+class _GooglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final strokeWidth = size.width * 0.22;
+    final radius = (size.width - strokeWidth) / 2;
+    final center = rect.center;
+
+    Paint arcPaint(Color c) => Paint()
+      ..color = c
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+
+    void drawArc(Color color, double startDeg, double sweepDeg) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startDeg * 3.1415926535 / 180,
+        sweepDeg * 3.1415926535 / 180,
+        false,
+        arcPaint(color),
+      );
+    }
+
+    drawArc(const Color(0xFF4285F4), -45, 95);   // blue (right)
+    drawArc(const Color(0xFF34A853), 55, 80);    // green (bottom)
+    drawArc(const Color(0xFFFBBC05), 135, 80);   // yellow (left)
+    drawArc(const Color(0xFFEA4335), 215, 90);   // red (top)
+
+    // Horizontal bar (the "G" crossbar)
+    final barPaint = Paint()..color = const Color(0xFF4285F4);
+    canvas.drawRect(
+      Rect.fromLTWH(center.dx, center.dy - strokeWidth * 0.28, radius * 0.95, strokeWidth * 0.56),
+      barPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _GooglePainter oldDelegate) => false;
 }

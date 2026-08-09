@@ -15,6 +15,7 @@ import '../../constants/store_categories.dart';
 import '../../widgets/map_picker_sheet.dart';
 import '../../widgets/welcoming_page_shimmer.dart';
 import '../customers/category_home_view.dart';
+import 'complete_profile_view.dart';
 import '../delivery/delivery_signup_view.dart';
 import '../delivery/delivery_home_view.dart';
 import '../stores/store_admin_view.dart';
@@ -22,7 +23,12 @@ import 'admin_login_view.dart' as Admin;
 import 'sign_in_ui.dart';
 
 class SignInView extends StatefulWidget {
-  const SignInView({super.key});
+  /// When true (e.g. pushed as a login detour from an in-progress guest
+  /// action like add-to-cart), a successful sign-in pops back to the
+  /// caller with `true` instead of navigating to a home screen itself —
+  /// the caller resumes whatever it was doing.
+  final bool popOnSuccess;
+  const SignInView({super.key, this.popOnSuccess = false});
 
   @override
   State<SignInView> createState() => _SignInViewState();
@@ -242,7 +248,12 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
 
   void _navigateToHomeScreen() {
     if (!mounted) return;
-    
+
+    if (widget.popOnSuccess) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+
     final authManager = Provider.of<AuthManager>(context, listen: false);
     final userType = authManager.userProfile?['userType'] as String?;
     final storeName = authManager.userProfile?['name'] as String? ?? 'Store';
@@ -303,6 +314,42 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
     }
   }
 
+  void _handleGoogleSignIn() async {
+    if (_isLoading) return;
+    setState(() { _isLoading = true; _message = ""; });
+
+    try {
+      final authManager = Provider.of<AuthManager>(context, listen: false);
+      final result = await authManager.signInWithGoogle();
+
+      if (!mounted) return;
+      if (result['success'] != true) {
+        // User closed the Google picker — not an error, just do nothing.
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (result['needsProfileCompletion'] == true) {
+        if (widget.popOnSuccess) {
+          final completed = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => CompleteProfileView(popOnSuccess: true)),
+          );
+          if (completed == true && mounted) Navigator.of(context).pop(true);
+        } else {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const CompleteProfileView()),
+          );
+        }
+      } else {
+        _navigateToHomeScreen();
+      }
+    } catch (e) {
+      if (mounted) _showError(e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   void _signUpCustomer() async {
     if (_isLoading) return;
     setState(() { _isLoading = true; _message = ""; });
@@ -320,6 +367,13 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
         password: _passwordController.text.trim(),
         displayName: '${_nameController.text.trim()} ${_surnameController.text.trim()}',
         phone: _contactNumberController.text.trim(),
+        nationalId: _nationalIDController.text.trim(),
+        address: _customerAddressController.text.trim(),
+        latitude: _latitude != 0.0 ? _latitude : null,
+        longitude: _longitude != 0.0 ? _longitude : null,
+        buildingInfo: _buildingInfoController.text.trim(),
+        apartmentNumber: _apartmentNumberController.text.trim(),
+        deliveryInstructions: _deliveryInstructionsController.text.trim(),
       );
 
       if (mounted) {
@@ -527,12 +581,22 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
               context: context,
             )
           else
-            SignInUIComponents.loginCustomerForm(
-              emailController: _emailController,
-              passwordController: _passwordController,
-              onLogin: _login,
-              isLoading: _isLoading,
-              context: context,
+            Column(
+              children: [
+                SignInUIComponents.loginCustomerForm(
+                  emailController: _emailController,
+                  passwordController: _passwordController,
+                  onLogin: _login,
+                  isLoading: _isLoading,
+                  context: context,
+                ),
+                SignInUIComponents.googleSignInDivider(isDark: isDark),
+                SignInUIComponents.googleSignInButton(
+                  onTap: _handleGoogleSignIn,
+                  isLoading: _isLoading,
+                  isDark: isDark,
+                ),
+              ],
             ),
           const SizedBox(height: 20),
           SignInUIComponents.toggleSignUpLoginButton(

@@ -1,10 +1,14 @@
 import bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
 import { generateJWT, generateVerificationToken, generateTokenExpiry } from '../utils/tokenUtils.js';
 import { getEmailService } from '../utils/emailService.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+
+const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
+const googleClient = new OAuth2Client(GOOGLE_OAUTH_CLIENT_ID);
 
 class AuthController {
   // POST /api/v1/auth/signup
@@ -370,6 +374,99 @@ class AuthController {
       });
     } catch (error) {
       logger.error('Error in login:', error);
+      next(error);
+    }
+  }
+
+  // POST /api/v1/auth/google — customer sign-in/sign-up via a Google ID token
+  // obtained client-side (google_sign_in package). Finds an existing user by
+  // email, or creates one (Google already verified the email, so
+  // email_verified is set true immediately — no verification email step).
+  // The response's needsProfileCompletion flag tells the client whether the
+  // required-fields screen (name/surname/national ID/address/etc.) must be
+  // shown before the account is usable — mirrors what the email/password
+  // signup form already collects.
+  static async googleAuth(req, res, next) {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        return res.status(400).json({ success: false, message: 'idToken is required' });
+      }
+      if (!GOOGLE_OAUTH_CLIENT_ID) {
+        logger.error('GOOGLE_OAUTH_CLIENT_ID is not configured on the server');
+        return res.status(500).json({ success: false, message: 'Google sign-in is not configured on the server' });
+      }
+
+      let payload;
+      try {
+        const ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_OAUTH_CLIENT_ID });
+        payload = ticket.getPayload();
+      } catch (err) {
+        logger.warn('Google ID token verification failed:', err.message);
+        return res.status(401).json({ success: false, message: 'Invalid Google token' });
+      }
+
+      const email = payload?.email;
+      if (!email) {
+        return res.status(400).json({ success: false, message: 'Google account has no email' });
+      }
+
+      const connection = await pool.getConnection();
+      try {
+        const [existing] = await connection.execute('SELECT * FROM users WHERE email = ?', [email]);
+
+        let user;
+        let isNewUser = false;
+
+        if (existing.length > 0) {
+          user = existing[0];
+          if (!user.email_verified) {
+            await connection.execute('UPDATE users SET email_verified = TRUE WHERE id = ?', [user.id]);
+            user.email_verified = 1;
+          }
+        } else {
+          isNewUser = true;
+          const uid = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const displayName = payload.name || email.split('@')[0];
+          const nameParts = displayName.trim().split(/\s+/);
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          await connection.execute(
+            `INSERT INTO users (uid, email, password_hash, display_name, name, surname, email_verified)
+             VALUES (?, ?, NULL, ?, ?, ?, TRUE)`,
+            [uid, email, displayName, firstName, lastName]
+          );
+          const [rows] = await connection.execute('SELECT * FROM users WHERE uid = ?', [uid]);
+          user = rows[0];
+        }
+
+        const needsProfileCompletion = !(
+          user.name && user.surname && user.national_id && user.address && user.phone
+        );
+
+        const token = generateJWT(user.uid, user.email, 'customer');
+
+        return res.json({
+          success: true,
+          token,
+          isNewUser,
+          needsProfileCompletion,
+          user: {
+            id: user.id,
+            uid: user.uid,
+            email: user.email,
+            display_name: user.display_name,
+            name: user.name,
+            surname: user.surname,
+            userType: 'customer',
+          },
+        });
+      } finally {
+        connection.release();
+      }
+    } catch (error) {
+      logger.error('Error in googleAuth:', error);
       next(error);
     }
   }

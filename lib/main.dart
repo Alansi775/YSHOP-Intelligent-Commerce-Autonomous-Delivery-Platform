@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +19,13 @@ import 'providers/ai_chat_provider.dart'; //  YSHOP AI Chat
 import 'services/order_notification_service.dart';
 
 // Global ValueNotifier for tracking hero section scroll position
-final isAboveHeroNotifier = ValueNotifier<bool>(true); 
+final isAboveHeroNotifier = ValueNotifier<bool>(true);
+
+// Incrementing signal CategoryHomeView listens to and opens its cart end
+// drawer in response — used to "land the user in the cart" after a guest's
+// add-to-cart triggers a login detour and later succeeds, from a screen
+// (ProductDetailView) that has no cart drawer of its own to open.
+final ValueNotifier<int> openCartDrawerSignal = ValueNotifier<int>(0);
 
 // =======================================================
 // MARK: - تعريفات الثيم (Themes Definitions)
@@ -198,6 +205,12 @@ class _HomeScreen extends StatelessWidget {
             debugPrint(' Customer persisted - showing CategoryHomeView');
             return const CategoryHomeView();
           }
+        } else if (kIsWeb) {
+          // Web guests browse freely without an account — checkout/add-to-cart
+          // is what actually prompts sign-in (see ProductDetailView). Mobile
+          // keeps the existing always-sign-in-first behavior below.
+          debugPrint('🌐 Guest on web - showing CategoryHomeView without login');
+          return const CategoryHomeView();
         } else {
           return const SignInView();
         }

@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../services/api_service.dart';
+import '../config/api_config.dart';
 
 /// Auth Manager with Backend JWT Authentication
 /// No Firebase - all authentication through backend server
@@ -146,13 +148,21 @@ class AuthManager with ChangeNotifier {
     }
   }
 
+  /// Force a profile refetch, bypassing the throttle — for call sites that
+  /// just wrote a change (e.g. completing required profile fields) and need
+  /// the in-memory profile to reflect it immediately.
+  Future<void> refreshProfile() async {
+    _lastProfileFetch = null;
+    await _fetchUserProfile();
+  }
+
   /// Fetch user profile from backend (throttled to every 5 seconds)
   Future<void> _fetchUserProfile() async {
     if (_token == null) return;
-    
+
     // Throttle: only fetch if last fetch was > 5 seconds ago
     final now = DateTime.now();
-    if (_lastProfileFetch != null && 
+    if (_lastProfileFetch != null &&
         now.difference(_lastProfileFetch!).inSeconds < 5) {
       return;
     }
@@ -190,6 +200,13 @@ class AuthManager with ChangeNotifier {
     required String password,
     required String displayName,
     String? phone,
+    String? nationalId,
+    String? address,
+    double? latitude,
+    double? longitude,
+    String? buildingInfo,
+    String? apartmentNumber,
+    String? deliveryInstructions,
   }) async {
     try {
       _isLoading = true;
@@ -201,6 +218,13 @@ class AuthManager with ChangeNotifier {
         'password': password,
         'display_name': displayName,
         'phone': phone,
+        'national_id': nationalId,
+        'address': address,
+        'latitude': latitude,
+        'longitude': longitude,
+        'building_info': buildingInfo,
+        'apartment_number': apartmentNumber,
+        'delivery_instructions': deliveryInstructions,
       });
 
       if (response != null && response['success'] == true) {
@@ -299,6 +323,72 @@ class AuthManager with ChangeNotifier {
       rethrow;
     } catch (e) {
       _errorMessage = 'Sign in failed: ${e.toString()}';
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Sign in (or sign up, transparently) with Google. Returns a small result
+  /// map rather than throwing on a plain user-cancelled picker, since that's
+  /// not really an error condition:
+  ///   {'success': false, 'cancelled': true}                                  — user closed the picker
+  ///   {'success': true, 'needsProfileCompletion': bool, 'isNewUser': bool}   — signed in
+  /// needsProfileCompletion drives whether the caller must push the blocking
+  /// required-fields screen before treating the session as fully usable.
+  Future<Map<String, dynamic>> signInWithGoogle() async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      final googleSignIn = GoogleSignIn(
+        clientId: kIsWeb ? ApiConfig.googleWebClientId : null,
+        scopes: ['email', 'profile'],
+      );
+
+      final account = await googleSignIn.signIn();
+      if (account == null) {
+        _isLoading = false;
+        notifyListeners();
+        return {'success': false, 'cancelled': true};
+      }
+
+      final googleAuth = await account.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null) {
+        throw Exception('Google sign-in did not return an ID token');
+      }
+
+      ApiService.clearCache();
+      ApiService.clearPendingRequests();
+
+      final response = await ApiService.postRequest('/auth/google', {
+        'idToken': idToken,
+      });
+
+      if (response != null && response['success'] == true) {
+        final token = response['token'];
+        final user = response['user'] ?? {};
+        if (token == null) {
+          throw Exception('No authentication token received');
+        }
+
+        await _saveAuth(token, user, true);
+
+        _isLoading = false;
+        _errorMessage = null;
+        notifyListeners();
+        return {
+          'success': true,
+          'needsProfileCompletion': response['needsProfileCompletion'] == true,
+          'isNewUser': response['isNewUser'] == true,
+        };
+      }
+
+      throw Exception(response?['message'] ?? 'Google sign-in failed');
+    } catch (e) {
+      _errorMessage = 'Google sign-in failed: ${e.toString()}';
       _isLoading = false;
       notifyListeners();
       rethrow;
