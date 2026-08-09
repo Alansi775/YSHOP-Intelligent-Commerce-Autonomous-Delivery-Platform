@@ -178,9 +178,10 @@ export class Order {
     try {
       // Simple SQL - use COLLATE to fix collation mismatch
       const sql = `
-        SELECT SQL_NO_CACHE 
-          o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status, 
+        SELECT SQL_NO_CACHE
+          o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status,
           o.shipping_address, o.payment_method, o.delivery_option, o.driver_location, o.driver_id,
+          o.order_type, o.table_id,
           DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i:%s') as created_at,
           DATE_FORMAT(o.updated_at, '%Y-%m-%d %H:%i:%s') as updated_at,
           COALESCE(s.name, 'Unknown Store') as store_name,
@@ -362,10 +363,10 @@ export class Order {
     try {
       // First get the orders for pagination with all necessary fields
       const sql = `
-        SELECT SQL_NO_CACHE 
+        SELECT SQL_NO_CACHE
           o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status, o.shipping_address,
           o.payment_method, o.delivery_option, o.driver_id, o.created_at, o.updated_at,
-          o.driver_location, o.picked_up_at, o.delivered_at,
+          o.driver_location, o.picked_up_at, o.delivered_at, o.order_type, o.table_id,
           s.name as store_name,
           s.store_type as store_type,
           s.latitude as store_latitude,
@@ -424,7 +425,7 @@ export class Order {
       const sql = `
         SELECT SQL_NO_CACHE
           o.id, o.user_id, o.store_id, o.total_price, o.currency, o.status, o.shipping_address,
-          o.payment_method, o.delivery_option, o.driver_id,
+          o.payment_method, o.delivery_option, o.driver_id, o.order_type, o.table_id,
           DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i:%s') as created_at,
           o.driver_location,
           u.display_name as customerName,

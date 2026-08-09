@@ -234,10 +234,11 @@ class ReturnController {
       connection = await pool.getConnection();
 
       const [returns] = await connection.execute(`
-        SELECT 
+        SELECT
           rp.*,
           o.total_price as order_total_price,
-          o.currency as order_currency
+          o.currency as order_currency,
+          o.order_type as order_type
         FROM returned_products rp
         LEFT JOIN orders o ON rp.order_id = o.id
         ORDER BY rp.return_requested_at DESC

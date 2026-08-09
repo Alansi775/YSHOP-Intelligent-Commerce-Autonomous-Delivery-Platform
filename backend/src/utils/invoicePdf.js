@@ -109,7 +109,9 @@ export async function renderInvoicePDF(res, { store, periodStart, periodEnd, lab
     ['Orders', String(totals.online.order_count)],
     ['Gross charged', money(totals.online.gross_charged, currency)],
     ['Platform share', money(totals.online.platform_share, currency)],
-    ['Driver share', money(totals.online.driver_share, currency)],
+    // Driver settles with the platform directly, never with the store —
+    // no reason for the store owner's own invoice to show it.
+    ...(forStoreOwner ? [] : [['Driver share', money(totals.online.driver_share, currency)]]),
     ['Store share', money(totals.online.store_share, currency)],
   ];
   const localRows = [
@@ -123,16 +125,18 @@ export async function renderInvoicePDF(res, { store, periodStart, periodEnd, lab
   y += Math.max(h1, h2, 20) + 16;
 
   // ── Net settlement box ──────────────────────────────────────────────
+  // Driver settlement is a platform↔driver matter, not the store's
+  // business — that column only appears on the admin's own invoice.
   const net = totals.net;
   doc.roundedRect(left, y, contentW, 64, 8).fillAndStroke('#f0fdf4', '#bbf7d0');
   const netCol = (x, w, title, value, color) => {
     doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(title, x, y + 12, { width: w, align: 'center' });
     doc.font('Helvetica-Bold').fontSize(13).fillColor(color).text(value, x, y + 28, { width: w, align: 'center' });
   };
-  const colW = contentW / 3;
+  const colW = contentW / (forStoreOwner ? 2 : 3);
   netCol(left, colW, forStoreOwner ? 'You owe platform' : 'Store owes platform', money(net.store_owes_platform, currency), RED);
   netCol(left + colW, colW, forStoreOwner ? 'Platform owes you' : 'Platform owes store', money(net.platform_owes_store, currency), GREEN);
-  netCol(left + colW * 2, colW, 'Platform owes driver', money(net.platform_owes_driver, currency), '#D97706');
+  if (!forStoreOwner) netCol(left + colW * 2, colW, 'Platform owes driver', money(net.platform_owes_driver, currency), '#D97706');
   y += 80;
 
   // ── Itemized orders ──────────────────────────────────────────────────
@@ -181,7 +185,7 @@ export async function renderInvoicePDF(res, { store, periodStart, periodEnd, lab
     if (!cancelled) {
       doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(
         `Total ${money(order.total_price, order.currency)}   ·   Platform ${money(order.platform_share, order.currency)}` +
-        (order.order_type === 'local' ? '' : `   ·   Driver ${money(order.driver_share, order.currency)}`) +
+        (order.order_type === 'local' || forStoreOwner ? '' : `   ·   Driver ${money(order.driver_share, order.currency)}`) +
         `   ·   Store ${money(order.store_share, order.currency)}`,
         left + 10, y, { width: contentW - 20 }
       );
