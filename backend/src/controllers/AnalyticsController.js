@@ -1,6 +1,8 @@
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
 import { splitFromCharged } from '../utils/pricing.js';
+import { getPeriodStart, fetchOrderRows, computeTotals, groupOrders } from '../utils/salesReporting.js';
+import { renderInvoicePDF } from '../utils/invoicePdf.js';
 
 const PERIOD_SQL = {
   hour:  `AND o.created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
@@ -342,6 +344,70 @@ export class AnalyticsController {
     } catch (err) {
       logger.error('[Analytics] getAdminStoresSummary fatal error', { error: err.message, period });
       return res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  }
+
+  // ── Store owner: itemized current-period settlement view ──────────────
+  // GET /api/v1/analytics/store/:storeId/current-period
+  //
+  // The store-owner-facing counterpart to the admin Sales screen's
+  // "current period" view — same period window (since the last admin
+  // settlement, so the numbers agree with what the admin sees), same
+  // itemized order list with images, but framed from the store's side:
+  // local orders => you owe the platform; online orders (paid up-front
+  // OR at the door) => the platform owes you, since in both cases the
+  // cash landed with the platform/driver first, never with the store.
+  static async getStoreCurrentPeriod(req, res) {
+    const { storeId } = req.params;
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      const periodStart = await getPeriodStart(connection, storeId);
+      const periodEnd = new Date();
+      const rows = await fetchOrderRows(connection, storeId, periodStart, periodEnd);
+      return res.json({
+        success: true,
+        data: {
+          period_start: periodStart,
+          period_end: periodEnd,
+          totals: computeTotals(rows),
+          orders: groupOrders(rows),
+        },
+      });
+    } catch (err) {
+      logger.error('[Analytics] getStoreCurrentPeriod error:', err.message);
+      return res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  }
+
+  // GET /api/v1/analytics/store/:storeId/current-period/invoice
+  // Public-by-link (same pattern as the admin/POS invoices) so it can be
+  // opened directly from the Flutter app without juggling auth headers
+  // through url_launcher.
+  static async getStoreInvoice(req, res) {
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      const { storeId } = req.params;
+      const periodStart = await getPeriodStart(connection, storeId);
+      const periodEnd = new Date();
+      const [[store]] = await connection.execute(`SELECT name, address, phone, email FROM stores WHERE id = ?`, [storeId]);
+      const rows = await fetchOrderRows(connection, storeId, periodStart, periodEnd);
+      const totals = computeTotals(rows);
+      const orders = groupOrders(rows);
+      const currency = rows[0]?.currency || 'USD';
+
+      renderInvoicePDF(res, {
+        store, periodStart, periodEnd, label: 'Current period (unsettled)',
+        totals, orders, currency, forStoreOwner: true,
+      });
+    } catch (err) {
+      logger.error('[Analytics] getStoreInvoice error:', err.message);
+      return res.status(500).send('Failed to generate invoice');
     } finally {
       if (connection) connection.release();
     }

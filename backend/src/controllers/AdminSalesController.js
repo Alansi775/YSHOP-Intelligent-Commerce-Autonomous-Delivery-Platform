@@ -4,123 +4,14 @@
 // history, and pull a fully-itemized invoice for any period.
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
-import PDFDocument from 'pdfkit';
-import { splitFromCharged } from '../utils/pricing.js';
-
-// ── Shared helpers ──────────────────────────────────────────────────────
-
-async function getPeriodStart(connection, storeId) {
-  const [[row]] = await connection.execute(
-    `SELECT COALESCE(
-       (SELECT MAX(period_end) FROM store_settlements WHERE store_id = ? AND status = 'settled'),
-       (SELECT created_at FROM stores WHERE id = ?)
-     ) AS period_start`,
-    [storeId, storeId]
-  );
-  return row?.period_start || new Date(0);
-}
-
-async function fetchOrderRows(connection, storeId, periodStart, periodEnd) {
-  const [rows] = await connection.execute(
-    `SELECT
-       o.id AS order_id, o.order_type, o.status, o.created_at, o.currency, o.total_price,
-       t.name AS table_name,
-       oi.id AS item_id, oi.quantity, oi.price AS item_price, oi.notes,
-       p.id AS product_id, p.name AS product_name, p.image_url, p.description
-     FROM orders o
-     JOIN order_items oi ON oi.order_id = o.id
-     LEFT JOIN products p ON p.id = oi.product_id
-     LEFT JOIN pos_tables t ON t.id = o.table_id
-     WHERE o.store_id = ?
-       AND o.created_at > ?
-       AND o.created_at <= ?
-     ORDER BY o.created_at DESC, o.id DESC`,
-    [storeId, periodStart, periodEnd]
-  );
-  return rows;
-}
-
-// Totals exclude cancelled orders (nothing was actually charged), but the
-// itemized order list below still includes them — the admin explicitly
-// wants to see cancelled in-store tickets too, just not counted in totals.
-function computeTotals(rows) {
-  let onlineCharged = 0, onlineCount = 0;
-  let localCharged = 0, localCount = 0;
-  const seenOrders = new Set();
-  const countedOrders = new Set();
-
-  for (const r of rows) {
-    if (!seenOrders.has(r.order_id)) {
-      seenOrders.add(r.order_id);
-    }
-    if (r.status === 'cancelled') continue;
-    const itemTotal = Number(r.item_price) * Number(r.quantity);
-    if (r.order_type === 'local') {
-      localCharged += itemTotal;
-      if (!countedOrders.has(r.order_id)) { localCount++; countedOrders.add(r.order_id); }
-    } else {
-      onlineCharged += itemTotal;
-      if (!countedOrders.has(`o${r.order_id}`)) { onlineCount++; countedOrders.add(`o${r.order_id}`); }
-    }
-  }
-
-  const onlineSplit = splitFromCharged(onlineCharged, { isLocal: false });
-  const localSplit = splitFromCharged(localCharged, { isLocal: true });
-
-  return {
-    online: {
-      order_count: onlineCount,
-      gross_charged: Math.round(onlineCharged * 100) / 100,
-      platform_share: onlineSplit.platform,
-      driver_share: onlineSplit.driver,
-      store_share: onlineSplit.base,
-    },
-    local: {
-      order_count: localCount,
-      gross_charged: Math.round(localCharged * 100) / 100,
-      platform_share: localSplit.platform,
-      store_share: localSplit.base,
-    },
-  };
-}
-
-function groupOrders(rows) {
-  const byOrder = new Map();
-  for (const r of rows) {
-    if (!byOrder.has(r.order_id)) {
-      const isLocal = r.order_type === 'local';
-      // Cancelled orders were never actually charged, so there's no real
-      // split to show — just null it out rather than reporting a phantom cut.
-      const split = r.status === 'cancelled'
-        ? null
-        : splitFromCharged(Number(r.total_price), { isLocal });
-      byOrder.set(r.order_id, {
-        order_id: r.order_id,
-        order_type: r.order_type,
-        status: r.status,
-        created_at: r.created_at,
-        currency: r.currency,
-        total_price: Number(r.total_price),
-        table_name: r.table_name,
-        platform_share: split?.platform ?? null,
-        driver_share: isLocal ? null : (split?.driver ?? null),
-        store_share: split?.base ?? null,
-        items: [],
-      });
-    }
-    byOrder.get(r.order_id).items.push({
-      item_id: r.item_id,
-      product_id: r.product_id,
-      product_name: r.product_name,
-      image_url: r.image_url,
-      description: r.description,
-      quantity: r.quantity,
-      price: Number(r.item_price),
-      notes: r.notes,
-    });
-  }
-  return Array.from(byOrder.values());
-}
+import {
+  getPeriodStart,
+  fetchOrderRows,
+  computeTotals,
+  groupOrders,
+  netFromSettlementRow,
+} from '../utils/salesReporting.js';
+import { renderInvoicePDF } from '../utils/invoicePdf.js';
 
 export class AdminSalesController {
   // GET /api/v1/admin/sales/categories
@@ -168,7 +59,6 @@ export class AdminSalesController {
           email: store.email,
           currency: store.currency || 'USD',
           period_start: periodStart,
-          owed_to_platform: Math.round((totals.online.platform_share + totals.local.platform_share) * 100) / 100,
           totals,
         });
       }
@@ -288,7 +178,7 @@ export class AdminSalesController {
         `SELECT id, period_start, period_end, currency,
                 online_order_count, online_gross_charged, local_order_count, local_gross_charged,
                 (online_platform_share + local_platform_share) AS total_platform_share,
-                online_driver_share, settled_at
+                online_driver_share, online_store_share, local_store_share, settled_at
          FROM store_settlements
          WHERE store_id = ? AND status = 'settled'
          ORDER BY period_end DESC`,
@@ -312,10 +202,27 @@ export class AdminSalesController {
         return res.status(404).json({ success: false, message: 'Settlement not found' });
       }
       const rows = await fetchOrderRows(connection, settlement.store_id, settlement.period_start, settlement.period_end);
+      const totals = {
+        online: {
+          order_count: settlement.online_order_count,
+          gross_charged: Number(settlement.online_gross_charged),
+          platform_share: Number(settlement.online_platform_share),
+          driver_share: Number(settlement.online_driver_share),
+          store_share: Number(settlement.online_store_share),
+        },
+        local: {
+          order_count: settlement.local_order_count,
+          gross_charged: Number(settlement.local_gross_charged),
+          platform_share: Number(settlement.local_platform_share),
+          store_share: Number(settlement.local_store_share),
+        },
+        net: netFromSettlementRow(settlement),
+      };
       return res.json({
         success: true,
         data: {
           settlement,
+          totals,
           orders: groupOrders(rows),
         },
       });
@@ -329,15 +236,14 @@ export class AdminSalesController {
 
   // GET /api/v1/admin/sales/stores/:storeId/current/invoice
   // GET /api/v1/admin/sales/settlements/:id/invoice
-  // Fully itemized PDF for a period — every order, every product (with
-  // image reference, quantity, table if local), grand totals split by
-  // online/local. Public-by-link like the POS invoice (no auth check on
-  // the route itself, since it's meant to be handed to the store owner).
+  // Fully itemized PDF for a period. Public-by-link like the POS invoice
+  // (no auth check on the route itself, since it's meant to be handed to
+  // the store owner).
   static async getInvoice(req, res) {
     let connection;
     try {
       connection = await pool.getConnection();
-      let storeId, periodStart, periodEnd, label;
+      let storeId, periodStart, periodEnd, label, totals;
 
       if (req.params.id) {
         const [[settlement]] = await connection.execute(`SELECT * FROM store_settlements WHERE id = ?`, [req.params.id]);
@@ -346,6 +252,22 @@ export class AdminSalesController {
         periodStart = settlement.period_start;
         periodEnd = settlement.period_end;
         label = `Settled ${new Date(periodEnd).toISOString().split('T')[0]}`;
+        totals = {
+          online: {
+            order_count: settlement.online_order_count,
+            gross_charged: Number(settlement.online_gross_charged),
+            platform_share: Number(settlement.online_platform_share),
+            driver_share: Number(settlement.online_driver_share),
+            store_share: Number(settlement.online_store_share),
+          },
+          local: {
+            order_count: settlement.local_order_count,
+            gross_charged: Number(settlement.local_gross_charged),
+            platform_share: Number(settlement.local_platform_share),
+            store_share: Number(settlement.local_store_share),
+          },
+          net: netFromSettlementRow(settlement),
+        };
       } else {
         storeId = req.params.storeId;
         periodStart = await getPeriodStart(connection, storeId);
@@ -355,53 +277,11 @@ export class AdminSalesController {
 
       const [[store]] = await connection.execute(`SELECT name, address, phone, email FROM stores WHERE id = ?`, [storeId]);
       const rows = await fetchOrderRows(connection, storeId, periodStart, periodEnd);
-      const totals = computeTotals(rows);
+      if (!totals) totals = computeTotals(rows);
       const orders = groupOrders(rows);
+      const currency = rows[0]?.currency || 'USD';
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="invoice-store${storeId}-${label.replace(/\s/g, '_')}.pdf"`);
-
-      const doc = new PDFDocument({ size: 'A4', margin: 40 });
-      doc.pipe(res);
-
-      doc.fontSize(18).text('YShop — Store Settlement Invoice', { align: 'center' });
-      doc.moveDown(0.5);
-      doc.fontSize(11).text(store?.name || `Store #${storeId}`, { align: 'center' });
-      doc.fontSize(9).fillColor('gray').text(
-        [store?.address, store?.phone, store?.email].filter(Boolean).join(' · '),
-        { align: 'center' }
-      );
-      doc.fillColor('black').moveDown();
-      doc.fontSize(10).text(`Period: ${new Date(periodStart).toLocaleString()} - ${new Date(periodEnd).toLocaleString()}`);
-      doc.text(`Status: ${label}`);
-      doc.moveDown();
-
-      doc.fontSize(13).text('Summary', { underline: true });
-      doc.fontSize(10);
-      doc.text(`Online orders: ${totals.online.order_count} · Gross: ${totals.online.gross_charged} · Platform: ${totals.online.platform_share} · Driver: ${totals.online.driver_share} · Store keeps: ${totals.online.store_share}`);
-      doc.text(`In-store orders: ${totals.local.order_count} · Gross: ${totals.local.gross_charged} · Platform: ${totals.local.platform_share} · Store keeps: ${totals.local.store_share}`);
-      doc.moveDown();
-
-      doc.fontSize(13).text('Orders', { underline: true });
-      doc.moveDown(0.3);
-      for (const order of orders) {
-        doc.fontSize(10).fillColor(order.status === 'cancelled' ? 'red' : 'black').text(
-          `#${order.order_id} · ${order.order_type === 'local' ? `Table ${order.table_name || '—'}` : 'Online'} · ${new Date(order.created_at).toLocaleString()} · ${order.status}${order.status === 'cancelled' ? ' (CANCELLED — excluded from totals)' : ''}`
-        );
-        doc.fillColor('black');
-        if (order.status !== 'cancelled') {
-          const shareParts = [`Platform: ${order.platform_share}`, `Store: ${order.store_share}`];
-          if (order.order_type !== 'local') shareParts.push(`Driver: ${order.driver_share}`);
-          doc.fontSize(8).fillColor('gray').text(`   ${shareParts.join(' · ')}`);
-          doc.fillColor('black');
-        }
-        for (const item of order.items) {
-          doc.fontSize(9).text(`   ${item.quantity}x ${item.product_name || 'Product #' + item.product_id} — ${item.price} ${order.currency}`);
-        }
-        doc.moveDown(0.3);
-      }
-
-      doc.end();
+      renderInvoicePDF(res, { store, periodStart, periodEnd, label, totals, orders, currency, forStoreOwner: false });
     } catch (err) {
       logger.error('[AdminSales] getInvoice error:', err.message);
       return res.status(500).send('Failed to generate invoice');
