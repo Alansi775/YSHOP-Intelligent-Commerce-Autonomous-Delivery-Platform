@@ -47,6 +47,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
   // 🔥 STORE CURRENT DATA (avoid FutureBuilder flickering!)
   Map<String, List<dynamic>> _currentData = {'orders': [], 'returns': []};
   bool _isLoadingInitial = true;
+  bool _loadFailed = false;
   
   // 🔥 Reactive Sync subscription
   late StreamSubscription<Map<String, dynamic>> _reactiveSyncSubscription;
@@ -76,8 +77,15 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       // Get store ID first
       final store = await ApiService.getUserStore();
       _storeId = store?['id']?.toString();
-      
-      if (_storeId == null) return;
+
+      if (_storeId == null) {
+        // getUserStore() swallows its own errors and returns null rather
+        // than throwing, so this is the actual common failure path — a
+        // bare `return` here left the screen on "Loading orders..."
+        // forever with no store to retry against.
+        if (mounted) setState(() { _isLoadingInitial = false; _loadFailed = true; });
+        return;
+      }
 
       // Load initial data ONCE
       final initialData = await _loadAllData();
@@ -85,6 +93,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
         setState(() {
           _currentData = initialData;
           _isLoadingInitial = false;
+          _loadFailed = false;
         });
       }
 
@@ -161,7 +170,25 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
       });
     } catch (e) {
       debugPrint('❌ Reactive sync init error: $e');
+      // Whatever failed above (store lookup, socket connect, subscribe —
+      // _loadAllData() itself already swallows its own errors and never
+      // throws), the screen must not stay stuck on the loading spinner
+      // forever with no way out. Fall through to a retryable error state.
+      if (mounted) {
+        setState(() {
+          _isLoadingInitial = false;
+          _loadFailed = true;
+        });
+      }
     }
+  }
+
+  Future<void> _retryInitialLoad() async {
+    setState(() {
+      _isLoadingInitial = true;
+      _loadFailed = false;
+    });
+    await _initializeReactiveSync();
   }
 
   @override
@@ -814,7 +841,7 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Your Profit (65%)',
+                      'Your Profit',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -914,6 +941,36 @@ class _OrdersViewState extends State<OrdersView> with TickerProviderStateMixin {
                 style: TextStyle(
                   color: isDark ? Colors.white70 : Colors.black87,
                 ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_loadFailed) {
+      return SizedBox(
+        height: 400,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.cloud_off_rounded, size: 40, color: isDark ? Colors.white38 : Colors.black38),
+              const SizedBox(height: 12),
+              Text(
+                'Could not load your orders',
+                style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Check your connection and try again',
+                style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: _retryInitialLoad,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
               ),
             ],
           ),
