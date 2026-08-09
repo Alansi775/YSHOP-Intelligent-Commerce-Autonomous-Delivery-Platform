@@ -630,11 +630,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                 // token (see google_web_signin_web.dart); the hand-painted
                 // button + imperative .signIn() only works on mobile.
                 if (kIsWeb)
-                  Center(
-                    child: buildGoogleWebSignInButton(
-                      child: SignInUIComponents.googleSignInButtonFace(isDark: isDark, isLoading: false),
-                    ),
-                  )
+                  Center(child: buildGoogleWebSignInButton())
                 else
                   SignInUIComponents.googleSignInButton(
                     onTap: _handleGoogleSignIn,
@@ -695,6 +691,41 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
               ),
             ),
           ),
+
+          // Back button — only when this screen was actually pushed on top
+          // of something (the guest "Sign In / Create Account" detour, the
+          // add-to-cart-while-guest detour), never when it's root content
+          // with nothing to go back to.
+          if (Navigator.of(context).canPop())
+            Positioned(
+              top: 0,
+              left: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(999),
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                        ),
+                        child: Icon(
+                          Icons.arrow_back,
+                          color: isDark ? Colors.white : Colors.black87,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // Main content
           Center(

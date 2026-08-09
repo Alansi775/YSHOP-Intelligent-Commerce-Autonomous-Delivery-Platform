@@ -13,6 +13,7 @@ import '../../widgets/cart_icon_with_badge.dart';
 import '../../widgets/liquid_ai_icon.dart';
 import '../../widgets/ai_home_conversation_box.dart';
 import '../../screens/auth/sign_in_ui.dart';
+import '../auth/sign_in_view.dart';
 import '../../state_management/cart_manager.dart';
 import '../../state_management/theme_manager.dart';
 import '../../state_management/auth_manager.dart';
@@ -261,6 +262,31 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
     }
   }
 
+  /// Gate for opening the AI box — the AI needs to know who it's talking
+  /// to, so a guest gets sent to sign in first and, on success, lands right
+  /// back in the (now expanded) AI box instead of just returning to a
+  /// blank tap. Collapsing (val == false) never needs auth.
+  Future<void> _requireAuthForAI(bool expanding) async {
+    if (!expanding) {
+      setState(() => _isAIExpanded = false);
+      _aiExpandAnimation.reverse();
+      return;
+    }
+    final authManager = Provider.of<AuthManager>(context, listen: false);
+    if (authManager.isAuthenticated) {
+      setState(() => _isAIExpanded = true);
+      _aiExpandAnimation.forward();
+      return;
+    }
+    final success = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const SignInView(popOnSuccess: true)),
+    );
+    if (success == true && mounted) {
+      setState(() => _isAIExpanded = true);
+      _aiExpandAnimation.forward();
+    }
+  }
+
   void _handleCollapseConversation() {
     setState(() => _isAIExpanded = false);
     _aiExpandAnimation.reverse();
@@ -422,10 +448,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
                         onAddToCart: _handleAddToCart,
                         messages: _aiMessages,
                         isExpanded: _isAIExpanded,
-                        onToggleExpand: (val) {
-                          setState(() => _isAIExpanded = val);
-                          if (val) _aiExpandAnimation.forward();
-                        },
+                        onToggleExpand: (val) { _requireAuthForAI(val); },
                         onCollapse: _handleCollapseConversation,
                         onNewConversation: _startNewConversation,
                         aiSearchController: _aiSearchController,
@@ -615,10 +638,7 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
                 onAddToCart: _handleAddToCart,
                 messages: _aiMessages,
                 isExpanded: _isAIExpanded,
-                onToggleExpand: (val) {
-                  setState(() => _isAIExpanded = val);
-                  if (val) _aiExpandAnimation.forward();
-                },
+                onToggleExpand: (val) { _requireAuthForAI(val); },
                 onCollapse: _handleCollapseConversation,
                 onNewConversation: _startNewConversation,
                 aiSearchController: _aiSearchController,
