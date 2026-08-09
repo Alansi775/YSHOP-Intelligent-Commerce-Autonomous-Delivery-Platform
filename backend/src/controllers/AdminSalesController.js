@@ -281,7 +281,7 @@ export class AdminSalesController {
       const orders = groupOrders(rows);
       const currency = rows[0]?.currency || 'USD';
 
-      renderInvoicePDF(res, { store, periodStart, periodEnd, label, totals, orders, currency, forStoreOwner: false });
+      await renderInvoicePDF(res, { store, periodStart, periodEnd, label, totals, orders, currency, forStoreOwner: false });
     } catch (err) {
       logger.error('[AdminSales] getInvoice error:', err.message);
       return res.status(500).send('Failed to generate invoice');

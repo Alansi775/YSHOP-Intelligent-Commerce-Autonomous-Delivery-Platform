@@ -401,7 +401,7 @@ export class AnalyticsController {
       const orders = groupOrders(rows);
       const currency = rows[0]?.currency || 'USD';
 
-      renderInvoicePDF(res, {
+      await renderInvoicePDF(res, {
         store, periodStart, periodEnd, label: 'Current period (unsettled)',
         totals, orders, currency, forStoreOwner: true,
       });

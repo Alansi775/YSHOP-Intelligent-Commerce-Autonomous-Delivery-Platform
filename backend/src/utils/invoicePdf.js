@@ -4,6 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
+import sharp from 'sharp';
 
 const INK = '#1a1a1a';
 const MUTED = '#6b6b70';
@@ -21,6 +22,23 @@ function resolveImagePath(imageUrl) {
     if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs;
   } catch (_) {}
   return null;
+}
+
+// Thumbnails only need to render at ~26pt in the PDF — the same product
+// photo often repeats across many order line items (one popular dish sold
+// many times), so downscaling + caching by path keeps a busy invoice from
+// ballooning to multiple megabytes of full-resolution JPEGs.
+const _thumbCache = new Map();
+async function getThumbBuffer(absPath) {
+  if (_thumbCache.has(absPath)) return _thumbCache.get(absPath);
+  try {
+    const buf = await sharp(absPath).resize(80, 80, { fit: 'cover' }).jpeg({ quality: 70 }).toBuffer();
+    _thumbCache.set(absPath, buf);
+    return buf;
+  } catch (_) {
+    _thumbCache.set(absPath, null);
+    return null;
+  }
 }
 
 function money(v, currency) {
@@ -44,7 +62,7 @@ function paymentBadge(order) {
  * @param {Array} orders  — from groupOrders(), each with items[]
  * @param {string} currency
  */
-export function renderInvoicePDF(res, { store, periodStart, periodEnd, label, totals, orders, currency, forStoreOwner = false }) {
+export async function renderInvoicePDF(res, { store, periodStart, periodEnd, label, totals, orders, currency, forStoreOwner = false }) {
   const filenameSafe = `${(store?.name || 'store').replace(/[^a-z0-9]+/gi, '_')}_${label.replace(/[^a-z0-9]+/gi, '_')}`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="invoice_${filenameSafe}.pdf"`);
@@ -147,8 +165,9 @@ export function renderInvoicePDF(res, { store, periodStart, periodEnd, label, to
     for (const item of order.items) {
       ensureSpace(34);
       const imgPath = resolveImagePath(item.image_url);
-      if (imgPath) {
-        try { doc.image(imgPath, left + 10, y, { width: 26, height: 26, fit: [26, 26] }); } catch (_) {}
+      const thumb = imgPath ? await getThumbBuffer(imgPath) : null;
+      if (thumb) {
+        try { doc.image(thumb, left + 10, y, { width: 26, height: 26, fit: [26, 26] }); } catch (_) {}
       } else {
         doc.roundedRect(left + 10, y, 26, 26, 4).fillAndStroke('#eef0f3', LINE);
       }
