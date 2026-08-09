@@ -329,30 +329,60 @@ class AuthManager with ChangeNotifier {
     }
   }
 
-  /// Sign in (or sign up, transparently) with Google. Returns a small result
-  /// map rather than throwing on a plain user-cancelled picker, since that's
-  /// not really an error condition:
+  // Reused across calls (not recreated per sign-in attempt) — on web this
+  // matters: the constructor kicks off the platform's async init, and the
+  // rendered GIS button (see google_web_signin_web.dart) and the
+  // onCurrentUserChanged stream below both need to be bound to the SAME
+  // instance for the button's sign-in to actually surface here.
+  GoogleSignIn? _googleSignInInstance;
+  GoogleSignIn get googleSignInInstance {
+    return _googleSignInInstance ??= GoogleSignIn(
+      clientId: kIsWeb ? ApiConfig.googleWebClientId : null,
+      scopes: ['email', 'profile'],
+    );
+  }
+
+  /// Sign in (or sign up, transparently) with Google — mobile path only.
+  /// google_sign_in_web's own source is explicit that this imperative
+  /// `.signIn()` flow "can't reliably provide an idToken" on web (Google
+  /// Identity Services requires their own rendered button for that), so on
+  /// web the UI must use `googleSignInInstance` + the GIS button widget +
+  /// `completeGoogleAuth` instead of calling this method.
+  /// Returns a small result map rather than throwing on a plain
+  /// user-cancelled picker, since that's not really an error condition:
   ///   {'success': false, 'cancelled': true}                                  — user closed the picker
   ///   {'success': true, 'needsProfileCompletion': bool, 'isNewUser': bool}   — signed in
-  /// needsProfileCompletion drives whether the caller must push the blocking
-  /// required-fields screen before treating the session as fully usable.
   Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
 
-      final googleSignIn = GoogleSignIn(
-        clientId: kIsWeb ? ApiConfig.googleWebClientId : null,
-        scopes: ['email', 'profile'],
-      );
-
-      final account = await googleSignIn.signIn();
+      final account = await googleSignInInstance.signIn();
       if (account == null) {
         _isLoading = false;
         notifyListeners();
         return {'success': false, 'cancelled': true};
       }
+
+      return await completeGoogleAuth(account);
+    } catch (e) {
+      _errorMessage = 'Google sign-in failed: ${e.toString()}';
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Shared tail end of Google sign-in, given an already-authenticated
+  /// [GoogleSignInAccount] — obtained via `.signIn()` on mobile, or via the
+  /// web's onCurrentUserChanged stream after the user interacts with the
+  /// rendered GIS button. Exchanges the Google ID token for a YSHOP session.
+  Future<Map<String, dynamic>> completeGoogleAuth(GoogleSignInAccount account) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
 
       final googleAuth = await account.authentication;
       final idToken = googleAuth.idToken;

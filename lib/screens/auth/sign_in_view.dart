@@ -3,6 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:provider/provider.dart';
@@ -19,6 +21,8 @@ import 'complete_profile_view.dart';
 import '../delivery/delivery_signup_view.dart';
 import '../delivery/delivery_home_view.dart';
 import '../stores/store_admin_view.dart';
+import '../../services/google_web_signin_stub.dart'
+    if (dart.library.html) '../../services/google_web_signin_web.dart';
 import 'admin_login_view.dart' as Admin;
 import 'sign_in_ui.dart';
 
@@ -120,10 +124,12 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
     );
     _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic);
     _animationController.forward();
+    _setUpGoogleWebListener();
   }
 
   @override
   void dispose() {
+    _googleWebSub?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -315,38 +321,67 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
   }
 
   void _handleGoogleSignIn() async {
+    // Mobile-only entry point — imperative popup flow. Web uses the
+    // rendered GIS button (_setUpGoogleWebListener) instead, since
+    // .signIn() can't reliably deliver an ID token there.
     if (_isLoading) return;
     setState(() { _isLoading = true; _message = ""; });
 
     try {
       final authManager = Provider.of<AuthManager>(context, listen: false);
       final result = await authManager.signInWithGoogle();
-
       if (!mounted) return;
       if (result['success'] != true) {
         // User closed the Google picker — not an error, just do nothing.
         setState(() => _isLoading = false);
         return;
       }
-
-      if (result['needsProfileCompletion'] == true) {
-        if (widget.popOnSuccess) {
-          final completed = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => CompleteProfileView(popOnSuccess: true)),
-          );
-          if (completed == true && mounted) Navigator.of(context).pop(true);
-        } else {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const CompleteProfileView()),
-          );
-        }
-      } else {
-        _navigateToHomeScreen();
-      }
+      await _afterGoogleResult(result);
     } catch (e) {
       if (mounted) _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  StreamSubscription<GoogleSignInAccount?>? _googleWebSub;
+
+  /// Web-only: subscribe once to the shared GoogleSignIn instance's account
+  /// stream, which is what actually fires after the user interacts with the
+  /// native rendered GIS button (see SignInUIComponents.webGoogleButton /
+  /// AuthManager.googleSignInInstance).
+  void _setUpGoogleWebListener() {
+    if (!kIsWeb || _googleWebSub != null) return;
+    final authManager = Provider.of<AuthManager>(context, listen: false);
+    _googleWebSub = authManager.googleSignInInstance.onCurrentUserChanged.listen((account) async {
+      if (account == null || _isLoading || !mounted) return;
+      setState(() { _isLoading = true; _message = ""; });
+      try {
+        final result = await authManager.completeGoogleAuth(account);
+        if (!mounted) return;
+        await _afterGoogleResult(result);
+      } catch (e) {
+        if (mounted) _showError(e.toString().replaceAll('Exception: ', ''));
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    });
+  }
+
+  Future<void> _afterGoogleResult(Map<String, dynamic> result) async {
+    if (result['needsProfileCompletion'] == true) {
+      if (widget.popOnSuccess) {
+        final completed = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(builder: (_) => CompleteProfileView(popOnSuccess: true)),
+        );
+        if (completed == true && mounted) Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const CompleteProfileView()),
+        );
+      }
+    } else {
+      _navigateToHomeScreen();
     }
   }
 
@@ -591,11 +626,17 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                   context: context,
                 ),
                 SignInUIComponents.googleSignInDivider(isDark: isDark),
-                SignInUIComponents.googleSignInButton(
-                  onTap: _handleGoogleSignIn,
-                  isLoading: _isLoading,
-                  isDark: isDark,
-                ),
+                // Web needs Google's own rendered button to get a real ID
+                // token (see google_web_signin_web.dart); the hand-painted
+                // button + imperative .signIn() only works on mobile.
+                if (kIsWeb)
+                  Center(child: buildGoogleWebSignInButton())
+                else
+                  SignInUIComponents.googleSignInButton(
+                    onTap: _handleGoogleSignIn,
+                    isLoading: _isLoading,
+                    isDark: isDark,
+                  ),
               ],
             ),
           const SizedBox(height: 20),

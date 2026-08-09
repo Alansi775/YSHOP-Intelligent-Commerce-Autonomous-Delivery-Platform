@@ -64,6 +64,10 @@ dependencies:
   flutter_dotenv: ^5.0.2
   flutter_local_notifications: ^18.0.1
   google_sign_in: ^6.3.0
+  # Direct dep (not just transitive) so app code can import web_only.dart's
+  # renderButton — required for a real ID token on web, see
+  # lib/services/google_web_signin_web.dart for why.
+  google_sign_in_web: ^0.12.4
 
 dev_dependencies:
   flutter_test:
