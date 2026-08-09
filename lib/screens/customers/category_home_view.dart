@@ -903,8 +903,10 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
   Widget _buildWebGlassNavbar(bool isDark) {
     final authManager = Provider.of<AuthManager>(context);
     final themeManager = Provider.of<ThemeManager>(context, listen: false);
-    final bgColor = isDark ? Colors.black.withOpacity(0.72) : Colors.white.withOpacity(0.88);
-    final borderColor = isDark ? Colors.white.withOpacity(0.09) : Colors.black.withOpacity(0.06);
+    // Genuinely transparent glass — just enough tint for the blur to read,
+    // not a near-solid bar sitting on top of the page.
+    final bgColor = isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.12);
+    final borderColor = isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
     final textColor = isDark ? Colors.white : Colors.black;
 
     return Positioned(
@@ -939,21 +941,25 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
                         color: textColor,
                       ),
                     ),
-                    const SizedBox(width: 28),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: categories.take(6).map((c) => _WebNavLink(
-                                label: c,
-                                color: textColor,
-                                onTap: () => Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => StoresListView(categoryName: c)),
-                                ),
-                              )).toList(),
+                      child: Center(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: categories.take(6).map((c) => _WebNavLink(
+                                  label: c,
+                                  color: textColor,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => StoresListView(categoryName: c)),
+                                  ),
+                                )).toList(),
+                          ),
                         ),
                       ),
                     ),
+                    const SizedBox(width: 12),
                     _WebIconBtn(
                       icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
                       color: textColor,
@@ -1256,57 +1262,60 @@ class _VideoSectionState extends State<_VideoSection> {
   @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.of(context).size.width;
-    final cardSize = (screenW * 0.45).clamp(220.0, 420.0);
-    final textColor = widget.isDark ? Colors.white : Colors.black;
+    final cardSize = (screenW * 0.45).clamp(280.0, 520.0);
 
-    return Column(
-      children: [
-        SizedBox(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sideGap = ((constraints.maxWidth - cardSize) / 2).clamp(0.0, double.infinity);
+        // Sit just inside the video's edge rather than out in the empty
+        // margin, so the arrows read as part of the video, not the page.
+        final arrowInset = (sideGap - 52).clamp(4.0, sideGap);
+
+        return SizedBox(
           height: cardSize,
-          child: PageView.builder(
-            controller: _pageController,
-            physics: const NeverScrollableScrollPhysics(),
-            itemBuilder: (context, index) {
-              final data = _videos[index % _videos.length];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: _VideoCard(
-                  videoData: data,
-                  isActive: index == (_pageController.hasClients ? (_pageController.page?.round() ?? _initialPage) : _initialPage),
-                ),
-              );
-            },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              PageView.builder(
+                controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final data = _videos[index % _videos.length];
+                  final isActive = index == (_pageController.hasClients ? (_pageController.page?.round() ?? _initialPage) : _initialPage);
+                  return Center(
+                    child: SizedBox(
+                      width: cardSize,
+                      height: cardSize,
+                      child: _VideoCard(
+                        videoData: data,
+                        isActive: isActive,
+                        dotCount: _videos.length,
+                        activeDot: _realIndex,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                left: arrowInset,
+                child: _CarouselArrow(icon: Icons.chevron_left_rounded, onTap: () => _go(-1)),
+              ),
+              Positioned(
+                right: arrowInset,
+                child: _CarouselArrow(icon: Icons.chevron_right_rounded, onTap: () => _go(1)),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _CarouselArrow(icon: Icons.chevron_left_rounded, color: textColor, onTap: () => _go(-1)),
-            const SizedBox(width: 16),
-            ...List.generate(_videos.length, (i) => Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == _realIndex ? 18 : 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: (i == _realIndex ? textColor : textColor.withOpacity(0.25)),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                )),
-            const SizedBox(width: 16),
-            _CarouselArrow(icon: Icons.chevron_right_rounded, color: textColor, onTap: () => _go(1)),
-          ],
-        ),
-      ],
+        );
+      },
     );
   }
 }
 
 class _CarouselArrow extends StatelessWidget {
   final IconData icon;
-  final Color color;
   final VoidCallback onTap;
-  const _CarouselArrow({required this.icon, required this.color, required this.onTap});
+  const _CarouselArrow({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1315,9 +1324,9 @@ class _CarouselArrow extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 34, height: 34,
-          decoration: BoxDecoration(color: color.withOpacity(0.08), shape: BoxShape.circle),
-          child: Icon(icon, size: 20, color: color),
+          width: 44, height: 44,
+          decoration: BoxDecoration(color: Colors.black.withOpacity(0.35), shape: BoxShape.circle),
+          child: Icon(icon, size: 24, color: Colors.white),
         ),
       ),
     );
@@ -1327,7 +1336,9 @@ class _CarouselArrow extends StatelessWidget {
 class _VideoCard extends StatefulWidget {
   final Map<String, String> videoData;
   final bool isActive;
-  const _VideoCard({required this.videoData, required this.isActive});
+  final int dotCount;
+  final int activeDot;
+  const _VideoCard({required this.videoData, required this.isActive, required this.dotCount, required this.activeDot});
 
   @override
   State<_VideoCard> createState() => _VideoCardState();
@@ -1393,29 +1404,62 @@ class _VideoCardState extends State<_VideoCard> {
               ),
             ),
           if (!widget.isActive) Container(color: Colors.black.withOpacity(0.55)),
+          // Subtle top scrim so the label stays legible over bright footage.
           Positioned(
+            top: 0, left: 0, right: 0,
+            height: 90,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 20,
             left: 16,
             right: 16,
-            bottom: 16,
             child: AnimatedOpacity(
               opacity: widget.isActive ? 1 : 0,
               duration: const Duration(milliseconds: 250),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     widget.videoData['label']!,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     widget.videoData['sub']!,
-                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12),
                   ),
                 ],
               ),
             ),
           ),
+          if (widget.isActive)
+            Positioned(
+              bottom: 14,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(widget.dotCount, (i) => Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: i == widget.activeDot ? 18 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(i == widget.activeDot ? 0.95 : 0.4),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    )),
+              ),
+            ),
         ],
       ),
     );
