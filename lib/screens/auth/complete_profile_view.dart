@@ -44,16 +44,44 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
   bool _isLoading = false;
   String _message = '';
 
+  // True when this is a first-time Google sign-up — no account exists yet,
+  // there's no session token, and submitting calls completeGoogleSignup
+  // (which creates the account) instead of PUT /users/profile.
+  bool _isPendingGoogleSignup = false;
+  bool _nameLocked = false;
+  bool _surnameLocked = false;
+  String? _pendingEmail;
+
   @override
   void initState() {
     super.initState();
-    // Pre-fill whatever Google already gave us (display name), so the user
-    // isn't retyping something the sign-in already provided.
-    final profile = Provider.of<AuthManager>(context, listen: false).userProfile;
-    final name = profile?['name'] as String?;
-    final surname = profile?['surname'] as String?;
-    if (name != null && name.isNotEmpty) _nameController.text = name;
-    if (surname != null && surname.isNotEmpty) _surnameController.text = surname;
+    final authManager = Provider.of<AuthManager>(context, listen: false);
+    final pending = authManager.pendingGoogleProfile;
+    if (pending != null) {
+      // First-time Google sign-up. Whatever name Google actually gave us is
+      // locked (can't be changed here — it's already verified); anything it
+      // didn't provide stays editable and required like normal.
+      _isPendingGoogleSignup = true;
+      _pendingEmail = pending['email'] as String?;
+      final givenName = (pending['givenName'] as String?) ?? '';
+      final familyName = (pending['familyName'] as String?) ?? '';
+      if (givenName.isNotEmpty) {
+        _nameController.text = givenName;
+        _nameLocked = true;
+      }
+      if (familyName.isNotEmpty) {
+        _surnameController.text = familyName;
+        _surnameLocked = true;
+      }
+    } else {
+      // Already-authenticated account (existing user just missing required
+      // fields) — pre-fill whatever's already on file.
+      final profile = authManager.userProfile;
+      final name = profile?['name'] as String?;
+      final surname = profile?['surname'] as String?;
+      if (name != null && name.isNotEmpty) _nameController.text = name;
+      if (surname != null && surname.isNotEmpty) _surnameController.text = surname;
+    }
   }
 
   @override
@@ -105,34 +133,50 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
 
     setState(() { _isLoading = true; _message = ''; });
     try {
-      final response = await ApiService.putRequest('/users/profile', {
-        'displayName': '$name $surname',
-        'surname': surname,
-        'phone': phone,
-        'nationalId': nationalId,
-        'address': address,
-        'latitude': _latitude != 0.0 ? _latitude : null,
-        'longitude': _longitude != 0.0 ? _longitude : null,
-        'buildingInfo': _buildingInfoController.text.trim(),
-        'apartmentNumber': _apartmentNumberController.text.trim(),
-        'deliveryInstructions': _deliveryInstructionsController.text.trim(),
-      });
+      final authManager = Provider.of<AuthManager>(context, listen: false);
 
-      if (response != null && response['success'] == true) {
-        if (!mounted) return;
-        final authManager = Provider.of<AuthManager>(context, listen: false);
-        await authManager.refreshProfile();
-        if (!mounted) return;
-        if (widget.popOnSuccess) {
-          Navigator.of(context).pop(true);
-        } else {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const CategoryHomeView()),
-          );
+      if (_isPendingGoogleSignup) {
+        // Creates the account and a real session together — nothing was
+        // written to the database until this call succeeds.
+        await authManager.completeGoogleSignup(
+          phone: phone,
+          nationalId: nationalId,
+          address: address,
+          latitude: _latitude != 0.0 ? _latitude : null,
+          longitude: _longitude != 0.0 ? _longitude : null,
+          buildingInfo: _buildingInfoController.text.trim(),
+          apartmentNumber: _apartmentNumberController.text.trim(),
+          deliveryInstructions: _deliveryInstructionsController.text.trim(),
+          firstName: name,
+          surname: surname,
+        );
+      } else {
+        final response = await ApiService.putRequest('/users/profile', {
+          'displayName': '$name $surname',
+          'surname': surname,
+          'phone': phone,
+          'nationalId': nationalId,
+          'address': address,
+          'latitude': _latitude != 0.0 ? _latitude : null,
+          'longitude': _longitude != 0.0 ? _longitude : null,
+          'buildingInfo': _buildingInfoController.text.trim(),
+          'apartmentNumber': _apartmentNumberController.text.trim(),
+          'deliveryInstructions': _deliveryInstructionsController.text.trim(),
+        });
+        if (response == null || response['success'] != true) {
+          throw Exception(response?['message'] ?? 'Failed to save your details');
         }
-        return;
+        await authManager.refreshProfile();
       }
-      throw Exception(response?['message'] ?? 'Failed to save your details');
+
+      if (!mounted) return;
+      if (widget.popOnSuccess) {
+        Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const CategoryHomeView()),
+        );
+      }
     } catch (e) {
       if (mounted) setState(() => _message = e.toString().replaceAll('Exception: ', ''));
     } finally {
@@ -168,8 +212,23 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
                       style: TextStyle(fontSize: 14, color: (isDark ? Colors.white : Colors.black).withOpacity(0.6)),
                     ),
                     const SizedBox(height: 28),
-                    SignInUIComponents.luxuryInput(placeholder: 'NAME', controller: _nameController, isDark: isDark),
-                    SignInUIComponents.luxuryInput(placeholder: 'SURNAME', controller: _surnameController, isDark: isDark),
+                    if (_isPendingGoogleSignup && _pendingEmail != null) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.lock_outline, size: 14, color: (isDark ? Colors.white : Colors.black).withOpacity(0.4)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Signing up as $_pendingEmail',
+                              style: TextStyle(fontSize: 13, color: (isDark ? Colors.white : Colors.black).withOpacity(0.5)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    SignInUIComponents.luxuryInput(placeholder: _nameLocked ? 'NAME (FROM GOOGLE)' : 'NAME', controller: _nameController, isDark: isDark, readOnly: _nameLocked),
+                    SignInUIComponents.luxuryInput(placeholder: _surnameLocked ? 'SURNAME (FROM GOOGLE)' : 'SURNAME', controller: _surnameController, isDark: isDark, readOnly: _surnameLocked),
                     SignInUIComponents.luxuryInput(placeholder: 'NATIONAL ID / RESIDENCY', controller: _nationalIdController, isDark: isDark, keyboardType: TextInputType.number),
                     SignInUIComponents.luxuryInput(placeholder: 'PHONE NUMBER', controller: _phoneController, isDark: isDark, keyboardType: TextInputType.phone),
                     const SizedBox(height: 8),

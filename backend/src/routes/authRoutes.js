@@ -10,6 +10,7 @@ router.post('/delivery-signup', AuthController.deliverySignup);
 router.post('/store-signup', AuthController.storeSignup);
 router.post('/login', AuthController.login);
 router.post('/google', AuthController.googleAuth);
+router.post('/google/complete-signup', AuthController.completeGoogleSignup);
 router.post('/store-login', AuthController.storeLogin);
 router.post('/delivery-login', AuthController.deliveryLogin);
 router.post('/verify-email', AuthController.verifyEmail);

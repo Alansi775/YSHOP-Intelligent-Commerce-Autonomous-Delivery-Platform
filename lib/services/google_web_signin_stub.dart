@@ -4,4 +4,8 @@
 // never actually rendered on those platforms.
 import 'package:flutter/material.dart';
 
-Widget buildGoogleWebSignInButton({double minimumWidth = 380}) => const SizedBox.shrink();
+Widget buildGoogleWebSignInButton({
+  required Widget child,
+  double width = 400,
+  double height = 52,
+}) => const SizedBox.shrink();

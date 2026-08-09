@@ -315,34 +315,48 @@ class SignInUIComponents {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: isLoading ? null : onTap,
-        child: Container(
-          height: 52,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: (isDark ? Colors.white : Colors.black).withOpacity(0.15)),
-          ),
-          child: isLoading
-              ? Center(
-                  child: SizedBox(
-                    width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: isDark ? Colors.white70 : Colors.black54),
-                  ),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(width: 20, height: 20, child: CustomPaint(painter: _GooglePainter())),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Continue with Google',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87),
-                    ),
-                  ],
-                ),
-        ),
+        child: googleSignInButtonFace(isDark: isDark, isLoading: isLoading),
       ),
+    );
+  }
+
+  /// The visual "face" of the Google button — same dark, pill-free luxury
+  /// styling as the other form fields/buttons on this screen. Split out
+  /// from [googleSignInButton] because web needs this exact look WITHOUT
+  /// its own tap handler: the actual click there has to land on Google's
+  /// real rendered button (stacked invisibly on top, see
+  /// google_web_signin_web.dart) rather than on this widget, since only
+  /// Google's own button reliably returns an ID token in a browser.
+  static Widget googleSignInButtonFace({
+    required bool isDark,
+    required bool isLoading,
+  }) {
+    return Container(
+      height: 52,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: (isDark ? Colors.white : Colors.black).withOpacity(0.15)),
+      ),
+      child: isLoading
+          ? Center(
+              child: SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: isDark ? Colors.white70 : Colors.black54),
+              ),
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(width: 20, height: 20, child: CustomPaint(painter: _GooglePainter())),
+                const SizedBox(width: 12),
+                Text(
+                  'Continue with Google',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87),
+                ),
+              ],
+            ),
     );
   }
 

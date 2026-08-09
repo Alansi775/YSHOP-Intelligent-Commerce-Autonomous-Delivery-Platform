@@ -374,10 +374,22 @@ class AuthManager with ChangeNotifier {
     }
   }
 
+  // Set only while a NEW Google user is mid-signup: the pending token plus
+  // whatever name Google actually gave us, held between the initial
+  // /auth/google call and the required-fields form being submitted
+  // (completeGoogleSignup). In-memory only, never persisted — if the user
+  // backs out of CompleteProfileView, this is just discarded and nothing
+  // was ever written to the database.
+  String? _pendingGoogleSignupToken;
+  Map<String, dynamic>? _pendingGoogleProfile;
+  Map<String, dynamic>? get pendingGoogleProfile => _pendingGoogleProfile;
+
   /// Shared tail end of Google sign-in, given an already-authenticated
   /// [GoogleSignInAccount] — obtained via `.signIn()` on mobile, or via the
   /// web's onCurrentUserChanged stream after the user interacts with the
-  /// rendered GIS button. Exchanges the Google ID token for a YSHOP session.
+  /// rendered GIS button. Exchanges the Google ID token for a YSHOP session
+  /// if the account already exists, or a short-lived pending-signup token
+  /// (see [completeGoogleSignup]) if it doesn't yet.
   Future<Map<String, dynamic>> completeGoogleAuth(GoogleSignInAccount account) async {
     try {
       _isLoading = true;
@@ -398,6 +410,17 @@ class AuthManager with ChangeNotifier {
       });
 
       if (response != null && response['success'] == true) {
+        if (response['isNewUser'] == true) {
+          // No account exists yet — nothing to save. Just hold onto the
+          // pending token + Google's name fields for CompleteProfileView.
+          _pendingGoogleSignupToken = response['pendingSignupToken'] as String?;
+          _pendingGoogleProfile = response['googleProfile'] as Map<String, dynamic>?;
+          _isLoading = false;
+          _errorMessage = null;
+          notifyListeners();
+          return {'success': true, 'needsProfileCompletion': true, 'isNewUser': true};
+        }
+
         final token = response['token'];
         final user = response['user'] ?? {};
         if (token == null) {
@@ -412,13 +435,80 @@ class AuthManager with ChangeNotifier {
         return {
           'success': true,
           'needsProfileCompletion': response['needsProfileCompletion'] == true,
-          'isNewUser': response['isNewUser'] == true,
+          'isNewUser': false,
         };
       }
 
       throw Exception(response?['message'] ?? 'Google sign-in failed');
     } catch (e) {
       _errorMessage = 'Google sign-in failed: ${e.toString()}';
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Submits the required-fields form after a first-time Google sign-in
+  /// (see CompleteProfileView) — creates the account and a real session
+  /// together in one call, using the pending token from [completeGoogleAuth].
+  /// [firstName]/[surname] are only used as a fallback for whatever Google
+  /// itself didn't provide (the backend ignores them if Google already gave
+  /// us that field — it can't be overridden client-side).
+  Future<void> completeGoogleSignup({
+    required String phone,
+    required String nationalId,
+    required String address,
+    double? latitude,
+    double? longitude,
+    String? buildingInfo,
+    String? apartmentNumber,
+    String? deliveryInstructions,
+    String? firstName,
+    String? surname,
+  }) async {
+    final pendingToken = _pendingGoogleSignupToken;
+    if (pendingToken == null) {
+      throw Exception('No pending Google sign-in — please sign in with Google again');
+    }
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      final response = await ApiService.postRequest('/auth/google/complete-signup', {
+        'pendingSignupToken': pendingToken,
+        'phone': phone,
+        'nationalId': nationalId,
+        'address': address,
+        'latitude': latitude,
+        'longitude': longitude,
+        'buildingInfo': buildingInfo,
+        'apartmentNumber': apartmentNumber,
+        'deliveryInstructions': deliveryInstructions,
+        'firstName': firstName,
+        'surname': surname,
+      });
+
+      if (response != null && response['success'] == true) {
+        final token = response['token'];
+        final user = response['user'] ?? {};
+        if (token == null) {
+          throw Exception('No authentication token received');
+        }
+
+        await _saveAuth(token, user, true);
+        _pendingGoogleSignupToken = null;
+        _pendingGoogleProfile = null;
+
+        _isLoading = false;
+        _errorMessage = null;
+        notifyListeners();
+        return;
+      }
+
+      throw Exception(response?['message'] ?? 'Failed to complete sign-up');
+    } catch (e) {
+      _errorMessage = 'Failed to complete sign-up: ${e.toString()}';
       _isLoading = false;
       notifyListeners();
       rethrow;

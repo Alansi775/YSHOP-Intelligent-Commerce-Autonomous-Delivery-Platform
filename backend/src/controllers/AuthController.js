@@ -2,13 +2,15 @@ import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
-import { generateJWT, generateVerificationToken, generateTokenExpiry } from '../utils/tokenUtils.js';
+import { generateJWT, generateVerificationToken, generateTokenExpiry, generatePendingGoogleSignupToken, verifyPendingGoogleSignupToken } from '../utils/tokenUtils.js';
 import { getEmailService } from '../utils/emailService.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
-const googleClient = new OAuth2Client(GOOGLE_OAUTH_CLIENT_ID);
+const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID; // Web client
+const GOOGLE_IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID; // Native iOS client — different client ID, same Google project
+const GOOGLE_AUDIENCES = [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_IOS_CLIENT_ID].filter(Boolean);
+const googleClient = new OAuth2Client();
 
 class AuthController {
   // POST /api/v1/auth/signup
@@ -392,14 +394,17 @@ class AuthController {
       if (!idToken) {
         return res.status(400).json({ success: false, message: 'idToken is required' });
       }
-      if (!GOOGLE_OAUTH_CLIENT_ID) {
-        logger.error('GOOGLE_OAUTH_CLIENT_ID is not configured on the server');
+      if (GOOGLE_AUDIENCES.length === 0) {
+        logger.error('Neither GOOGLE_OAUTH_CLIENT_ID nor GOOGLE_IOS_CLIENT_ID is configured on the server');
         return res.status(500).json({ success: false, message: 'Google sign-in is not configured on the server' });
       }
 
+      // Web and native iOS use DIFFERENT OAuth client IDs (same Google
+      // project), so an ID token's `aud` claim can legitimately be either
+      // one — verifyIdToken accepts an array and matches any of them.
       let payload;
       try {
-        const ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_OAUTH_CLIENT_ID });
+        const ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_AUDIENCES });
         payload = ticket.getPayload();
       } catch (err) {
         logger.warn('Google ID token verification failed:', err.message);
@@ -413,60 +418,133 @@ class AuthController {
 
       const connection = await pool.getConnection();
       try {
-        const [existing] = await connection.execute('SELECT * FROM users WHERE email = ?', [email]);
-
-        let user;
-        let isNewUser = false;
+        const [existing] = await connection.execute(
+          `SELECT id, uid, email, display_name, phone, address, name, surname,
+                  national_id, latitude, longitude, building_info, apartment_number,
+                  delivery_instructions, email_verified
+           FROM users WHERE email = ?`,
+          [email]
+        );
 
         if (existing.length > 0) {
-          user = existing[0];
+          // Account already exists — this is just a login. Return the FULL
+          // profile (not a stripped id/email/display_name shape) so the
+          // client doesn't need a second round trip to show the user's real
+          // address/phone/etc. right away.
+          const user = existing[0];
           if (!user.email_verified) {
             await connection.execute('UPDATE users SET email_verified = TRUE WHERE id = ?', [user.id]);
             user.email_verified = 1;
           }
-        } else {
-          isNewUser = true;
-          const uid = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const displayName = payload.name || email.split('@')[0];
-          const nameParts = displayName.trim().split(/\s+/);
-          const firstName = nameParts[0] || '';
-          const lastName = nameParts.slice(1).join(' ') || '';
 
-          await connection.execute(
-            `INSERT INTO users (uid, email, password_hash, display_name, name, surname, email_verified)
-             VALUES (?, ?, NULL, ?, ?, ?, TRUE)`,
-            [uid, email, displayName, firstName, lastName]
+          const needsProfileCompletion = !(
+            user.name && user.surname && user.national_id && user.address && user.phone
           );
-          const [rows] = await connection.execute('SELECT * FROM users WHERE uid = ?', [uid]);
-          user = rows[0];
+
+          const token = generateJWT(user.uid, user.email, 'customer');
+
+          return res.json({
+            success: true,
+            token,
+            isNewUser: false,
+            needsProfileCompletion,
+            user: { ...user, userType: 'customer' },
+          });
         }
 
-        const needsProfileCompletion = !(
-          user.name && user.surname && user.national_id && user.address && user.phone
-        );
-
-        const token = generateJWT(user.uid, user.email, 'customer');
+        // No account yet. Do NOT create one here — the row only gets
+        // written once the required-fields form is actually submitted
+        // (completeGoogleSignup below). Google already verified this
+        // identity, so hand back a short-lived pending token plus whatever
+        // name Google is willing to give us, instead of a real session.
+        const givenName = payload.given_name || '';
+        const familyName = payload.family_name || '';
+        const pendingSignupToken = generatePendingGoogleSignupToken(email, givenName, familyName);
 
         return res.json({
           success: true,
-          token,
-          isNewUser,
-          needsProfileCompletion,
-          user: {
-            id: user.id,
-            uid: user.uid,
-            email: user.email,
-            display_name: user.display_name,
-            name: user.name,
-            surname: user.surname,
-            userType: 'customer',
-          },
+          isNewUser: true,
+          needsProfileCompletion: true,
+          pendingSignupToken,
+          googleProfile: { email, givenName, familyName, name: payload.name || '' },
         });
       } finally {
         connection.release();
       }
     } catch (error) {
       logger.error('Error in googleAuth:', error);
+      next(error);
+    }
+  }
+
+  // POST /api/v1/auth/google/complete-signup — finishes a first-time Google
+  // sign-in. Takes the pending token from googleAuth plus the required
+  // fields (same set the email/password signup form collects) and creates
+  // the `users` row and a real session together, atomically. If the client
+  // never calls this (user backs out mid-flow), nothing was ever written —
+  // the pending token just expires 15 minutes later.
+  static async completeGoogleSignup(req, res, next) {
+    try {
+      const {
+        pendingSignupToken, phone, nationalId, address, latitude, longitude,
+        buildingInfo, apartmentNumber, deliveryInstructions, firstName, surname,
+      } = req.body;
+
+      if (!pendingSignupToken) {
+        return res.status(400).json({ success: false, message: 'pendingSignupToken is required' });
+      }
+
+      const pending = verifyPendingGoogleSignupToken(pendingSignupToken);
+      if (!pending) {
+        return res.status(401).json({ success: false, message: 'Your sign-in session expired — please sign in with Google again' });
+      }
+
+      // Whatever Google actually provided wins — the client can't override
+      // an identity field Google already verified. Client-supplied
+      // firstName/surname only fill in what Google didn't give us.
+      const resolvedFirstName = pending.givenName || (firstName || '').trim();
+      const resolvedSurname = pending.familyName || (surname || '').trim();
+
+      if (!resolvedFirstName || !resolvedSurname || !phone || !nationalId || !address) {
+        return res.status(400).json({ success: false, message: 'All required fields must be filled in' });
+      }
+
+      const connection = await pool.getConnection();
+      try {
+        const [existing] = await connection.execute('SELECT id FROM users WHERE email = ?', [pending.email]);
+        if (existing.length > 0) {
+          return res.status(409).json({ success: false, message: 'This account already exists — please sign in normally' });
+        }
+
+        const uid = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const displayName = `${resolvedFirstName} ${resolvedSurname}`.trim();
+
+        await connection.execute(
+          `INSERT INTO users (uid, email, password_hash, display_name, name, surname, phone, national_id, address, latitude, longitude, building_info, apartment_number, delivery_instructions, email_verified)
+           VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+          [uid, pending.email, displayName, resolvedFirstName, resolvedSurname, phone, nationalId, address, latitude || null, longitude || null, buildingInfo || null, apartmentNumber || null, deliveryInstructions || null]
+        );
+
+        const [rows] = await connection.execute(
+          `SELECT id, uid, email, display_name, phone, address, name, surname,
+                  national_id, latitude, longitude, building_info, apartment_number,
+                  delivery_instructions
+           FROM users WHERE uid = ?`,
+          [uid]
+        );
+        const user = rows[0];
+        const token = generateJWT(user.uid, user.email, 'customer');
+
+        return res.json({
+          success: true,
+          token,
+          user: { ...user, userType: 'customer' },
+        });
+      } finally {
+        connection.release();
+      }
+    } catch (error) {
+      logger.error('Error in completeGoogleSignup:', error);
       next(error);
     }
   }

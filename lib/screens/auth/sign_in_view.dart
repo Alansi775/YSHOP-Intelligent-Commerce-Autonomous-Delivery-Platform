@@ -630,7 +630,11 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                 // token (see google_web_signin_web.dart); the hand-painted
                 // button + imperative .signIn() only works on mobile.
                 if (kIsWeb)
-                  Center(child: buildGoogleWebSignInButton())
+                  Center(
+                    child: buildGoogleWebSignInButton(
+                      child: SignInUIComponents.googleSignInButtonFace(isDark: isDark, isLoading: false),
+                    ),
+                  )
                 else
                   SignInUIComponents.googleSignInButton(
                     onTap: _handleGoogleSignIn,
