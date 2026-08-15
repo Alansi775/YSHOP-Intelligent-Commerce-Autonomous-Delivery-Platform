@@ -204,6 +204,15 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
+            // Flutter's default (~250px beyond the viewport) disposes and
+            // later rebuilds each product card as it scrolls out of and
+            // back into range — invisible for static content, but for
+            // CachedNetworkImage that means the widget genuinely re-mounts
+            // and briefly shows its placeholder again, which reads as the
+            // photo "disappearing" on every scroll down-then-up. A large
+            // cacheExtent keeps a full store's worth of cards actually
+            // alive instead of being torn down and rebuilt.
+            cacheExtent: 4000,
             slivers: [
               //  SPACER - مساحة للبرغر
               SliverToBoxAdapter(
@@ -606,10 +615,10 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     // عدد الأعمدة يتكيف مع الشاشة
     final int columns = isMobile ? 2 : (screenWidth < 900 ? 3 : 4);
     
-    // The card is a compact fixed-height image + two text lines now (was a
-    // flex-stretched image filling most of the cell) — a shorter cell fits
-    // it without a lot of empty space at the bottom.
-    final double childAspectRatio = isMobile ? 0.74 : 0.85;
+    // Image is Expanded inside the card now (fills whatever height the
+    // cell has left over after the text), so a taller cell just means a
+    // bigger, more prominent image instead of empty dead space.
+    final double childAspectRatio = isMobile ? 0.62 : 0.78;
 
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -623,7 +632,15 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final product = filtered[index];
-            return _buildProductCardWithAnimation(product, index, isDark);
+            // Stable key (product id, not list position) so scrolling a
+            // card off-screen and back doesn't make Flutter treat the
+            // rebuilt widget as a brand new one — that mismatch was part
+            // of why images "disappeared" and had to reload on every
+            // scroll back into view.
+            return KeyedSubtree(
+              key: ValueKey('product_card_${product.id}'),
+              child: _buildProductCardWithAnimation(product, index, isDark),
+            );
           },
           childCount: filtered.length,
         ),
@@ -631,30 +648,20 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     );
   }
 
-  // هذه الدالة ضرورية لربط الأنيميشن بالكارت
+  // Lightweight fade-in only — the previous version also computed a
+  // per-frame Matrix4 translate+rotate for every card while the whole grid
+  // reveals, which is real CPU/compositing cost multiplied by however many
+  // cards are on screen at once. A plain Opacity ramp (no matrix work) is
+  // dramatically cheaper and reads as noticeably snappier while looking
+  // essentially the same.
   Widget _buildProductCardWithAnimation(Product product, int index, bool isDark) {
     return AnimatedBuilder(
       animation: _productsRevealController,
       builder: (context, child) {
-        final delay = (index % 6) * 0.1;
+        final delay = (index % 8) * 0.05;
         final adjustedValue = (_productsRevealController.value - delay) / (1 - delay);
-        final t = Curves.easeOutCubic.transform(adjustedValue.clamp(0.0, 1.0));
-        
-        final isEven = index % 2 == 0;
-        final offsetX = isEven ? -30.0 * (1 - t) : 30.0 * (1 - t);
-        final offsetY = 40.0 * (1 - t);
-        final rotation = (isEven ? -0.1 : 0.1) * (1 - t);
-        
-        return Opacity(
-          opacity: t.clamp(0.0, 1.0),
-          child: Transform(
-            transform: Matrix4.identity()
-              ..translate(offsetX, offsetY)
-              ..rotateZ(rotation),
-            alignment: Alignment.center,
-            child: child,
-          ),
-        );
+        final t = adjustedValue.clamp(0.0, 1.0);
+        return Opacity(opacity: t, child: child);
       },
       child: _buildProductCard(product, isDark),
     );
@@ -684,14 +691,17 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Hero(
-                tag: 'product_${product.id}',
-                child: SizedBox(
-                  height: 130,
+            // Expanded, not a fixed height — the card fills whatever
+            // height the grid cell gives it either way, so a fixed image
+            // height just left a big dead gap below the text. This makes
+            // the image the dominant, flexible part of the card again.
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Hero(
+                  tag: 'product_${product.id}',
+                  child: SizedBox(
                   width: double.infinity,
                   child: CachedNetworkImage(
                     imageUrl: product.imageUrl,
@@ -718,6 +728,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                     ),
                   ),
                 ),
+              ),
               ),
             ),
             const SizedBox(height: 10),

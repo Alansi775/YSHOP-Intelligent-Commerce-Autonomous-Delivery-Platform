@@ -1264,16 +1264,11 @@ class _FullScreenImageViewer extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Blurred background
-          CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover),
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-            child: Container(
-              color: isDark
-                  ? Colors.black.withOpacity(0.7)
-                  : Colors.white.withOpacity(0.7),
-            ),
-          ),
+          // Plain solid backdrop, same as a normal photo viewer (Photos,
+          // Instagram, etc.) — the stretched/blurred product photo used to
+          // sit here too, which is the same "screen dominated by the
+          // product's own colors" issue fixed on the main detail screen.
+          Container(color: isDark ? Colors.black : Colors.white),
           // Interactive image
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),

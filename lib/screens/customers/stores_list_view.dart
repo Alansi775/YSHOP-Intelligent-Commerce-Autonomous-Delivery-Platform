@@ -191,6 +191,7 @@ class _StoresListViewState extends State<StoresListView> {
       itemBuilder: (context, index) {
         final store = _stores[index];
         return StoreCard(
+          key: ValueKey('store_card_${store.id}'),
           store: store,
           onTap: () {
             Navigator.of(context).push(
