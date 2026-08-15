@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/store.dart';
 import '../screens/auth/sign_in_ui.dart'; // LuxuryTheme
 import '../state_management/theme_manager.dart';

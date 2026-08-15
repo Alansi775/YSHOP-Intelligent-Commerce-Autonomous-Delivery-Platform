@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../models/product.dart';
 import '../../models/store.dart';
@@ -435,13 +434,16 @@ class _ProductDetailViewState extends State<ProductDetailView>
                         onTap: () => _showImageFullScreen(isDark),
                         child: Padding(
                           padding: EdgeInsets.only(top: topPad + 60, bottom: 40),
-                          child: CachedNetworkImage(
-                            imageUrl: widget.product.imageUrl,
+                          child: Image.network(
+                            widget.product.imageUrl,
                             fit: BoxFit.contain,
-                            placeholder: (_, __) => const Center(
-                              child: CircularProgressIndicator(strokeWidth: 1.5),
-                            ),
-                            errorWidget: (_, __, ___) =>
+                            loadingBuilder: (_, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(
+                                child: CircularProgressIndicator(strokeWidth: 1.5),
+                              );
+                            },
+                            errorBuilder: (_, __, ___) =>
                                 const Icon(Icons.broken_image, size: 48),
                           ),
                         ),
@@ -584,13 +586,16 @@ class _ProductDetailViewState extends State<ProductDetailView>
                           onTap: () => _showImageFullScreen(isDark),
                           child: Padding(
                             padding: const EdgeInsets.all(48),
-                            child: CachedNetworkImage(
-                              imageUrl: widget.product.imageUrl,
+                            child: Image.network(
+                              widget.product.imageUrl,
                               fit: BoxFit.contain,
-                              placeholder: (_, __) => const Center(
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 1.5)),
-                              errorWidget: (_, __, ___) =>
+                              loadingBuilder: (_, child, progress) {
+                                if (progress == null) return child;
+                                return const Center(
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 1.5));
+                              },
+                              errorBuilder: (_, __, ___) =>
                                   const Icon(Icons.broken_image, size: 64),
                             ),
                           ),
@@ -1012,13 +1017,16 @@ class _ProductDetailViewState extends State<ProductDetailView>
             child: _storeIconUrl != null && _storeIconUrl!.isNotEmpty
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: CachedNetworkImage(
-                      imageUrl: _storeIconUrl!,
+                    child: Image.network(
+                      _storeIconUrl!,
                       width: 44,
                       height: 44,
                       fit: BoxFit.cover,
-                      placeholder: (c, u) => Container(color: theme.primaryColor.withOpacity(0.08)),
-                      errorWidget: (c, u, e) => Icon(Icons.storefront_rounded, color: theme.primaryColor, size: 22),
+                      loadingBuilder: (c, child, progress) {
+                        if (progress == null) return child;
+                        return Container(color: theme.primaryColor.withOpacity(0.08));
+                      },
+                      errorBuilder: (c, e, s) => Icon(Icons.storefront_rounded, color: theme.primaryColor, size: 22),
                     ),
                   )
                 : Icon(Icons.storefront_rounded, color: theme.primaryColor, size: 22),
@@ -1273,8 +1281,8 @@ class _FullScreenImageViewer extends StatelessWidget {
                   child: InteractiveViewer(
                     minScale: 0.5,
                     maxScale: 4.0,
-                    child: CachedNetworkImage(
-                      imageUrl: imageUrl,
+                    child: Image.network(
+                      imageUrl,
                       fit: BoxFit.contain,
                     ),
                   ),

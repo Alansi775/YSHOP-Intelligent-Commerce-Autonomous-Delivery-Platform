@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 
@@ -714,22 +713,21 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                 // shared-element animation.
                 child: SizedBox(
                   width: double.infinity,
-                  child: CachedNetworkImage(
-                    imageUrl: product.imageUrl,
+                  // Plain Image.network, not CachedNetworkImage — same fix
+                  // that solved the store icon disappearing. Grid cards
+                  // render these well under 200px, so still bounded via
+                  // cacheWidth.
+                  child: Image.network(
+                    product.imageUrl,
                     fit: BoxFit.cover,
-                    // Grid cards render these at well under 200px — without
-                    // this, every product photo (some are multi-MB
-                    // originals) was being decoded at full resolution into
-                    // memory. With dozens of products on screen that blew
-                    // through Flutter's image cache budget, which evicts
-                    // older entries under pressure — the actual cause of
-                    // images "disappearing" and everything feeling heavy
-                    // while scrolling.
-                    memCacheWidth: 360,
-                    placeholder: (c, u) => Container(
-                      color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
-                    ),
-                    errorWidget: (c, u, e) => Container(
+                    cacheWidth: 360,
+                    loadingBuilder: (c, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                      );
+                    },
+                    errorBuilder: (c, e, s) => Container(
                       color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
                       child: Icon(
                         Icons.image_not_supported_outlined,
