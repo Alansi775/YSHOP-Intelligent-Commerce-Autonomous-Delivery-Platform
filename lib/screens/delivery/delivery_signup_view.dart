@@ -157,9 +157,27 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
           // Content
           SingleChildScrollView(
             child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 500),
-                child: Padding(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Wide enough to pair fields side-by-side (see below) so a
+                  // laptop/web window doesn't need to scroll through every
+                  // field stacked individually to reach Submit.
+                  final isWide = constraints.maxWidth > 700;
+                  return ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: isWide ? 640 : 500),
+                    child: _buildForm(isDark, isWide),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForm(bool isDark, bool isWide) {
+    return Padding(
                   padding: const EdgeInsets.all(30.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -225,20 +243,21 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
                                   isDark: isDark,
                                 ),
 
-                                // Phone
-                                SignInUIComponents.luxuryInput(
-                                  placeholder: "PHONE NUMBER",
-                                  controller: _phoneController,
-                                  keyboardType: TextInputType.phone,
-                                  isDark: isDark,
-                                ),
-
-                                // National ID
-                                SignInUIComponents.luxuryInput(
-                                  placeholder: "NATIONAL ID",
-                                  controller: _nationalIDController,
-                                  keyboardType: TextInputType.number,
-                                  isDark: isDark,
+                                // Phone + National ID
+                                SignInUIComponents.fieldPair(
+                                  isWide: isWide,
+                                  first: SignInUIComponents.luxuryInput(
+                                    placeholder: "PHONE NUMBER",
+                                    controller: _phoneController,
+                                    keyboardType: TextInputType.phone,
+                                    isDark: isDark,
+                                  ),
+                                  second: SignInUIComponents.luxuryInput(
+                                    placeholder: "NATIONAL ID",
+                                    controller: _nationalIDController,
+                                    keyboardType: TextInputType.number,
+                                    isDark: isDark,
+                                  ),
                                 ),
 
                                 // Location Picker
@@ -264,21 +283,22 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
                                   isDark: isDark,
                                 ),
 
-                                // Password
-                                SignInUIComponents.luxuryInput(
-                                  placeholder: "CREATE PASSWORD",
-                                  controller: _passwordController,
-                                  isSecure: true,
-                                  isDark: isDark,
-                                ),
-
-                                // Confirm Password
-                                SignInUIComponents.luxuryInput(
-                                  placeholder: "CONFIRM PASSWORD",
-                                  controller: _confirmPasswordController,
-                                  isSecure: true,
-                                  onSubmitted: (_) => _requestDriverAccount(),
-                                  isDark: isDark,
+                                // Password + Confirm Password
+                                SignInUIComponents.fieldPair(
+                                  isWide: isWide,
+                                  first: SignInUIComponents.luxuryInput(
+                                    placeholder: "CREATE PASSWORD",
+                                    controller: _passwordController,
+                                    isSecure: true,
+                                    isDark: isDark,
+                                  ),
+                                  second: SignInUIComponents.luxuryInput(
+                                    placeholder: "CONFIRM PASSWORD",
+                                    controller: _confirmPasswordController,
+                                    isSecure: true,
+                                    onSubmitted: (_) => _requestDriverAccount(),
+                                    isDark: isDark,
+                                  ),
                                 ),
 
                                 const SizedBox(height: 10),
@@ -316,12 +336,6 @@ class _DeliverySignupViewState extends State<DeliverySignupView> {
                       const SizedBox(height: 40),
                     ],
                   ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

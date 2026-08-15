@@ -506,7 +506,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
     }
   }
 
-  Widget _buildCurrentForm(bool isDark) {
+  Widget _buildCurrentForm(bool isDark, {bool isWide = false}) {
     if (_isStoreOwner) {
       return Column(
         children: [
@@ -531,6 +531,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                   onRequest: _requestStoreOwnerAccount,
                   isLoading: _isLoading,
                   context: context,
+                  isWide: isWide,
                 ),
                 SignInUIComponents.prestigeButton(
                   title: "BACK",
@@ -614,6 +615,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
               onSignUp: _signUpCustomer,
               isLoading: _isLoading,
               context: context,
+              isWide: isWide,
             )
           else
             Column(
@@ -807,7 +809,13 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                             padding: const EdgeInsets.all(30),
                             child: Center(
                               child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 420),
+                              // Wide enough for the two-column field layout
+                              // (SignInUIComponents._fieldPair) to actually
+                              // fit two inputs per row without cramping —
+                              // at the old 420 the multi-field signup forms
+                              // stacked every field individually and needed
+                              // scrolling inside the card to reach Submit.
+                              constraints: const BoxConstraints(maxWidth: 640),
                                 child: _buildGlassCard(isDark),
                               ),
                             ),
@@ -980,7 +988,7 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                     ),
                     child: KeyedSubtree(
                       key: ValueKey("$_isStoreOwner$_showSignUp$_isNewStoreOwner"),
-                      child: _buildCurrentForm(isDark),
+                      child: _buildCurrentForm(isDark, isWide: !isMobile),
                     ),
                   ),
 

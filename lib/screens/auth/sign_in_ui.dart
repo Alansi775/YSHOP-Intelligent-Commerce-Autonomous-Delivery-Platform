@@ -360,6 +360,23 @@ class SignInUIComponents {
     );
   }
 
+  /// Pairs two fields side-by-side on wide/web layouts, stacked otherwise —
+  /// keeps mobile untouched while letting a wide screen avoid a tall
+  /// single-column form that needs scrolling to reach the submit button.
+  static Widget fieldPair({required bool isWide, required Widget first, required Widget second}) {
+    if (!isWide) {
+      return Column(children: [first, second]);
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: first),
+        const SizedBox(width: 15),
+        Expanded(child: second),
+      ],
+    );
+  }
+
   static Widget signUpCustomerForm({
     required TextEditingController nameController,
     required TextEditingController surnameController,
@@ -376,6 +393,7 @@ class SignInUIComponents {
     required VoidCallback onSignUp,
     required bool isLoading,
     required BuildContext context,
+    bool isWide = false,
   }) {
     bool isDark = LuxuryTheme.isDark(context);
     return Column(
@@ -385,30 +403,38 @@ class SignInUIComponents {
           const SizedBox(width: 15),
           Expanded(child: luxuryInput(placeholder: "SURNAME", controller: surnameController, isDark: isDark)),
         ]),
-        luxuryInput(placeholder: "NATIONAL ID / RESIDENCY", controller: nationalIdController, keyboardType: TextInputType.number, isDark: isDark),
-        luxuryInput(placeholder: "PHONE NUMBER", controller: phoneController, keyboardType: TextInputType.phone, isDark: isDark),
-        
+        fieldPair(
+          isWide: isWide,
+          first: luxuryInput(placeholder: "NATIONAL ID / RESIDENCY", controller: nationalIdController, keyboardType: TextInputType.number, isDark: isDark),
+          second: luxuryInput(placeholder: "PHONE NUMBER", controller: phoneController, keyboardType: TextInputType.phone, isDark: isDark),
+        ),
+
         // Map Selection - Styled as a secondary luxury button
         Container(
           margin: const EdgeInsets.only(bottom: 15),
           child: prestigeButton(
-            title: addressController.text.isEmpty ? "PICK ON MAP" : "📍 ${addressController.text}", 
-            action: onSelectMap, 
-            isLoading: false, 
+            title: addressController.text.isEmpty ? "PICK ON MAP" : "📍 ${addressController.text}",
+            action: onSelectMap,
+            isLoading: false,
             isDark: isDark,
               isPrimary: false,
               leadingIcon: Icons.location_on,
           ),
         ),
 
-        
-        luxuryInput(placeholder: "BUILDING NAME (NUMBER)", controller: buildingInfoController, isDark: isDark), 
-        luxuryInput(placeholder: "APARTMENT NUMBER", controller: apartmentNumberController, isDark: isDark),
+        fieldPair(
+          isWide: isWide,
+          first: luxuryInput(placeholder: "BUILDING NAME (NUMBER)", controller: buildingInfoController, isDark: isDark),
+          second: luxuryInput(placeholder: "APARTMENT NUMBER", controller: apartmentNumberController, isDark: isDark),
+        ),
         luxuryInput(placeholder: "DELIVERY INSTRUCTIONS", controller: deliveryInstructionsController, isDark: isDark),
         luxuryInput(placeholder: "EMAIL ACCESS", controller: emailController, keyboardType: TextInputType.emailAddress, isDark: isDark),
-        luxuryInput(placeholder: "CREATE PASSWORD", controller: passwordController, isSecure: true, isDark: isDark),
-        luxuryInput(placeholder: "CONFIRM PASSWORD", controller: confirmPasswordController, isSecure: true, onSubmitted: (_) => onSignUp(), isDark: isDark),
-        
+        fieldPair(
+          isWide: isWide,
+          first: luxuryInput(placeholder: "CREATE PASSWORD", controller: passwordController, isSecure: true, isDark: isDark),
+          second: luxuryInput(placeholder: "CONFIRM PASSWORD", controller: confirmPasswordController, isSecure: true, onSubmitted: (_) => onSignUp(), isDark: isDark),
+        ),
+
         const SizedBox(height: 10),
         prestigeButton(title: "INITIATE MEMBERSHIP", action: onSignUp, isLoading: isLoading, isDark: isDark),
       ],
@@ -447,6 +473,7 @@ class SignInUIComponents {
     required VoidCallback onRequest,
     required bool isLoading,
     required BuildContext context,
+    bool isWide = false,
   }) {
     bool isDark = LuxuryTheme.isDark(context);
     return Column(
@@ -499,11 +526,17 @@ class SignInUIComponents {
           ),
         ),
 
-        luxuryInput(placeholder: "OFFICIAL PHONE", controller: phoneController, keyboardType: TextInputType.phone, isDark: isDark),
-        luxuryInput(placeholder: "BUSINESS EMAIL", controller: emailController, keyboardType: TextInputType.emailAddress, isDark: isDark),
-        luxuryInput(placeholder: "ADMIN PASSWORD", controller: passwordController, isSecure: true, isDark: isDark),
-        luxuryInput(placeholder: "CONFIRM", controller: confirmPasswordController, isSecure: true, onSubmitted: (_) => onRequest(), isDark: isDark),
-        
+        fieldPair(
+          isWide: isWide,
+          first: luxuryInput(placeholder: "OFFICIAL PHONE", controller: phoneController, keyboardType: TextInputType.phone, isDark: isDark),
+          second: luxuryInput(placeholder: "BUSINESS EMAIL", controller: emailController, keyboardType: TextInputType.emailAddress, isDark: isDark),
+        ),
+        fieldPair(
+          isWide: isWide,
+          first: luxuryInput(placeholder: "ADMIN PASSWORD", controller: passwordController, isSecure: true, isDark: isDark),
+          second: luxuryInput(placeholder: "CONFIRM", controller: confirmPasswordController, isSecure: true, onSubmitted: (_) => onRequest(), isDark: isDark),
+        ),
+
         const SizedBox(height: 10),
         prestigeButton(title: "SUBMIT", action: onRequest, isLoading: isLoading, isDark: isDark),
       ],
