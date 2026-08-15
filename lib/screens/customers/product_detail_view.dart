@@ -14,7 +14,6 @@ import '../../state_management/theme_manager.dart';
 import '../../services/api_service.dart';
 import '../../widgets/centered_notification.dart';
 import '../../widgets/store_admin_widgets.dart';
-import '../stores/chat_view.dart';
 import '../auth/sign_in_view.dart';
 import '../../main.dart' show openCartDrawerSignal;
 
@@ -276,48 +275,6 @@ class _ProductDetailViewState extends State<ProductDetailView>
   }
 
   // ═══════════════════════════════════════════════════════════
-  //   CHAT ACTION
-  // ═══════════════════════════════════════════════════════════
-  void _startChat() {
-    if (widget.product.storeOwnerEmail == null ||
-        widget.product.storeOwnerEmail!.isEmpty) {
-      CenteredNotification.show(context, 'Store owner email not available.',
-          success: false);
-      return;
-    }
-
-    final authManager = Provider.of<AuthManager>(context, listen: false);
-    if (!authManager.isAuthenticated) {
-      CenteredNotification.show(context, 'Please login to start a chat.',
-          success: false);
-      return;
-    }
-
-    final String currentUserID = authManager.userProfile?['email'] ??
-        authManager.userProfile?['uid'] ??
-        '';
-    if (currentUserID.isEmpty) {
-      CenteredNotification.show(context, 'Unable to identify user.',
-          success: false);
-      return;
-    }
-
-    final String storeOwnerEmail = widget.product.storeOwnerEmail ?? 'N/A';
-    final String chatID =
-        '${currentUserID}_${storeOwnerEmail}_${widget.product.id}';
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ChatView(
-          chatID: chatID,
-          product: ProductS.fromProduct(widget.product),
-          currentUserID: currentUserID,
-          isStoreOwner: false,
-        ),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════
   //  🛒 ADD TO CART + OVERLAY
   // ═══════════════════════════════════════════════════════════
   void _showAddedToCartNotification(BuildContext context) {
@@ -459,18 +416,17 @@ class _ProductDetailViewState extends State<ProductDetailView>
                 background: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // الخلفية مع تأثير التعتيم (Blur) الممتاز
-                    CachedNetworkImage(
-                      imageUrl: widget.product.imageUrl,
-                      fit: BoxFit.cover,
-                    ),
-                    BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 35, sigmaY: 35),
-                      child: Container(
-                        color: isDark
-                            ? Colors.black.withOpacity(0.6)
-                            : Colors.white.withOpacity(0.5),
-                      ),
+                    // Plain neutral backdrop — same idea as the native iOS
+                    // app's secondarySystemBackground behind the image.
+                    // Using the product's own (blurred, BoxFit.cover) photo
+                    // as the background stretched the photo to fill the
+                    // full panel height, cropping its top/bottom, and made
+                    // the whole screen feel tinted by whatever colors that
+                    // one photo happened to have.
+                    Container(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : Colors.black.withOpacity(0.03),
                     ),
                     // الصورة الأساسية للمنتج
                     Center(
@@ -590,7 +546,14 @@ class _ProductDetailViewState extends State<ProductDetailView>
 
     return Stack(
       children: [
-        Row(
+        // Centered with a max width instead of stretching the two panels
+        // edge-to-edge — on an actual wide monitor that read as far too
+        // spread out; this keeps it a tidy, organized block in the middle
+        // of the screen like the rest of the web layouts in this app.
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1300),
+            child: Row(
           children: [
             // ── LEFT: Image Panel (50%) ──
             Expanded(
@@ -604,25 +567,19 @@ class _ProductDetailViewState extends State<ProductDetailView>
                   );
                 },
                 child: Container(
+                  // Plain neutral backdrop — same idea as the native iOS
+                  // app's secondarySystemBackground behind the image.
+                  // Using the product's own (blurred, BoxFit.cover) photo
+                  // as the background stretched it to fill the whole
+                  // panel height, cropping its top/bottom, and made the
+                  // whole screen feel tinted by whatever colors that one
+                  // photo happened to have.
                   color: isDark
-                      ? Colors.black.withOpacity(0.3)
-                      : Colors.grey.shade100,
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.black.withOpacity(0.03),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Blurred background
-                      CachedNetworkImage(
-                        imageUrl: widget.product.imageUrl,
-                        fit: BoxFit.cover,
-                      ),
-                      BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
-                        child: Container(
-                          color: isDark
-                              ? Colors.black.withOpacity(0.5)
-                              : Colors.white.withOpacity(0.3),
-                        ),
-                      ),
                       // Product image centered
                       Center(
                         child: GestureDetector(
@@ -795,6 +752,8 @@ class _ProductDetailViewState extends State<ProductDetailView>
               ),
             ),
           ],
+        ),
+          ),
         ),
 
         // ── Back Button (Desktop) ──
@@ -1092,35 +1051,6 @@ class _ProductDetailViewState extends State<ProductDetailView>
                   ),
                 ),
               ],
-            ),
-          ),
-          // Chat button
-          GestureDetector(
-            onTap: _startChat,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              decoration: BoxDecoration(
-                color: theme.primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.chat_bubble_outline_rounded,
-                      size: 15, color: theme.primaryColor),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Chat',
-                    style: TextStyle(
-                      fontFamily: fontTenor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.primaryColor,
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],

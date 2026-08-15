@@ -1973,10 +1973,17 @@ class ApiService {
         if (cached != null) return cached;
       }
 
+      // Categories are public catalog data, same as the products themselves
+      // (getStoreProductsById is requiresAuth: false) — gating this behind
+      // login meant a guest browsing a store (the whole point of this
+      // session's guest-browsing feature) silently got zero categories,
+      // since getStoreCategories swallows its own errors and just returns
+      // [] on the 401 thrown by requiresAuth. Left only "All" showing with
+      // no real category chips.
       final response = await _request(
         'GET',
         '/stores/$storeId/categories?t=${DateTime.now().millisecondsSinceEpoch}',
-        requiresAuth: true,
+        requiresAuth: false,
       );
 
       if (response is Map && response['data'] is List) {

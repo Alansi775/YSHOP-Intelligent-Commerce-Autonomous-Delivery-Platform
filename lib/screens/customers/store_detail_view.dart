@@ -333,14 +333,25 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                       ),
                     ),
                     child: ClipOval(
-                      child: CachedNetworkImage(
-                        imageUrl: widget.store.storeIconUrl,
-                        fit: BoxFit.cover,
-                      ),
+                      child: widget.store.storeIconUrl.isEmpty
+                          ? Container(
+                              color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                              child: Icon(Icons.store, size: 32, color: (isDark ? Colors.white : Colors.black).withOpacity(0.5)),
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: widget.store.storeIconUrl,
+                              fit: BoxFit.cover,
+                              memCacheWidth: 144,
+                              memCacheHeight: 144,
+                              errorWidget: (context, url, error) => Container(
+                                color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                                child: Icon(Icons.store, size: 32, color: (isDark ? Colors.white : Colors.black).withOpacity(0.5)),
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
+
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +372,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                             color: isDark ? Colors.white60 : Colors.black54,
                             fontSize: 12,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -595,8 +606,10 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     // عدد الأعمدة يتكيف مع الشاشة
     final int columns = isMobile ? 2 : (screenWidth < 900 ? 3 : 4);
     
-    // إعطاء نسبة طولية (aspect ratio) أفضل للجوال عشان الـ overflow
-    final double childAspectRatio = isMobile ? 0.60 : 0.75; 
+    // The card is a compact fixed-height image + two text lines now (was a
+    // flex-stretched image filling most of the cell) — a shorter cell fits
+    // it without a lot of empty space at the bottom.
+    final double childAspectRatio = isMobile ? 0.74 : 0.85;
 
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -647,6 +660,12 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     );
   }
 
+  // Matches the native iOS app's StoreMinimalProductCard exactly: a fixed-
+  // height cover image (no blur/glass), plain semi-transparent background,
+  // product name, and a price + subtle add icon row. The previous version's
+  // BackdropFilter blur on every single card (dozens on screen at once) was
+  // real GPU/compositing cost on top of the image-cache pressure fixed
+  // above — removing it also helps the "heavy while scrolling" feeling.
   Widget _buildProductCard(Product product, bool isDark) {
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -654,142 +673,102 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
         MaterialPageRoute(builder: (_) => ProductDetailView(product: product)),
       ),
       child: Container(
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: Colors.transparent,
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                ? Colors.black.withOpacity(0.32)
-                : Colors.black.withOpacity(0.06),
-              blurRadius: isDark ? 18 : 8,
-              offset: Offset(0, isDark ? 6 : 3),
-            ),
-          ],
+          color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark
-              ? Colors.white.withOpacity(0.06)
-              : Colors.black.withOpacity(0.04),
+            color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
             width: 1,
           ),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
-              color: isDark ? Colors.black.withOpacity(0.4) : Colors.white.withOpacity(0.6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 📸 صورة المنتج - تأخذ المساحة بمرونة
-                  Expanded(
-                    flex: 5, 
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
-                      child: Hero(
-                        tag: 'product_${product.id}',
-                        child: Center(
-                          child: CachedNetworkImage(
-                            imageUrl: product.imageUrl,
-                            fit: BoxFit.contain,
-                            placeholder: (c, u) => Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: isDark
-                                  ? const Color(0xFF4A9FFF)
-                                  : const Color(0xFF2196F3),
-                              ),
-                            ),
-                          ),
-                        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Hero(
+                tag: 'product_${product.id}',
+                child: SizedBox(
+                  height: 130,
+                  width: double.infinity,
+                  child: CachedNetworkImage(
+                    imageUrl: product.imageUrl,
+                    fit: BoxFit.cover,
+                    // Grid cards render these at well under 200px — without
+                    // this, every product photo (some are multi-MB
+                    // originals) was being decoded at full resolution into
+                    // memory. With dozens of products on screen that blew
+                    // through Flutter's image cache budget, which evicts
+                    // older entries under pressure — the actual cause of
+                    // images "disappearing" and everything feeling heavy
+                    // while scrolling.
+                    memCacheWidth: 360,
+                    placeholder: (c, u) => Container(
+                      color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                    ),
+                    errorWidget: (c, u, e) => Container(
+                      color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        color: (isDark ? Colors.white : Colors.black).withOpacity(0.2),
+                        size: 28,
                       ),
                     ),
                   ),
-                  
-                  // 📝 بيانات المنتج - معدلة لمنع الـ Overflow
-                  Flexible(
-                    flex: 3, 
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              product.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: 'TenorSans',
-                                color: isDark ? Colors.white : Colors.black87,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12, // تصغير بسيط ليناسب الجوال
-                                height: 1.1,
-                              ),
-                            ),
-                          ),
-                          
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  "${product.currency} ${product.price}",
-                                  style: TextStyle(
-                                    fontFamily: 'TenorSans',
-                                    color: isDark
-                                      ? const Color(0xFF4A9FFF)
-                                      : const Color(0xFF2196F3),
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                              // 🛒 زر الإضافة
-                              InkWell(
-                                borderRadius: BorderRadius.circular(10),
-                                onTap: () async {
-                                  try {
-                                    final cart = Provider.of<CartManager>(context, listen: false);
-                                    await cart.addToCart(product: product, quantity: 1);
-                                    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                                  } catch (e) {
-                                    ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Could not add item: $e')),
-                                    );
-                                  }
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                      ? Colors.white.withOpacity(0.08)
-                                      : Colors.black.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    Icons.add_shopping_cart_rounded,
-                                    size: 16, // تصغير الأيقونة قليلاً
-                                    color: isDark
-                                      ? const Color(0xFF4A9FFF)
-                                      : const Color(0xFF2196F3),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+            const SizedBox(height: 10),
+            Text(
+              product.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'TenorSans',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "${product.currency} ${product.price}",
+                    style: TextStyle(
+                      fontFamily: 'TenorSans',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? const Color(0xFF4A9FFF) : const Color(0xFF2196F3),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: () async {
+                    try {
+                      final cart = Provider.of<CartManager>(context, listen: false);
+                      await cart.addToCart(product: product, quantity: 1);
+                      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not add item: $e')),
+                      );
+                    }
+                  },
+                  child: Icon(
+                    Icons.add_circle_rounded,
+                    size: 20,
+                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.3),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

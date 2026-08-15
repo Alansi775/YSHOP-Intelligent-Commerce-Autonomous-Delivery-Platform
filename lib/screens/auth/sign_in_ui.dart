@@ -50,7 +50,7 @@ class _ObscurableLuxuryInputState extends State<_ObscurableLuxuryInput> {
     final isDark = widget.isDark;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withOpacity(0.05)
@@ -83,7 +83,7 @@ class _ObscurableLuxuryInputState extends State<_ObscurableLuxuryInput> {
                 fontSize: 14,
                 letterSpacing: 1,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               border: InputBorder.none,
               focusedBorder: InputBorder.none,
               enabledBorder: InputBorder.none,
@@ -134,7 +134,7 @@ class SignInUIComponents {
     const double inputRadius = 18;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withOpacity(0.05)
@@ -168,7 +168,7 @@ class SignInUIComponents {
                 fontSize: 14,
                 letterSpacing: 1,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               border: InputBorder.none,
               focusedBorder: InputBorder.none,
               enabledBorder: InputBorder.none,
@@ -411,7 +411,7 @@ class SignInUIComponents {
 
         // Map Selection - Styled as a secondary luxury button
         Container(
-          margin: const EdgeInsets.only(bottom: 15),
+          margin: const EdgeInsets.only(bottom: 12),
           child: prestigeButton(
             title: addressController.text.isEmpty ? "PICK ON MAP" : "📍 ${addressController.text}",
             action: onSelectMap,
@@ -484,7 +484,7 @@ class SignInUIComponents {
         GestureDetector(
           onTap: onSelectStoreType,
           child: Container(
-            margin: const EdgeInsets.only(bottom: 15),
+            margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             decoration: BoxDecoration(
               color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),

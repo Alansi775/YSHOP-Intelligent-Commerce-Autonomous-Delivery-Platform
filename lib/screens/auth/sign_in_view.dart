@@ -929,6 +929,14 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
   }
 
   Widget _buildGlassCard(bool isDark, {bool isMobile = false}) {
+    // The signup forms (11+ fields — name, surname, national ID, phone,
+    // address/map, building, apartment, delivery instructions, email,
+    // password, confirm) are just genuinely taller than the 2-field login
+    // form, so skip the purely-decorative branding animation there to
+    // claim back real vertical space. Transform.scale further down doesn't
+    // actually shrink the layout footprint (it only scales the paint), so
+    // that alone was never saving any room — only skipping it entirely does.
+    final isSignupMode = _isStoreOwner ? _isNewStoreOwner : _showSignUp;
     return ClipRRect(
       borderRadius: BorderRadius.circular(isMobile ? 22 : 16),
       child: BackdropFilter(
@@ -961,7 +969,9 @@ class _SignInViewState extends State<SignInView> with SingleTickerProviderStateM
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // WelcomingPageShimmer with animation
+                  // WelcomingPageShimmer with animation — skipped in signup
+                  // mode, see isSignupMode above.
+                  if (!isSignupMode)
                   FadeTransition(
                     opacity: _fadeAnimation,
                     child: Padding(

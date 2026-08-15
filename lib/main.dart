@@ -93,6 +93,16 @@ final _darkThemeData = ThemeData(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // This is an image-heavy commerce app (store icons, dozens of product
+  // photos per store screen) — the default 100MB cache budget was getting
+  // exhausted, evicting recently-viewed images under memory pressure
+  // (visible as images "disappearing" while scrolling, or a store's icon
+  // vanishing after browsing its products and going back). The real fix is
+  // decoding images at their actual display size (memCacheWidth on each
+  // CachedNetworkImage) rather than full original resolution — this is
+  // just a larger safety margin on top of that.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 250 << 20; // 250MB
+
   // Load environment variables from .env (do NOT commit secrets)
   // Prefer the project root .env because it is consistently bundled on web and desktop.
   try {

@@ -139,6 +139,17 @@ class _StoreCardState extends State<StoreCard> {
                                     width: 82,
                                     height: 82,
                                     fit: BoxFit.cover,
+                                    // Decoding at full original resolution
+                                    // (some of these are multi-MB photos)
+                                    // for an 82x82 circle was pushing a lot
+                                    // of memory into Flutter's image cache,
+                                    // which evicts older entries under
+                                    // pressure — including this same icon
+                                    // after browsing product-heavy screens,
+                                    // which is what made it "disappear"
+                                    // until a full refresh.
+                                    memCacheWidth: 164,
+                                    memCacheHeight: 164,
                                     placeholder: (context, url) => Container(
                                       color: textColor.withOpacity(0.08),
                                     ),
@@ -188,7 +199,7 @@ class _StoreCardState extends State<StoreCard> {
                                     color: secondaryText,
                                     fontWeight: FontWeight.w400,
                                   ),
-                                  maxLines: 1,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
