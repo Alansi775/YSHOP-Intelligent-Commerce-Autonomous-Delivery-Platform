@@ -449,17 +449,22 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     );
   }
 
+  // This is a sticky header — it stays pinned and re-composites on every
+  // scroll frame for as long as the user is browsing products, unlike the
+  // other blur panels in this app which are only visible briefly. A live
+  // BackdropFilter blur running continuously like that is real, ongoing
+  // GPU cost; a solid (not glass) background gets the same visual grouping
+  // without asking the GPU to blur whatever's scrolling underneath it
+  // every single frame.
   Widget _buildGlassyCategoryFilter(bool isDark) {
     return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
+      child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
           decoration: BoxDecoration(
             color: isDark
-              ? Colors.black.withOpacity(0.5)
-              : Colors.white.withOpacity(0.8),
+              ? const Color(0xFF0A0A0A).withOpacity(0.96)
+              : Colors.white.withOpacity(0.96),
             border: Border(
               top: BorderSide(
                 color: isDark
@@ -502,7 +507,6 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             ),
           ),
         ),
-      ),
     );
   }
 

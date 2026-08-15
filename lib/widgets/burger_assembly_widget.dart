@@ -387,10 +387,16 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
                 ),
               ),
             
-            // الصورة
+            // الصورة — every burger3D asset is a 1024x1024 PNG (~4MB
+            // decoded, uncompressed) regardless of how small it's shown;
+            // cacheWidth bounds the actual decoded bitmap to roughly what's
+            // displayed instead of always paying for the full source
+            // resolution. 6 layers load together on every single store
+            // visit, so this adds up.
             Image.asset(
               layer.asset,
               width: widget.height * 1.5,
+              cacheWidth: (widget.height * 1.5 * MediaQuery.of(context).devicePixelRatio).round(),
               fit: BoxFit.contain,
               gaplessPlayback: true,
             ),
