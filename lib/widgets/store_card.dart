@@ -134,26 +134,34 @@ class _StoreCardState extends State<StoreCard> {
                                   child: Icon(Icons.store, size: 40, color: textColor.withOpacity(0.6)),
                                 )
                               : ClipOval(
-                                  child: CachedNetworkImage(
-                                    imageUrl: widget.store.storeIconUrl,
+                                  // Plain Image.network, not
+                                  // CachedNetworkImage — this icon kept
+                                  // disappearing after navigating away and
+                                  // back even after sizing/memory fixes,
+                                  // while nothing else about this app (e.g.
+                                  // the native iOS build, a different
+                                  // image-loading stack entirely) has that
+                                  // problem at all. cached_network_image
+                                  // adds its own disk-cache/state layer on
+                                  // top of Flutter's normal image loading;
+                                  // dropping that extra layer for this
+                                  // specific icon is worth testing as a
+                                  // more primitive, more reliable path —
+                                  // relies on the browser's own HTTP cache
+                                  // plus Flutter's built-in image cache
+                                  // instead.
+                                  child: Image.network(
+                                    widget.store.storeIconUrl,
                                     width: 82,
                                     height: 82,
                                     fit: BoxFit.cover,
-                                    // Decoding at full original resolution
-                                    // (some of these are multi-MB photos)
-                                    // for an 82x82 circle was pushing a lot
-                                    // of memory into Flutter's image cache,
-                                    // which evicts older entries under
-                                    // pressure — including this same icon
-                                    // after browsing product-heavy screens,
-                                    // which is what made it "disappear"
-                                    // until a full refresh.
-                                    memCacheWidth: 164,
-                                    memCacheHeight: 164,
-                                    placeholder: (context, url) => Container(
-                                      color: textColor.withOpacity(0.08),
-                                    ),
-                                    errorWidget: (context, url, error) => Container(
+                                    cacheWidth: 164,
+                                    cacheHeight: 164,
+                                    loadingBuilder: (context, child, progress) {
+                                      if (progress == null) return child;
+                                      return Container(color: textColor.withOpacity(0.08));
+                                    },
+                                    errorBuilder: (context, error, stack) => Container(
                                       color: textColor.withOpacity(0.08),
                                       child: Icon(Icons.store, size: 40, color: textColor.withOpacity(0.6)),
                                     ),

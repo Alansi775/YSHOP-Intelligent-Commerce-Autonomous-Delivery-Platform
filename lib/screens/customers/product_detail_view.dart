@@ -265,7 +265,6 @@ class _ProductDetailViewState extends State<ProductDetailView>
             opacity: animation,
             child: _FullScreenImageViewer(
               imageUrl: widget.product.imageUrl,
-              heroTag: 'product_${widget.product.id}',
               isDark: isDark,
             ),
           );
@@ -428,23 +427,22 @@ class _ProductDetailViewState extends State<ProductDetailView>
                           ? Colors.white.withOpacity(0.05)
                           : Colors.black.withOpacity(0.03),
                     ),
-                    // الصورة الأساسية للمنتج
+                    // الصورة الأساسية للمنتج — no Hero (see note on the
+                    // grid card: cached_network_image loses its resolved
+                    // stream across a Hero flight on Flutter Web).
                     Center(
                       child: GestureDetector(
                         onTap: () => _showImageFullScreen(isDark),
-                        child: Hero(
-                          tag: 'product_${widget.product.id}',
-                          child: Padding(
-                            padding: EdgeInsets.only(top: topPad + 60, bottom: 40),
-                            child: CachedNetworkImage(
-                              imageUrl: widget.product.imageUrl,
-                              fit: BoxFit.contain,
-                              placeholder: (_, __) => const Center(
-                                child: CircularProgressIndicator(strokeWidth: 1.5),
-                              ),
-                              errorWidget: (_, __, ___) =>
-                                  const Icon(Icons.broken_image, size: 48),
+                        child: Padding(
+                          padding: EdgeInsets.only(top: topPad + 60, bottom: 40),
+                          child: CachedNetworkImage(
+                            imageUrl: widget.product.imageUrl,
+                            fit: BoxFit.contain,
+                            placeholder: (_, __) => const Center(
+                              child: CircularProgressIndicator(strokeWidth: 1.5),
                             ),
+                            errorWidget: (_, __, ___) =>
+                                const Icon(Icons.broken_image, size: 48),
                           ),
                         ),
                       ),
@@ -580,23 +578,20 @@ class _ProductDetailViewState extends State<ProductDetailView>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Product image centered
+                      // Product image centered — no Hero, see note above.
                       Center(
                         child: GestureDetector(
                           onTap: () => _showImageFullScreen(isDark),
-                          child: Hero(
-                            tag: 'product_${widget.product.id}',
-                            child: Padding(
-                              padding: const EdgeInsets.all(48),
-                              child: CachedNetworkImage(
-                                imageUrl: widget.product.imageUrl,
-                                fit: BoxFit.contain,
-                                placeholder: (_, __) => const Center(
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 1.5)),
-                                errorWidget: (_, __, ___) =>
-                                    const Icon(Icons.broken_image, size: 64),
-                              ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(48),
+                            child: CachedNetworkImage(
+                              imageUrl: widget.product.imageUrl,
+                              fit: BoxFit.contain,
+                              placeholder: (_, __) => const Center(
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 1.5)),
+                              errorWidget: (_, __, ___) =>
+                                  const Icon(Icons.broken_image, size: 64),
                             ),
                           ),
                         ),
@@ -1248,12 +1243,10 @@ class _ProductDetailViewState extends State<ProductDetailView>
 // ═══════════════════════════════════════════════════════════════
 class _FullScreenImageViewer extends StatelessWidget {
   final String imageUrl;
-  final String heroTag;
   final bool isDark;
 
   const _FullScreenImageViewer({
     required this.imageUrl,
-    required this.heroTag,
     required this.isDark,
   });
 
@@ -1277,15 +1270,12 @@ class _FullScreenImageViewer extends StatelessWidget {
               child: Center(
                 child: GestureDetector(
                   onTap: () {}, // prevent dismiss on image tap
-                  child: Hero(
-                    tag: heroTag,
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 4.0,
-                      child: CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.contain,
-                      ),
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),

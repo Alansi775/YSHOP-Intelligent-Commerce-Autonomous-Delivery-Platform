@@ -347,12 +347,14 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                               color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
                               child: Icon(Icons.store, size: 32, color: (isDark ? Colors.white : Colors.black).withOpacity(0.5)),
                             )
-                          : CachedNetworkImage(
-                              imageUrl: widget.store.storeIconUrl,
+                          // Plain Image.network, same reasoning as the
+                          // store list card — see the note there.
+                          : Image.network(
+                              widget.store.storeIconUrl,
                               fit: BoxFit.cover,
-                              memCacheWidth: 144,
-                              memCacheHeight: 144,
-                              errorWidget: (context, url, error) => Container(
+                              cacheWidth: 144,
+                              cacheHeight: 144,
+                              errorBuilder: (context, error, stack) => Container(
                                 color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
                                 child: Icon(Icons.store, size: 32, color: (isDark ? Colors.white : Colors.black).withOpacity(0.5)),
                               ),
@@ -703,9 +705,14 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             Expanded(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Hero(
-                  tag: 'product_${product.id}',
-                  child: SizedBox(
+                // No Hero here — cached_network_image has a known bad
+                // interaction with Hero's flight/reparenting on Flutter Web:
+                // the image loses its resolved stream and has to reload
+                // once it's back in its original spot post-transition,
+                // which is exactly "shows fine, then disappears after
+                // visiting another screen and coming back". Not worth the
+                // shared-element animation.
+                child: SizedBox(
                   width: double.infinity,
                   child: CachedNetworkImage(
                     imageUrl: product.imageUrl,
@@ -732,7 +739,6 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                     ),
                   ),
                 ),
-              ),
               ),
             ),
             const SizedBox(height: 10),
