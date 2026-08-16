@@ -297,6 +297,16 @@ class _ProductDetailViewState extends State<ProductDetailView>
           overlayEntry?.remove();
           overlayEntry = null;
         },
+        onViewCart: () {
+          overlayEntry?.remove();
+          overlayEntry = null;
+          // Same "pop back to the shell, then signal" sequence used for the
+          // post-login auto-open below — the cart drawer lives on
+          // CategoryHomeView's Scaffold, so this screen has to be off the
+          // stack before openEndDrawer() will actually show anything.
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          openCartDrawerSignal.value++;
+        },
         getTenorSansStyle: (ctx, size, {FontWeight weight = FontWeight.normal, Color? color}) =>
             _ts(ctx, size, weight: weight, color: color),
       ),
@@ -1333,6 +1343,7 @@ class FocusTransitionOverlay extends StatefulWidget {
   final Size startSize;
   final Offset endPosition;
   final VoidCallback onDismiss;
+  final VoidCallback onViewCart;
   final TextStyle Function(BuildContext, double,
       {FontWeight weight, Color? color}) getTenorSansStyle;
 
@@ -1343,6 +1354,7 @@ class FocusTransitionOverlay extends StatefulWidget {
     required this.startSize,
     required this.endPosition,
     required this.onDismiss,
+    required this.onViewCart,
     required this.getTenorSansStyle,
   }) : super(key: key);
 
@@ -1365,7 +1377,7 @@ class _FocusTransitionOverlayState extends State<FocusTransitionOverlay>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 3200),
     );
 
     const double finalW = 260;
@@ -1440,7 +1452,13 @@ class _FocusTransitionOverlayState extends State<FocusTransitionOverlay>
                     dk ? Colors.white.withOpacity(0.95) : Colors.black87;
                 final Color txt = dk ? Colors.black87 : Colors.white;
 
-                return Container(
+                // Tappable end-to-end so a user who doesn't know where the
+                // cart lives has an obvious next step instead of just a
+                // passing animation — same destination as tapping the cart
+                // icon itself.
+                return GestureDetector(
+                  onTap: widget.onViewCart,
+                  child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                   decoration: BoxDecoration(
@@ -1506,7 +1524,31 @@ class _FocusTransitionOverlayState extends State<FocusTransitionOverlay>
                           ],
                         ),
                       ),
+                      Opacity(
+                        opacity: _textOpacityAnimation.value,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 10),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'View Cart',
+                                style: widget
+                                    .getTenorSansStyle(ctx, 12)
+                                    .copyWith(
+                                  color: txt,
+                                  fontWeight: FontWeight.w700,
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                              Icon(Icons.chevron_right_rounded,
+                                  color: txt, size: 16),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
+                  ),
                   ),
                 );
               }),
