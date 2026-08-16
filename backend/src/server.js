@@ -85,6 +85,13 @@ app.use(compression());
 
 //  Smart caching: Admin endpoints should NOT be cached, public endpoints can be
 app.use((req, res, next) => {
+  // /uploads/* gets its own long-lived immutable cache below — every upload
+  // gets a fresh UUID filename (see productRoutes.js/storeRoutes.js multer
+  // config), so a given URL's bytes never change. Skip this 5min JSON-API
+  // rule here so it doesn't get clobbered by the static handler.
+  if (req.path.startsWith('/uploads')) {
+    return next();
+  }
   if (req.method === 'GET') {
     //  CRITICAL: Admin + POS endpoints must NOT be cached to prevent stale data
     // POS (cashier/kitchen/tables) is real-time — a 5min public cache here means
@@ -133,8 +140,18 @@ const userLimiter = rateLimit({
 app.use(globalLimiter);
 app.use(userLimiter);
 
-// Static files for uploads
-app.use('/uploads', express.static('uploads'));
+// Static files for uploads — every upload gets a brand-new UUID filename
+// (see productRoutes.js/storeRoutes.js multer `filename:`), so a given URL's
+// bytes are permanently immutable: a store owner editing a photo produces a
+// NEW url (new DB row value), never overwrites the old file. Safe to cache
+// as long as the browser will let us — the client naturally picks up real
+// edits because it's a URL it has never fetched before, no invalidation
+// needed. This lets repeat visits (leave the screen, come back) load
+// straight from local disk cache with zero request to the server.
+app.use('/uploads', express.static('uploads', {
+  maxAge: '365d',
+  immutable: true,
+}));
 
 // Any /uploads/* path that isn't an actual file on disk (missing/never
 // migrated image) falls back to a placeholder instead of a broken-image
