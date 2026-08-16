@@ -6,7 +6,6 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../state_management/auth_manager.dart';
 import '../../state_management/theme_manager.dart';
 import '../../services/api_service.dart';
@@ -599,26 +598,30 @@ class _MyOrdersViewState extends State<MyOrdersView> with ReactiveSyncMixin {
                       topLeft: Radius.circular(16),
                       topRight: Radius.circular(16),
                     ),
-                    child: CachedNetworkImage(
-                      imageUrl: item.imageUrl,
+                    child: Image.network(
+                      item.imageUrl,
                       fit: BoxFit.cover,
                       width: double.infinity,
-                      placeholder: (c, u) => Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: isDark 
-                              ? Colors.white.withOpacity(0.2)
-                              : Colors.black.withOpacity(0.2),
+                      cacheWidth: 320,
+                      loadingBuilder: (c, child, progress) {
+                        if (progress == null) return child;
+                        return Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: isDark
+                                ? Colors.white.withOpacity(0.2)
+                                : Colors.black.withOpacity(0.2),
+                            ),
                           ),
-                        ),
-                      ),
-                      errorWidget: (c, u, e) => Center(
+                        );
+                      },
+                      errorBuilder: (c, e, s) => Center(
                         child: Icon(
                           Icons.image_not_supported_outlined,
-                          color: isDark 
+                          color: isDark
                             ? Colors.white.withOpacity(0.15)
                             : Colors.black.withOpacity(0.15),
                           size: 32,
@@ -671,7 +674,7 @@ class _MyOrdersViewState extends State<MyOrdersView> with ReactiveSyncMixin {
                       ),
                     ),
                     Text(
-                      '${_getCurrencySymbol(currency)}${item.price.toStringAsFixed(0)}',
+                      '${_getCurrencySymbol(currency)}${item.price.toStringAsFixed(2)}',
                       style: TextStyle(
                         fontFamily: 'TenorSans',
                         fontSize: 13,
