@@ -402,8 +402,16 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
               ),
             ),
 
-          // Floating Header
-          kIsWeb ? _buildWebGlassNavbar(isDark) : _buildFloatingHeader(isDark, isMobile),
+          // Floating Header — the wide glass navbar (with its continuous
+          // BackdropFilter blur) is only appropriate at desktop widths.
+          // kIsWeb alone doesn't mean desktop: opening the web build in
+          // mobile Safari/Chrome is still "web" but on a phone-sized
+          // viewport, so it used to get the full-width pill navbar sized
+          // for a 960px layout squeezed into ~380px — oversized, cramped,
+          // and the always-on blur is expensive enough on mobile Safari to
+          // visibly heat the device. Same compact icon-only header as the
+          // native apps below this width, regardless of platform.
+          (kIsWeb && !isMobile) ? _buildWebGlassNavbar(isDark) : _buildFloatingHeader(isDark, isMobile),
         ],
       ),
     );

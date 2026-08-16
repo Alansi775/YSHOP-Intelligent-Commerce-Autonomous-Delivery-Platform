@@ -22,6 +22,12 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
+  <!-- viewport-fit=cover lets the page extend under the iPhone notch/
+       Dynamic Island and home indicator instead of Safari leaving a plain
+       white strip there — Flutter's own SafeArea widgets then handle the
+       actual inset padding, same as the native app does. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
