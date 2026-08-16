@@ -1,7 +1,6 @@
 // lib/widgets/cart_item_widget.dart
 
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../state_management/cart_manager.dart';
 import '../models/currency.dart';
@@ -64,12 +63,23 @@ class CartItemWidget extends StatelessWidget {
           // 1. الصورة
           ClipRRect(
             borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
+            child: Image.network(
+              imageUrl,
               width: 100,
               height: 100,
               fit: BoxFit.cover,
-              errorWidget: (context, url, error) => const Icon(Icons.image_not_supported),
+              cacheWidth: 200,
+              cacheHeight: 200,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(width: 100, height: 100, color: theme.dividerColor.withOpacity(0.1));
+              },
+              errorBuilder: (context, error, stack) => Container(
+                width: 100,
+                height: 100,
+                color: theme.dividerColor.withOpacity(0.1),
+                child: const Icon(Icons.image_not_supported),
+              ),
             ),
           ),
           
@@ -82,8 +92,8 @@ class CartItemWidget extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: const TextStyle(fontFamily: 'TenorSans', fontSize: 15, fontWeight: FontWeight.bold),
-                    maxLines: 1,
+                    style: const TextStyle(fontFamily: 'TenorSans', fontSize: 14, fontWeight: FontWeight.bold),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),

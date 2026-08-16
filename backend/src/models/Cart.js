@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 import logger from '../config/logger.js';
+import { chargedPrice } from '../utils/pricing.js';
 
 /**
  * Cart Model - FINAL FIX: Added missing currency field
@@ -124,6 +125,13 @@ export class Cart {
         const r = { ...row };
         try {
           if (r.price !== undefined && typeof r.price === 'string') r.price = parseFloat(r.price);
+          // p.price above is the store owner's raw base price straight off
+          // the products table — this must match what ProductController's
+          // withCustomerPrice() shows on the product/store screens, or the
+          // cart displays a different number than what the customer just
+          // saw. Order.create() already applies this same chargedPrice()
+          // at checkout time, so this only fixes the *display* mismatch.
+          r.price = chargedPrice(r.price, { isLocal: false });
         } catch (e) {
           // ignore
         }
