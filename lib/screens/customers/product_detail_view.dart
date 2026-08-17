@@ -13,6 +13,7 @@ import '../../state_management/theme_manager.dart';
 import '../../services/api_service.dart';
 import '../../widgets/centered_notification.dart';
 import '../../widgets/store_admin_widgets.dart';
+import '../../widgets/product_media_gallery.dart';
 import '../auth/sign_in_view.dart';
 import '../../main.dart' show openCartDrawerSignal;
 
@@ -43,6 +44,15 @@ class _ProductDetailViewState extends State<ProductDetailView>
   final String fontTenor = 'TenorSans';
   String? _storeIconUrl;
   static final Map<String, String> _storeNameIconCache = {};
+
+  // imageUrls already falls back to [imageUrl] when the product predates
+  // multi-image support (see Product.fromJson), so this always has at
+  // least the one photo every product has had historically.
+  List<ProductMediaEntry> get _productMedia => [
+        ...widget.product.imageUrls.map((u) => ProductMediaEntry(u)),
+        if (widget.product.videoUrl != null && widget.product.videoUrl!.isNotEmpty)
+          ProductMediaEntry(widget.product.videoUrl!, isVideo: true),
+      ];
 
   // ── Animation Controllers ──
   late AnimationController _entryController;
@@ -251,7 +261,8 @@ class _ProductDetailViewState extends State<ProductDetailView>
   // ═══════════════════════════════════════════════════════════
   //  🖼️ FULLSCREEN IMAGE VIEWER
   // ═══════════════════════════════════════════════════════════
-  void _showImageFullScreen(bool isDark) {
+  void _showImageFullScreen(bool isDark, {int initialIndex = 0}) {
+    final imageMedia = _productMedia.where((m) => !m.isVideo).toList();
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
@@ -262,9 +273,9 @@ class _ProductDetailViewState extends State<ProductDetailView>
         pageBuilder: (context, animation, secondaryAnimation) {
           return FadeTransition(
             opacity: animation,
-            child: _FullScreenImageViewer(
-              imageUrl: widget.product.imageUrl,
-              isDark: isDark,
+            child: ProductMediaFullscreenViewer(
+              media: imageMedia,
+              initialIndex: initialIndex,
             ),
           );
         },
@@ -439,24 +450,13 @@ class _ProductDetailViewState extends State<ProductDetailView>
                     // الصورة الأساسية للمنتج — no Hero (see note on the
                     // grid card: cached_network_image loses its resolved
                     // stream across a Hero flight on Flutter Web).
-                    Center(
-                      child: GestureDetector(
-                        onTap: () => _showImageFullScreen(isDark),
-                        child: Padding(
-                          padding: EdgeInsets.only(top: topPad + 60, bottom: 40),
-                          child: Image.network(
-                            widget.product.imageUrl,
-                            fit: BoxFit.contain,
-                            loadingBuilder: (_, child, progress) {
-                              if (progress == null) return child;
-                              return const Center(
-                                child: CircularProgressIndicator(strokeWidth: 1.5),
-                              );
-                            },
-                            errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.broken_image, size: 48),
-                          ),
-                        ),
+                    Padding(
+                      padding: EdgeInsets.only(top: topPad + 60, bottom: 40),
+                      child: ProductMediaGallery(
+                        media: _productMedia,
+                        isDark: isDark,
+                        height: screenH * 0.55 - topPad - 100,
+                        onTapImage: (i) => _showImageFullScreen(isDark, initialIndex: i),
                       ),
                     ),
                     // تدرج لوني خفيف بالأسفل لدمج الصورة مع باقي الشاشة بسلاسة
@@ -591,24 +591,13 @@ class _ProductDetailViewState extends State<ProductDetailView>
                     fit: StackFit.expand,
                     children: [
                       // Product image centered — no Hero, see note above.
-                      Center(
-                        child: GestureDetector(
-                          onTap: () => _showImageFullScreen(isDark),
-                          child: Padding(
-                            padding: const EdgeInsets.all(48),
-                            child: Image.network(
-                              widget.product.imageUrl,
-                              fit: BoxFit.contain,
-                              loadingBuilder: (_, child, progress) {
-                                if (progress == null) return child;
-                                return const Center(
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 1.5));
-                              },
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.broken_image, size: 64),
-                            ),
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.all(48),
+                        child: ProductMediaGallery(
+                          media: _productMedia,
+                          isDark: isDark,
+                          height: screenH - topPad - 200,
+                          onTapImage: (i) => _showImageFullScreen(isDark, initialIndex: i),
                         ),
                       ),
                       // Expand hint
@@ -1251,84 +1240,6 @@ class _ProductDetailViewState extends State<ProductDetailView>
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 🖼️ FULLSCREEN IMAGE VIEWER (Immersive)
-// ═══════════════════════════════════════════════════════════════
-class _FullScreenImageViewer extends StatelessWidget {
-  final String imageUrl;
-  final bool isDark;
-
-  const _FullScreenImageViewer({
-    required this.imageUrl,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Plain solid backdrop, same as a normal photo viewer (Photos,
-          // Instagram, etc.) — the stretched/blurred product photo used to
-          // sit here too, which is the same "screen dominated by the
-          // product's own colors" issue fixed on the main detail screen.
-          Container(color: isDark ? Colors.black : Colors.white),
-          // Interactive image
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Container(
-              color: Colors.transparent,
-              child: Center(
-                child: GestureDetector(
-                  onTap: () {}, // prevent dismiss on image tap
-                  child: InteractiveViewer(
-                    minScale: 0.5,
-                    maxScale: 4.0,
-                    child: Image.network(
-                      imageUrl,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Close button
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
-            right: 20,
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black)
-                          .withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      Icons.close_rounded,
-                      color: isDark ? Colors.white : Colors.black,
-                      size: 22,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

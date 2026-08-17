@@ -327,34 +327,25 @@ class ProductCardView extends StatelessWidget {
                     topLeft: Radius.circular(15),
                     topRight: Radius.circular(15),
                   ),
-                  child: Container(
+                  child: Image.network(
+                    product.imageUrl,
                     height: 150,
                     width: double.infinity,
-                    // Neutral fill behind the image — BoxFit.contain below
-                    // can't crop a photo to fill this exactly, so tall/wide
-                    // photos letterbox against this instead of losing part
-                    // of the shot the way BoxFit.cover used to.
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white.withOpacity(0.04)
-                        : Colors.black.withOpacity(0.03),
-                    child: Image.network(
-                      product.imageUrl,
-                      height: 150,
-                      width: double.infinity,
-                      fit: BoxFit.contain,
-                      cacheWidth: 400,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          height: 150,
-                          color: Theme.of(context).dividerColor.withOpacity(0.5),
-                        );
-                      },
-                      errorBuilder: (context, error, stack) => Container(
+                    // Card thumbnails stay cropped-to-fill — the full,
+                    // uncropped photo is what the detail gallery is for.
+                    fit: BoxFit.cover,
+                    cacheWidth: 400,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
                         height: 150,
-                        color: Colors.red.withOpacity(0.1),
-                        child: const Icon(Icons.error_outline, color: Colors.red),
-                      ),
+                        color: Theme.of(context).dividerColor.withOpacity(0.5),
+                      );
+                    },
+                    errorBuilder: (context, error, stack) => Container(
+                      height: 150,
+                      color: Colors.red.withOpacity(0.1),
+                      child: const Icon(Icons.error_outline, color: Colors.red),
                     ),
                   ),
                 ),

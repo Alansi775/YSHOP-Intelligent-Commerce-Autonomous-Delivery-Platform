@@ -617,7 +617,7 @@ class _ProductCardView extends StatelessWidget {
               ),
               child: Image.network(
                 product.imageUrl ?? '',
-                fit: BoxFit.contain,
+                fit: BoxFit.cover,
                 height: 120,
                 width: double.infinity,
                 cacheWidth: 320,

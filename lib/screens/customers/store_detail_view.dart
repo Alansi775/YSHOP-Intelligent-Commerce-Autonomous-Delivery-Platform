@@ -43,6 +43,12 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
   // Animation States
   bool _showMenu = false;
 
+  // The burger-piece-assembly loading animation is a restaurant visual —
+  // showing it for a pharmacy or clothing store makes no sense. Those
+  // store types skip straight to the same header/category/product reveal
+  // sequence, just without that particular animation playing first.
+  bool get _isFoodStore => widget.store.storeType.trim().toLowerCase() == 'food';
+
   // 🎯 SCROLL CONFIGURATION متناسق مع البرغر
   // 6 طبقات × 150px = 900px + 100px buffer = 1000px
   final double _burgerScrollEnd = 1700.0;
@@ -67,10 +73,44 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     );
 
     _loadData();
+
+    if (!_isFoodStore) {
+      // Same reveal timing a burger-store gets once its animation
+      // finishes assembling — just triggered directly instead of waiting
+      // on a visual that doesn't apply here.
+      Future.delayed(const Duration(milliseconds: 250), _revealMenu);
+    }
   }
 
   void _onScroll() {
     _scrollNotifier.value = _mainScrollController.offset;
+  }
+
+  Future<void> _revealMenu() async {
+    if (!mounted) return;
+
+    // Only BurgerAssemblyWidget normally drives this down as it animates —
+    // the cart icon in the header stays at opacity 0 until it does (see
+    // _buildFloatingHeader). Non-Food stores never mount that widget, so
+    // nothing would ever reveal the cart icon without this.
+    _burgerWelcomeOpacity.value = 0.0;
+
+    setState(() => _showMenu = true);
+
+    // Animate header
+    await Future.delayed(const Duration(milliseconds: 150));
+    if (!mounted) return;
+    _headerEntranceController.forward(from: 0.0);
+
+    // Animate categories
+    await Future.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    _categoryRevealController.forward(from: 0.0);
+
+    // Animate products
+    await Future.delayed(const Duration(milliseconds: 550));
+    if (!mounted) return;
+    _productsRevealController.forward(from: 0.0);
   }
 
   Future<void> _loadData() async {
@@ -161,41 +201,28 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             ),
           ),
 
-          // 🎬 BURGER ASSEMBLY - Fixed in Center
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: MediaQuery.of(context).size.height,
-            child: RepaintBoundary(
-              child: IgnorePointer(  // لا يمنع الـ scroll
-                child: Center(
-                  child: BurgerAssemblyWidget(
-                    scrollNotifier: _scrollNotifier,
-                    storeName: widget.store.storeName,
-                    welcomeOpacityNotifier: _burgerWelcomeOpacity,
-                    onAssembled: () async {
-                      if (!mounted) return;
-                      
-                      setState(() => _showMenu = true);
-                      
-                      // Animate header
-                      await Future.delayed(const Duration(milliseconds: 150));
-                      _headerEntranceController.forward(from: 0.0);
-                      
-                      // Animate categories
-                      await Future.delayed(const Duration(milliseconds: 350));
-                      _categoryRevealController.forward(from: 0.0);
-                      
-                      // Animate products
-                      await Future.delayed(const Duration(milliseconds: 550));
-                      _productsRevealController.forward(from: 0.0);
-                    },
+          // 🎬 BURGER ASSEMBLY - Fixed in Center (Food stores only —
+          // non-Food stores trigger the same reveal from initState instead,
+          // see _isFoodStore/_revealMenu).
+          if (_isFoodStore)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: MediaQuery.of(context).size.height,
+              child: RepaintBoundary(
+                child: IgnorePointer(  // لا يمنع الـ scroll
+                  child: Center(
+                    child: BurgerAssemblyWidget(
+                      scrollNotifier: _scrollNotifier,
+                      storeName: widget.store.storeName,
+                      welcomeOpacityNotifier: _burgerWelcomeOpacity,
+                      onAssembled: _revealMenu,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
 
           // Scrollable Content
           CustomScrollView(
@@ -213,9 +240,12 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             // alive instead of being torn down and rebuilt.
             cacheExtent: 4000,
             slivers: [
-              //  SPACER - مساحة للبرغر
+              //  SPACER - مساحة للبرغر (Food only — this is the scroll
+              // distance the fixed-position burger animation "occupies"
+              // before real content appears; non-Food stores never show
+              // that widget, so there's nothing to scroll past).
               SliverToBoxAdapter(
-                child: SizedBox(height: _burgerScrollEnd),
+                child: SizedBox(height: _isFoodStore ? _burgerScrollEnd : 0),
               ),
 
               // Menu Content
