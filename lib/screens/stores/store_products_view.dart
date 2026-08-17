@@ -621,23 +621,19 @@ class _ProductCardView extends StatelessWidget {
                 topLeft: Radius.circular(15),
                 topRight: Radius.circular(15),
               ),
-              child: Image.network(
-                product.imageUrl ?? '',
-                fit: BoxFit.cover,
+              child: Container(
                 height: 120,
                 width: double.infinity,
-                cacheWidth: 320,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    height: 120,
-                    color: kSecondaryTextColor.withOpacity(0.1),
-                  );
-                },
-                errorBuilder: (context, error, stack) => Container(
-                  height: 120,
-                  color: kSecondaryTextColor.withOpacity(0.1),
-                  child: const Center(
+                color: kCardBackground,
+                child: Image.network(
+                  product.imageUrl ?? '',
+                  fit: BoxFit.contain,
+                  cacheWidth: 320,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const SizedBox.expand();
+                  },
+                  errorBuilder: (context, error, stack) => const Center(
                     child: Icon(Icons.image_not_supported, color: kSecondaryTextColor),
                   ),
                 ),

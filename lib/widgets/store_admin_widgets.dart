@@ -327,25 +327,24 @@ class ProductCardView extends StatelessWidget {
                     topLeft: Radius.circular(15),
                     topRight: Radius.circular(15),
                   ),
-                  child: Image.network(
-                    product.imageUrl,
+                  child: Container(
                     height: 150,
                     width: double.infinity,
-                    // Card thumbnails stay cropped-to-fill — the full,
-                    // uncropped photo is what the detail gallery is for.
-                    fit: BoxFit.cover,
-                    cacheWidth: 400,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        height: 150,
-                        color: Theme.of(context).dividerColor.withOpacity(0.5),
-                      );
-                    },
-                    errorBuilder: (context, error, stack) => Container(
-                      height: 150,
-                      color: Colors.red.withOpacity(0.1),
-                      child: const Icon(Icons.error_outline, color: Colors.red),
+                    // Matches the card's own Material color — the
+                    // letterbox strip around a non-square photo reads as
+                    // part of the card, not an empty gap.
+                    color: const Color(0xFF1E1E1E),
+                    child: Image.network(
+                      product.imageUrl,
+                      fit: BoxFit.contain,
+                      cacheWidth: 400,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const SizedBox.expand();
+                      },
+                      errorBuilder: (context, error, stack) => const Center(
+                        child: Icon(Icons.error_outline, color: Colors.red),
+                      ),
                     ),
                   ),
                 ),

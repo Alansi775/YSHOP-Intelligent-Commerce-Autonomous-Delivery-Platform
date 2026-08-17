@@ -410,19 +410,19 @@ class CategoryProductCard extends StatelessWidget {
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                      child: Image.network(
-                        product.imageUrl,
+                      child: Container(
                         width: double.infinity,
                         height: double.infinity,
-                        fit: BoxFit.cover,
-                        cacheWidth: 400,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return Container(color: Colors.white.withOpacity(0.03));
-                        },
-                        errorBuilder: (context, error, stack) => Container(
-                          color: Colors.white.withOpacity(0.03),
-                          child: Center(
+                        color: Colors.white.withOpacity(0.03),
+                        child: Image.network(
+                          product.imageUrl,
+                          fit: BoxFit.contain,
+                          cacheWidth: 400,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const SizedBox.expand();
+                          },
+                          errorBuilder: (context, error, stack) => Center(
                             child: Icon(
                               Icons.inventory_2_outlined,
                               color: Colors.white.withOpacity(0.2),

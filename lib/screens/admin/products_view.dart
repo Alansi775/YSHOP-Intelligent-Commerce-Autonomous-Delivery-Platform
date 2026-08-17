@@ -524,40 +524,38 @@ class _ProductCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: AspectRatio(
                   aspectRatio: 1.2,
-                  child: (product.imageUrl != null && product.imageUrl!.isNotEmpty)
-                      ? Image.network(
-                          product.imageUrl!,
-                          fit: BoxFit.cover,
-                          cacheWidth: 360,
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return Container(
-                              color: kGlassBackground,
-                              child: const Center(
+                  child: Container(
+                    color: kGlassBackground,
+                    child: (product.imageUrl != null && product.imageUrl!.isNotEmpty)
+                        ? Image.network(
+                            product.imageUrl!,
+                            fit: BoxFit.contain,
+                            cacheWidth: 360,
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   color: kAccentBlue,
                                 ),
+                              );
+                            },
+                            errorBuilder: (_, __, ___) => const Center(
+                              child: Icon(
+                                Icons.broken_image_rounded,
+                                color: kSecondaryTextColor,
+                                size: 40,
                               ),
-                            );
-                          },
-                          errorBuilder: (_, __, ___) => Container(
-                            color: kGlassBackground,
-                            child: const Icon(
-                              Icons.broken_image_rounded,
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.inventory_2_rounded,
                               color: kSecondaryTextColor,
                               size: 40,
                             ),
                           ),
-                        )
-                      : Container(
-                          color: kGlassBackground,
-                          child: const Icon(
-                            Icons.inventory_2_rounded,
-                            color: kSecondaryTextColor,
-                            size: 40,
-                          ),
-                        ),
+                  ),
                 ),
               ),
               // Status badge
