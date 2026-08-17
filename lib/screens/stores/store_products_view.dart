@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../services/api_service.dart'; //  استخدام API Service
 import '../../models/currency.dart'; // للحصول على رموز العملات
 import '../auth/admin_login_view.dart'; // لاستخدام الألوان الداكنة
+import '../../widgets/product_media_gallery.dart';
 
 // دالة للحصول على رمز العملة الصحيح
 String getCurrencySymbol(String? currencyCode) {
@@ -23,6 +24,7 @@ class ProductSS {
   final String price;
   final String description;
   final String? imageUrl;
+  final List<String> imageUrls;
   final String? videoUrl;
   final int? stock;
   final String storeOwnerEmail;
@@ -39,6 +41,7 @@ class ProductSS {
     required this.price,
     required this.description,
     this.imageUrl,
+    List<String>? imageUrls,
     this.videoUrl,
     this.stock,
     required this.storeOwnerEmail,
@@ -47,7 +50,9 @@ class ProductSS {
     required this.approved,
     this.currency,
     this.categoryName,
-  });
+  }) : imageUrls = (imageUrls == null || imageUrls.isEmpty)
+            ? ((imageUrl == null || imageUrl.isEmpty) ? const [] : [imageUrl])
+            : imageUrls;
 
   //  Factory من API Response (MySQL)
   factory ProductSS.fromApi(Map<String, dynamic> data) {
@@ -58,6 +63,7 @@ class ProductSS {
       price: data['price']?.toString() ?? '0.00',
       description: data['description'] as String? ?? '',
       imageUrl: data['image_url'] as String?,
+      imageUrls: (data['image_urls'] as List?)?.map((e) => e.toString()).toList(),
       videoUrl: data['video_url'] as String?,
       stock: data['stock'] as int?,
       storeOwnerEmail: data['owner_email'] as String? ?? 'unknown@store.com',
@@ -962,35 +968,35 @@ class _ProductDetailView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              //  Product Image - تم إصلاح القص
-              Center(
-                child: Container(
-                  clipBehavior: Clip.hardEdge,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: kCardBackground,
-                  ),
-                  child: Image.network(
-                    product.imageUrl ?? '',
-                    fit: BoxFit.contain, //  تم التغيير من cover إلى contain
-                    width: double.infinity,
-                    cacheWidth: 500,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        height: 250,
-                        color: kSecondaryTextColor.withOpacity(0.1),
-                        child: const Center(child: CircularProgressIndicator()),
-                      );
-                    },
-                    errorBuilder: (context, error, stack) => Container(
-                      height: 250,
-                      color: kSecondaryTextColor.withOpacity(0.1),
-                      child: const Center(
-                        child: Icon(Icons.image, size: 50, color: kSecondaryTextColor),
+              //  Product Media — full gallery (arrows + dot indicator) for
+              // products with more than one image, matching the same
+              // carousel used in the store-owner detail screen and the
+              // customer product page.
+              Container(
+                clipBehavior: Clip.hardEdge,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: kCardBackground,
+                ),
+                child: ProductMediaGallery(
+                  media: [
+                    ...product.imageUrls.map((u) => ProductMediaEntry(u)),
+                    if (product.videoUrl != null && product.videoUrl!.isNotEmpty)
+                      ProductMediaEntry(product.videoUrl!, isVideo: true),
+                  ],
+                  isDark: true,
+                  height: 280,
+                  onTapImage: (i) {
+                    final imageMedia = product.imageUrls.map((u) => ProductMediaEntry(u)).toList();
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        opaque: false,
+                        pageBuilder: (_, __, ___) =>
+                            ProductMediaFullscreenViewer(media: imageMedia, initialIndex: i),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 20),

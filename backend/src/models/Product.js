@@ -333,6 +333,16 @@ export class Product {
       const [rows] = await connection.execute(query, [status]);
       connection.release();
 
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
+      rows.forEach(row => {
+        if (row.image_url && typeof row.image_url === 'string') {
+          row.image_url = row.image_url.startsWith('http')
+            ? baseUrl + new URL(row.image_url).pathname
+            : baseUrl + row.image_url;
+        }
+      });
+      await Product._attachMedia(rows, baseUrl);
+
       return rows;
     } catch (error) {
       logger.error('Error finding products by status:', error);
@@ -346,8 +356,10 @@ export class Product {
       const offset = (page - 1) * limit;
       const connection = await pool.getConnection();
 
+      // NOTE: no p.video_url here — products has no such column (a
+      // product's video, if any, lives in product_media, attached below).
       const query = `
-        SELECT 
+        SELECT
           p.id,
           p.name,
           p.description,
@@ -355,7 +367,6 @@ export class Product {
           p.currency,
           p.stock,
           p.image_url,
-          p.video_url,
           p.status,
           p.created_at,
           p.updated_at,
@@ -387,6 +398,7 @@ export class Product {
           row.store_phone = '';
         }
       });
+      await Product._attachMedia(rows, baseUrl);
 
       logger.info(`Found ${rows.length} products for email: ${email}`);
       return rows;

@@ -2,11 +2,11 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/api_service.dart';
 import '../../models/store.dart';
 import '../../models/product.dart';
 import '../../models/currency.dart';
+import '../../widgets/product_media_gallery.dart';
 import 'common.dart';
 import 'widgets.dart' as w;
 
@@ -525,19 +525,23 @@ class _ProductCard extends StatelessWidget {
                 child: AspectRatio(
                   aspectRatio: 1.2,
                   child: (product.imageUrl != null && product.imageUrl!.isNotEmpty)
-                      ? CachedNetworkImage(
-                          imageUrl: product.imageUrl!,
+                      ? Image.network(
+                          product.imageUrl!,
                           fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(
-                            color: kGlassBackground,
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: kAccentBlue,
+                          cacheWidth: 360,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return Container(
+                              color: kGlassBackground,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: kAccentBlue,
+                                ),
                               ),
-                            ),
-                          ),
-                          errorWidget: (_, __, ___) => Container(
+                            );
+                          },
+                          errorBuilder: (_, __, ___) => Container(
                             color: kGlassBackground,
                             child: const Icon(
                               Icons.broken_image_rounded,
@@ -709,41 +713,44 @@ class _ProductDetailsDialog extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Image
+                    // Media — full gallery (arrows + dots) when the
+                    // product has more than one photo, tap to zoom.
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: SizedBox(
-                        width: 180,
-                        height: 180,
-                        child: (product.imageUrl != null && product.imageUrl!.isNotEmpty)
-                            ? CachedNetworkImage(
-                                imageUrl: product.imageUrl!,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(
-                                  color: kGlassBackground,
-                                  child: const Center(
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: kAccentBlue,
-                                    ),
-                                  ),
-                                ),
-                                errorWidget: (_, __, ___) => Container(
-                                  color: kGlassBackground,
-                                  child: const Icon(
-                                    Icons.broken_image_rounded,
-                                    color: kSecondaryTextColor,
-                                    size: 50,
-                                  ),
-                                ),
-                              )
-                            : Container(
+                        width: 220,
+                        height: 200,
+                        child: product.imageUrls.isEmpty
+                            ? Container(
                                 color: kGlassBackground,
                                 child: const Icon(
                                   Icons.inventory_2_rounded,
                                   color: kSecondaryTextColor,
                                   size: 50,
                                 ),
+                              )
+                            : ProductMediaGallery(
+                                media: [
+                                  ...product.imageUrls.map((u) => ProductMediaEntry(u)),
+                                  if (product.videoUrl != null && product.videoUrl!.isNotEmpty)
+                                    ProductMediaEntry(product.videoUrl!, isVideo: true),
+                                ],
+                                isDark: true,
+                                height: 200,
+                                onTapImage: (i) {
+                                  final imageMedia =
+                                      product.imageUrls.map((u) => ProductMediaEntry(u)).toList();
+                                  Navigator.push(
+                                    context,
+                                    PageRouteBuilder(
+                                      opaque: false,
+                                      pageBuilder: (_, __, ___) => ProductMediaFullscreenViewer(
+                                        media: imageMedia,
+                                        initialIndex: i,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                       ),
                     ),

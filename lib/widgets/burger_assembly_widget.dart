@@ -11,6 +11,13 @@ class BurgerAssemblyWidget extends StatefulWidget {
   final String? storeName;
   final VoidCallback? onAssembled;
   final ValueNotifier<double>? welcomeOpacityNotifier;
+  // The "DISCOVER EXCELLENCE / Scroll Down to Explore" welcome scene and
+  // its scroll-driven reveal are generic and apply to every store type —
+  // only the burger-pieces-exploding-into-place visual is restaurant
+  // specific. Non-Food stores keep everything else (welcome text,
+  // completion celebration, scroll mechanics) and just skip this one part.
+  final bool showBurgerPieces;
+  final String completionLabel;
 
   const BurgerAssemblyWidget({
     Key? key,
@@ -19,6 +26,8 @@ class BurgerAssemblyWidget extends StatefulWidget {
     this.storeName,
     this.onAssembled,
     this.welcomeOpacityNotifier,
+    this.showBurgerPieces = true,
+    this.completionLabel = 'MASTERPIECE ASSEMBLED',
   }) : super(key: key);
 
   @override
@@ -240,10 +249,12 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
           _buildParticleSystem(),
           
           if (_assemblyProgress <= 0.05) _buildInitialWelcomeText(),
-          
-          //  EXPLODED VIEW ASSEMBLY
-          _buildExplodedView(),
-          
+
+          //  EXPLODED VIEW ASSEMBLY — burger pieces only; non-Food stores
+          // still get the ambient glow/particles above and the welcome/
+          // completion text around this, just not the burger PNGs.
+          if (widget.showBurgerPieces) _buildExplodedView(),
+
           if (_isAssembled) _buildWelcomeToRestaurant(),
         ],
       ),
@@ -598,7 +609,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
                     FittedBox( // 🆕 إضافة FittedBox للنص السفلي
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        "MASTERPIECE ASSEMBLED",
+                        widget.completionLabel,
                         textAlign: TextAlign.center,
                         maxLines: 1,
                         style: TextStyle(

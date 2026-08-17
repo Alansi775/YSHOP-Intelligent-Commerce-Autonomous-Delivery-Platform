@@ -76,12 +76,12 @@ class AuthManager with ChangeNotifier {
         try {
           debugPrint(' Validating cached token with backend...');
           final response = await ApiService.getUserProfile();
-          
+
           if (response != null) {
             _emailVerified = true;
             _userProfile = response;
             debugPrint(' Token validated successfully');
-            
+
             // Save validated profile to SharedPreferences
             try {
               final userJson = jsonEncode(response);
@@ -94,15 +94,38 @@ class AuthManager with ChangeNotifier {
             throw Exception('Profile fetch returned null');
           }
         } catch (e) {
-          debugPrint('❌ Token validation failed: $e');
-          // Token is invalid/expired, clear it
-          _token = null;
-          _emailVerified = false;
-          _userProfile = null;
-          // Clear from SharedPreferences
-          await prefs.remove(_tokenKey);
-          await prefs.remove(_userKey);
-          ApiService.setUserToken(null);
+          // Only a genuine 401 means the token itself is actually invalid —
+          // anything else (a slow/cold connection right after a browser
+          // refresh, a dropped request, a transient 5xx) is not proof the
+          // session is bad. Wiping the token on every failure here was
+          // logging a store owner/driver/admin out of their role and
+          // dropping them onto the generic customer home screen — with a
+          // perfectly valid token still sitting in storage the whole time.
+          final isGenuineAuthFailure = e is ApiException && e.isUnauthorized;
+
+          if (isGenuineAuthFailure) {
+            debugPrint('❌ Token rejected by backend (401), clearing: $e');
+            _token = null;
+            _emailVerified = false;
+            _userProfile = null;
+            await prefs.remove(_tokenKey);
+            await prefs.remove(_userKey);
+            ApiService.setUserToken(null);
+            return;
+          }
+
+          debugPrint('⚠ Token validation request failed (not a 401), keeping cached session: $e');
+          final userJson = prefs.getString(_userKey);
+          if (userJson != null) {
+            try {
+              _userProfile = jsonDecode(userJson) as Map<String, dynamic>;
+              _emailVerified = prefs.getBool(_emailVerifiedKey) ?? true;
+            } catch (_) {
+              _userProfile = null;
+            }
+          }
+          // Token stays set (already propagated to ApiService above) so
+          // the next real API call retries validation naturally.
           return;
         }
       } else {

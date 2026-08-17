@@ -73,13 +73,6 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
     );
 
     _loadData();
-
-    if (!_isFoodStore) {
-      // Same reveal timing a burger-store gets once its animation
-      // finishes assembling — just triggered directly instead of waiting
-      // on a visual that doesn't apply here.
-      Future.delayed(const Duration(milliseconds: 250), _revealMenu);
-    }
   }
 
   void _onScroll() {
@@ -201,28 +194,30 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             ),
           ),
 
-          // 🎬 BURGER ASSEMBLY - Fixed in Center (Food stores only —
-          // non-Food stores trigger the same reveal from initState instead,
-          // see _isFoodStore/_revealMenu).
-          if (_isFoodStore)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: MediaQuery.of(context).size.height,
-              child: RepaintBoundary(
-                child: IgnorePointer(  // لا يمنع الـ scroll
-                  child: Center(
-                    child: BurgerAssemblyWidget(
-                      scrollNotifier: _scrollNotifier,
-                      storeName: widget.store.storeName,
-                      welcomeOpacityNotifier: _burgerWelcomeOpacity,
-                      onAssembled: _revealMenu,
-                    ),
+          // 🎬 WELCOME SCENE - Fixed in Center. The "DISCOVER EXCELLENCE /
+          // Scroll Down to Explore" welcome scene and its scroll-driven
+          // reveal show for every store — only the burger-pieces-assembling
+          // visual is restaurant specific (showBurgerPieces).
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).size.height,
+            child: RepaintBoundary(
+              child: IgnorePointer(  // لا يمنع الـ scroll
+                child: Center(
+                  child: BurgerAssemblyWidget(
+                    scrollNotifier: _scrollNotifier,
+                    storeName: widget.store.storeName,
+                    welcomeOpacityNotifier: _burgerWelcomeOpacity,
+                    showBurgerPieces: _isFoodStore,
+                    completionLabel: _isFoodStore ? 'MASTERPIECE ASSEMBLED' : 'WELCOME',
+                    onAssembled: _revealMenu,
                   ),
                 ),
               ),
             ),
+          ),
 
           // Scrollable Content
           CustomScrollView(
@@ -240,12 +235,11 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
             // alive instead of being torn down and rebuilt.
             cacheExtent: 4000,
             slivers: [
-              //  SPACER - مساحة للبرغر (Food only — this is the scroll
-              // distance the fixed-position burger animation "occupies"
-              // before real content appears; non-Food stores never show
-              // that widget, so there's nothing to scroll past).
+              //  SPACER - مساحة لمشهد الترحيب — every store scrolls
+              // through the same welcome scene, so this space is always
+              // reserved regardless of store type.
               SliverToBoxAdapter(
-                child: SizedBox(height: _isFoodStore ? _burgerScrollEnd : 0),
+                child: SizedBox(height: _burgerScrollEnd),
               ),
 
               // Menu Content

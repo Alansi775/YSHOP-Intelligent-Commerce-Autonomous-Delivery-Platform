@@ -144,6 +144,7 @@ class ProductSS {
   final String price;
   final String description;
   final String? imageUrl;
+  final List<String> imageUrls;
   final String? videoUrl;
   final int? stock;
   final String storeOwnerEmail;
@@ -162,6 +163,7 @@ class ProductSS {
     required this.price,
     required this.description,
     this.imageUrl,
+    List<String>? imageUrls,
     this.videoUrl,
     this.stock,
     required this.storeOwnerEmail,
@@ -171,7 +173,9 @@ class ProductSS {
     this.currency,
     this.categoryId,
     this.categoryName,
-  });
+  }) : imageUrls = (imageUrls == null || imageUrls.isEmpty)
+            ? ((imageUrl == null || imageUrl.isEmpty) ? const [] : [imageUrl])
+            : imageUrls;
 
   factory ProductSS.fromJson(Map<String, dynamic> json) {
     return ProductSS(
@@ -182,6 +186,8 @@ class ProductSS {
       price: (json["price"] is num) ? json["price"].toString() : json["price"] as String? ?? "0.00",
       description: json["description"] as String? ?? "",
       imageUrl: json["image_url"] as String?,
+      imageUrls: (json["image_urls"] as List?)?.map((e) => e.toString()).toList(),
+      videoUrl: json["video_url"] as String?,
       storeOwnerEmail: json["store_owner_email"] as String? ?? "",
       storePhone: json["store_phone"] as String? ?? "No Phone",
       status: json["status"] as String? ?? "Pending",
@@ -201,6 +207,7 @@ class ProductSS {
       price: (m['price'] ?? '0.00').toString(),
       description: m['description'] as String? ?? '',
       imageUrl: m['image_url'] as String? ?? m['imageUrl'] as String?,
+      imageUrls: (m['image_urls'] as List?)?.map((e) => e.toString()).toList(),
       videoUrl: m['video_url'] as String?,
       stock: m['stock'] is int ? m['stock'] : int.tryParse((m['stock'] ?? '').toString()),
       storeOwnerEmail: m['owner_email'] as String? ?? m['storeOwnerEmail'] as String? ?? '',
