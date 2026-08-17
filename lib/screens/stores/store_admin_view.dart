@@ -124,6 +124,8 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
             price: item['price'].toString(),
             description: item['description'] ?? '',
             imageUrl: Store.getFullImageUrl(item['image_url']),
+            imageUrls: (item['image_urls'] as List?)?.map((e) => e.toString()).toList(),
+            videoUrl: item['video_url'] as String?,
             approved: item['status'] == 'approved',
             status: item['status'] ?? 'pending',
             storeOwnerEmail: item['owner_email'] ?? '',
@@ -132,7 +134,7 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
             stock: item['stock'],
             currency: item['currency'] ?? 'USD',
           )).toList();
-          
+
           _filteredProducts = _searchQuery.isEmpty ? _products : _products.where((p) =>
             p.name.toLowerCase().contains(_searchQuery)).toList();
         });
@@ -294,6 +296,8 @@ class _StoreAdminViewState extends State<StoreAdminView> with TickerProviderStat
             price: item['price'].toString(),
             description: item['description'] ?? '',
             imageUrl: Store.getFullImageUrl(item['image_url']),
+            imageUrls: (item['image_urls'] as List?)?.map((e) => e.toString()).toList(),
+            videoUrl: item['video_url'] as String?,
             approved: item['status'] == 'approved',
             status: item['status'] ?? 'pending',
             storeOwnerEmail: item['owner_email'] ?? '',

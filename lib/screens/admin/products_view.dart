@@ -77,6 +77,8 @@ class _ProductsManagementViewState extends State<ProductsManagementView> with Si
                 'store_id': p['store_id'],
                 'store_name': p['store_name'],
                 'image_url': Product.getFullImageUrl(p['image_url'] as String?),
+                'image_urls': p['image_urls'],
+                'video_url': p['video_url'],
                 'stock': p['stock'],
                 'status': p['status'] ?? 'pending', //  Read from API
                 'owner_email': p['owner_email'],
@@ -95,6 +97,8 @@ class _ProductsManagementViewState extends State<ProductsManagementView> with Si
                 'store_id': p['store_id'],
                 'store_name': p['store_name'],
                 'image_url': Product.getFullImageUrl(p['image_url'] as String?),
+                'image_urls': p['image_urls'],
+                'video_url': p['video_url'],
                 'stock': p['stock'],
                 'status': p['status'] ?? 'approved', //  Read from API
                 'owner_email': p['owner_email'],
@@ -132,6 +136,7 @@ class _ProductsManagementViewState extends State<ProductsManagementView> with Si
             price: product.price,
             description: product.description,
             imageUrl: product.imageUrl,
+            imageUrls: product.imageUrls,
             videoUrl: product.videoUrl,
             stock: product.stock,
             storeOwnerEmail: product.storeOwnerEmail,
@@ -184,6 +189,7 @@ class _ProductsManagementViewState extends State<ProductsManagementView> with Si
             price: product.price,
             description: product.description,
             imageUrl: product.imageUrl,
+            imageUrls: product.imageUrls,
             videoUrl: product.videoUrl,
             stock: product.stock,
             storeOwnerEmail: product.storeOwnerEmail,
@@ -233,6 +239,7 @@ class _ProductsManagementViewState extends State<ProductsManagementView> with Si
             price: product.price,
             description: product.description,
             imageUrl: product.imageUrl,
+            imageUrls: product.imageUrls,
             videoUrl: product.videoUrl,
             stock: product.stock,
             storeOwnerEmail: product.storeOwnerEmail,
@@ -529,7 +536,11 @@ class _ProductCard extends StatelessWidget {
                     child: (product.imageUrl != null && product.imageUrl!.isNotEmpty)
                         ? Image.network(
                             product.imageUrl!,
-                            fit: BoxFit.contain,
+                            // Cover fills the card cleanly; top-aligned so
+                            // any cropping trims the bottom, not a face or
+                            // a product's top.
+                            fit: BoxFit.cover,
+                            alignment: Alignment.topCenter,
                             cacheWidth: 360,
                             loadingBuilder: (context, child, progress) {
                               if (progress == null) return child;

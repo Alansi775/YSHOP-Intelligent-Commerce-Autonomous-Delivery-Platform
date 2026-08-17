@@ -327,24 +327,27 @@ class ProductCardView extends StatelessWidget {
                     topLeft: Radius.circular(15),
                     topRight: Radius.circular(15),
                   ),
-                  child: Container(
+                  child: Image.network(
+                    product.imageUrl,
                     height: 150,
                     width: double.infinity,
-                    // Matches the card's own Material color — the
-                    // letterbox strip around a non-square photo reads as
-                    // part of the card, not an empty gap.
-                    color: const Color(0xFF1E1E1E),
-                    child: Image.network(
-                      product.imageUrl,
-                      fit: BoxFit.contain,
-                      cacheWidth: 400,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const SizedBox.expand();
-                      },
-                      errorBuilder: (context, error, stack) => const Center(
-                        child: Icon(Icons.error_outline, color: Colors.red),
-                      ),
+                    // Cover fills the card cleanly; top-aligned means any
+                    // cropping trims the bottom, keeping whatever's most
+                    // likely to matter — a face, a product's top — intact.
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    cacheWidth: 400,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        height: 150,
+                        color: Theme.of(context).dividerColor.withOpacity(0.5),
+                      );
+                    },
+                    errorBuilder: (context, error, stack) => Container(
+                      height: 150,
+                      color: Colors.red.withOpacity(0.1),
+                      child: const Icon(Icons.error_outline, color: Colors.red),
                     ),
                   ),
                 ),

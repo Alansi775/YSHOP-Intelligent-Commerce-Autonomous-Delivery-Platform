@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/database.js';
+import Product from '../models/Product.js';
 
 const router = express.Router();
 let categorySchemaReadyPromise = null;
@@ -245,23 +246,15 @@ router.get('/categories/:categoryId/products', async (req, res) => {
   const { categoryId } = req.params;
 
   try {
-    const query = `
-      SELECT 
-        id,
-        name,
-        price,
-        currency,
-        description,
-        image_url,
-        status,
-        stock,
-        category_id
-      FROM products
-      WHERE category_id = ?
-      ORDER BY updated_at DESC
-    `;
-
-    const [products] = await pool.query(query, [categoryId]);
+    // Routed through the shared Product model (was a standalone raw query)
+    // so this gets the same image_url absolute-URL prefixing and
+    // image_urls/video_url attachment every other product listing gets —
+    // this endpoint was quietly stuck on a single photo per product while
+    // every other product screen already supported the full gallery.
+    // includeInactive: true preserves this route's original behavior of
+    // returning products in every status (a store owner managing a
+    // category needs to see pending/rejected items too, not just live ones).
+    const products = await Product.findAll({ categoryId, includeInactive: true }, 1, 500);
     res.json({ data: products });
   } catch (error) {
     console.error('❌ Error fetching category products:', error);

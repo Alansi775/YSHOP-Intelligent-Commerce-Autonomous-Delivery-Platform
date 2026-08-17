@@ -735,26 +735,25 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                 // which is exactly "shows fine, then disappears after
                 // visiting another screen and coming back". Not worth the
                 // shared-element animation.
-                child: Container(
+                child: SizedBox(
                   width: double.infinity,
-                  // A tinted backdrop behind the image, not the card's own
-                  // (near-transparent) background — otherwise BoxFit.contain's
-                  // letterbox gaps around a tall/wide photo would look like
-                  // an empty hole instead of a deliberate frame.
-                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
                   // Plain Image.network, not CachedNetworkImage — same fix
                   // that solved the store icon disappearing. Grid cards
                   // render these well under 200px, so still bounded via
-                  // cacheWidth. BoxFit.contain — never crop a product's
-                  // photo just to fill the cell, whatever its own aspect
-                  // ratio is.
+                  // cacheWidth. BoxFit.cover fills the cell cleanly (no
+                  // empty letterbox gaps); Alignment.topCenter means any
+                  // cropping trims from the bottom/sides, keeping whatever
+                  // matters most — a model's face, a product's top — intact.
                   child: Image.network(
                     product.imageUrl,
-                    fit: BoxFit.contain,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
                     cacheWidth: 360,
                     loadingBuilder: (c, child, progress) {
                       if (progress == null) return child;
-                      return const SizedBox.expand();
+                      return Container(
+                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                      );
                     },
                     errorBuilder: (c, e, s) => Center(
                       child: Icon(

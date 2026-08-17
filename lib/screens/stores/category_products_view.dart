@@ -58,6 +58,8 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
                   price: item['price'].toString(),
                   description: item['description'] ?? '',
                   imageUrl: Store.getFullImageUrl(item['image_url']),
+                  imageUrls: (item['image_urls'] as List?)?.map((e) => e.toString()).toList(),
+                  videoUrl: item['video_url'] as String?,
                   approved: item['status'] == 'approved',
                   status: item['status'] ?? 'pending',
                   storeOwnerEmail: widget.storeOwnerEmail ?? item['owner_email'] ?? '',
@@ -410,19 +412,22 @@ class CategoryProductCard extends StatelessWidget {
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                      child: Container(
+                      child: Image.network(
+                        product.imageUrl,
                         width: double.infinity,
                         height: double.infinity,
-                        color: Colors.white.withOpacity(0.03),
-                        child: Image.network(
-                          product.imageUrl,
-                          fit: BoxFit.contain,
-                          cacheWidth: 400,
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const SizedBox.expand();
-                          },
-                          errorBuilder: (context, error, stack) => Center(
+                        // Cover fills the card cleanly; top-aligned so any
+                        // cropping trims the bottom, not a face/product top.
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                        cacheWidth: 400,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return Container(color: Colors.white.withOpacity(0.03));
+                        },
+                        errorBuilder: (context, error, stack) => Container(
+                          color: Colors.white.withOpacity(0.03),
+                          child: Center(
                             child: Icon(
                               Icons.inventory_2_outlined,
                               color: Colors.white.withOpacity(0.2),
