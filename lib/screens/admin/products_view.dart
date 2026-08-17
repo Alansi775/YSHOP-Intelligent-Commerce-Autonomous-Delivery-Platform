@@ -709,79 +709,72 @@ class _ProductDetailsDialog extends StatelessWidget {
                 
                 const SizedBox(height: 24),
                 
-                // Product image and info
-                Row(
+                // Media — full-width, prominent gallery (arrows + dots)
+                // above the info, same idea as the customer's hero gallery
+                // instead of a small thumbnail squeezed beside the text.
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 340,
+                    child: product.imageUrls.isEmpty
+                        ? Container(
+                            color: kGlassBackground,
+                            child: const Icon(
+                              Icons.inventory_2_rounded,
+                              color: kSecondaryTextColor,
+                              size: 50,
+                            ),
+                          )
+                        : ProductMediaGallery(
+                            media: [
+                              ...product.imageUrls.map((u) => ProductMediaEntry(u)),
+                              if (product.videoUrl != null && product.videoUrl!.isNotEmpty)
+                                ProductMediaEntry(product.videoUrl!, isVideo: true),
+                            ],
+                            isDark: true,
+                            height: 340,
+                            onTapImage: (i) {
+                              final imageMedia =
+                                  product.imageUrls.map((u) => ProductMediaEntry(u)).toList();
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  opaque: false,
+                                  pageBuilder: (_, __, ___) => ProductMediaFullscreenViewer(
+                                    media: imageMedia,
+                                    initialIndex: i,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Info
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Media — full gallery (arrows + dots) when the
-                    // product has more than one photo, tap to zoom.
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: SizedBox(
-                        width: 220,
-                        height: 200,
-                        child: product.imageUrls.isEmpty
-                            ? Container(
-                                color: kGlassBackground,
-                                child: const Icon(
-                                  Icons.inventory_2_rounded,
-                                  color: kSecondaryTextColor,
-                                  size: 50,
-                                ),
-                              )
-                            : ProductMediaGallery(
-                                media: [
-                                  ...product.imageUrls.map((u) => ProductMediaEntry(u)),
-                                  if (product.videoUrl != null && product.videoUrl!.isNotEmpty)
-                                    ProductMediaEntry(product.videoUrl!, isVideo: true),
-                                ],
-                                isDark: true,
-                                height: 200,
-                                onTapImage: (i) {
-                                  final imageMedia =
-                                      product.imageUrls.map((u) => ProductMediaEntry(u)).toList();
-                                  Navigator.push(
-                                    context,
-                                    PageRouteBuilder(
-                                      opaque: false,
-                                      pageBuilder: (_, __, ___) => ProductMediaFullscreenViewer(
-                                        media: imageMedia,
-                                        initialIndex: i,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        color: kPrimaryTextColor,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    
-                    const SizedBox(width: 24),
-                    
-                    // Info
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            product.name,
-                            style: const TextStyle(
-                              color: kPrimaryTextColor,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
+                    const SizedBox(height: 12),
                           w.StatusBadgeView(status: product.status, fontSize: 14),
                           const SizedBox(height: 16),
                           _DetailRow(label: 'Price', value: '${getCurrencySymbol(product.currency)}${product.price}'),
                           _DetailRow(label: 'Stock', value: '${product.stock ?? "N/A"}'),
-                          _DetailRow(label: 'Store', value: product.storeName),
-                        ],
-                      ),
-                    ),
+                    _DetailRow(label: 'Store', value: product.storeName),
                   ],
                 ),
-                
+
                 const SizedBox(height: 24),
                 
                 // Description

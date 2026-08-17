@@ -985,7 +985,10 @@ class _ProductDetailView extends StatelessWidget {
                       ProductMediaEntry(product.videoUrl!, isVideo: true),
                   ],
                   isDark: true,
-                  height: 280,
+                  // Big and prominent — same idea as the customer's hero
+                  // gallery, not a cramped thumbnail strip. The sheet is
+                  // already 90% of the screen height, so there's room.
+                  height: MediaQuery.of(context).size.height * 0.42,
                   onTapImage: (i) {
                     final imageMedia = product.imageUrls.map((u) => ProductMediaEntry(u)).toList();
                     Navigator.push(
