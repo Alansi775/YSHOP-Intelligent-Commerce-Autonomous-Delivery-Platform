@@ -747,6 +747,25 @@ class ApiService {
     Map<String, dynamic> productData,
     dynamic imageFile,
   ) async {
+    return createProductWithMedia(
+      productData,
+      imageFile != null ? [imageFile] : const [],
+      isVideoFlags: imageFile != null ? [false] : const [],
+    );
+  }
+
+  // Same endpoint, but sends every picked image plus an optional video in
+  // one multipart request under the shared 'media' field — the backend
+  // (ProductController.create) sorts them by mimetype server-side, using
+  // isVideoFlags[i] (parallel to mediaFiles) rather than guessing from the
+  // filename, since a picked video's XFile.path on web is a blob: URL with
+  // no reliable extension. `mediaFiles` items may be File/XFile (native
+  // picker output) or an already-built http.MultipartFile.
+  static Future<dynamic> createProductWithMedia(
+    Map<String, dynamic> productData,
+    List<dynamic> mediaFiles, {
+    List<bool>? isVideoFlags,
+  }) async {
     final url = Uri.parse('$_baseUrl/products');
     final request = http.MultipartRequest('POST', url);
 
@@ -765,17 +784,20 @@ class ApiService {
       if (productData['category_id'] != null) 'category_id': productData['category_id'].toString(),
     });
 
-    if (imageFile != null) {
-      if (imageFile is http.MultipartFile) {
-        request.files.add(imageFile);
-      } else {
-        final fileBytes = await imageFile.readAsBytes();
-        request.files.add(http.MultipartFile.fromBytes(
-          'image',
-          fileBytes,
-          filename: 'product_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        ));
+    for (int i = 0; i < mediaFiles.length; i++) {
+      final file = mediaFiles[i];
+      if (file == null) continue;
+      if (file is http.MultipartFile) {
+        request.files.add(file);
+        continue;
       }
+      final isVideo = (isVideoFlags != null && i < isVideoFlags.length) ? isVideoFlags[i] : false;
+      final fileBytes = await file.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes(
+        'media',
+        fileBytes,
+        filename: 'product_${DateTime.now().millisecondsSinceEpoch}_$i.${isVideo ? 'mp4' : 'jpg'}',
+      ));
     }
 
     final streamedResponse = await request.send().timeout(_timeout);

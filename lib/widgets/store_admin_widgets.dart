@@ -1,6 +1,5 @@
 
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/product.dart';
 import '../models/currency.dart';
 import 'package:provider/provider.dart';
@@ -114,6 +113,8 @@ class ProductS {
   final String description;
   final String price;
   final String imageUrl;
+  final List<String> imageUrls;
+  final String? videoUrl;
   final bool approved;
   final String status;
   final String storeOwnerEmail;
@@ -129,6 +130,8 @@ class ProductS {
     required this.description,
     required this.price,
     required this.imageUrl,
+    List<String>? imageUrls,
+    this.videoUrl,
     required this.approved,
     required this.status,
     required this.storeOwnerEmail,
@@ -137,7 +140,9 @@ class ProductS {
     required this.customerID,
     this.stock,
     this.currency,
-  });
+  }) : imageUrls = (imageUrls == null || imageUrls.isEmpty)
+            ? (imageUrl.isEmpty ? const [] : [imageUrl])
+            : imageUrls;
 
   //  Factory من API Response
   factory ProductS.fromApi(Map<String, dynamic> data) {
@@ -147,6 +152,8 @@ class ProductS {
       description: data['description'] as String? ?? 'No description',
       price: data['price']?.toString() ?? '0',
       imageUrl: data['image_url'] as String? ?? '',
+      imageUrls: (data['image_urls'] as List?)?.map((e) => e.toString()).toList(),
+      videoUrl: data['video_url'] as String?,
       approved: data['status'] == 'approved',
       status: data['status'] as String? ?? 'pending',
       storeOwnerEmail: data['owner_email'] as String? ?? 'unknown@store.com',
@@ -166,6 +173,8 @@ class ProductS {
       description: p.description,
       price: p.price.toStringAsFixed(2),
       imageUrl: p.imageUrl,
+      imageUrls: p.imageUrls,
+      videoUrl: p.videoUrl,
       approved: p.approved,
       status: p.status,
       storeOwnerEmail: p.storeOwnerEmail ?? 'N/A',
@@ -318,19 +327,34 @@ class ProductCardView extends StatelessWidget {
                     topLeft: Radius.circular(15),
                     topRight: Radius.circular(15),
                   ),
-                  child: CachedNetworkImage(
-                    imageUrl: product.imageUrl,
+                  child: Container(
                     height: 150,
                     width: double.infinity,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
+                    // Neutral fill behind the image — BoxFit.contain below
+                    // can't crop a photo to fill this exactly, so tall/wide
+                    // photos letterbox against this instead of losing part
+                    // of the shot the way BoxFit.cover used to.
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withOpacity(0.04)
+                        : Colors.black.withOpacity(0.03),
+                    child: Image.network(
+                      product.imageUrl,
                       height: 150,
-                      color: Theme.of(context).dividerColor.withOpacity(0.5), 
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      height: 150,
-                      color: Colors.red.withOpacity(0.1),
-                      child: const Icon(Icons.error_outline, color: Colors.red),
+                      width: double.infinity,
+                      fit: BoxFit.contain,
+                      cacheWidth: 400,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return Container(
+                          height: 150,
+                          color: Theme.of(context).dividerColor.withOpacity(0.5),
+                        );
+                      },
+                      errorBuilder: (context, error, stack) => Container(
+                        height: 150,
+                        color: Colors.red.withOpacity(0.1),
+                        child: const Icon(Icons.error_outline, color: Colors.red),
+                      ),
                     ),
                   ),
                 ),
@@ -498,13 +522,17 @@ class HeaderSection extends StatelessWidget {
         children: [
           hasIcon
               ? ClipOval(
-                  child: CachedNetworkImage(
-                    imageUrl: getFullImageUrl(storeIconUrl, cacheBuster: storeOwnerUid),
+                  child: Image.network(
+                    getFullImageUrl(storeIconUrl, cacheBuster: storeOwnerUid),
                     width: 120,
                     height: 120,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                    errorWidget: (context, url, error) => _DefaultIcon(),
+                    cacheWidth: 240,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
+                    errorBuilder: (context, error, stack) => _DefaultIcon(),
                   ),
                 )
               : _DefaultIcon(),

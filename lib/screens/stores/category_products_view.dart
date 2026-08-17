@@ -1,7 +1,6 @@
 // lib/screens/category_products_view.dart
 
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/category.dart';
 import '../../models/store.dart';
 import '../../widgets/store_admin_widgets.dart';
@@ -411,20 +410,25 @@ class CategoryProductCard extends StatelessWidget {
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                      child: CachedNetworkImage(
-                        imageUrl: product.imageUrl,
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: Colors.white.withOpacity(0.03),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          color: Colors.white.withOpacity(0.03),
-                          child: Center(
-                            child: Icon(
-                              Icons.inventory_2_outlined,
-                              color: Colors.white.withOpacity(0.2),
+                      child: Container(
+                        color: Colors.white.withOpacity(0.03),
+                        child: Image.network(
+                          product.imageUrl,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.contain,
+                          cacheWidth: 400,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return Container(color: Colors.white.withOpacity(0.03));
+                          },
+                          errorBuilder: (context, error, stack) => Container(
+                            color: Colors.white.withOpacity(0.03),
+                            child: Center(
+                              child: Icon(
+                                Icons.inventory_2_outlined,
+                                color: Colors.white.withOpacity(0.2),
+                              ),
                             ),
                           ),
                         ),

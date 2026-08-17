@@ -44,15 +44,52 @@ class _AddProductViewState extends State<AddProductView> {
   void initState() {
     super.initState();
     _loadSavedCurrency();
+    // TextFormField's onChanged doesn't reliably fire for a pasted value on
+    // every platform/renderer — the controller's own listener does, for any
+    // change regardless of source (typed, pasted, or set programmatically),
+    // so the revenue breakdown below always stays in sync.
+    _priceController.addListener(_onPriceChanged);
+  }
+
+  void _onPriceChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _priceController.removeListener(_onPriceChanged);
     _nameController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
     _stockController.dispose();
     super.dispose();
+  }
+
+  // Store owners paste prices copied from all kinds of sources — some use
+  // '.' as a thousands separator, some ',', sometimes both in the same
+  // string (e.g. "1.799.99" or "1,799.99"). Whichever separator appears
+  // LAST is treated as the decimal point; every earlier occurrence of
+  // either character is a thousands separator and gets stripped.
+  static double? _parsePrice(String raw) {
+    var s = raw.trim();
+    if (s.isEmpty) return null;
+    s = s.replaceAll(RegExp(r'[^\d.,]'), ''); // drop currency symbols/letters/spaces
+    if (s.isEmpty) return null;
+
+    final lastDot = s.lastIndexOf('.');
+    final lastComma = s.lastIndexOf(',');
+    final decimalIndex = lastDot > lastComma ? lastDot : lastComma;
+
+    String normalized;
+    if (decimalIndex == -1) {
+      normalized = s;
+    } else {
+      final wholePart = s.substring(0, decimalIndex).replaceAll(RegExp(r'[.,]'), '');
+      final fractionPart = s.substring(decimalIndex + 1).replaceAll(RegExp(r'[.,]'), '');
+      normalized = fractionPart.isEmpty ? wholePart : '$wholePart.$fractionPart';
+    }
+
+    return double.tryParse(normalized);
   }
 
   Future<void> _loadSavedCurrency() async {
@@ -97,17 +134,23 @@ class _AddProductViewState extends State<AddProductView> {
       final productData = {
         "name": _nameController.text.trim(),
         "description": _descriptionController.text.trim(),
-        "price": double.tryParse(_priceController.text.trim()) ?? 0.0,
+        "price": _parsePrice(_priceController.text.trim()) ?? 0.0,
         "stock": int.parse(_stockController.text.trim()),
         "storeId": storeId,
         "currencyId": _selectedCurrency!.id,
         "currencyCode": _selectedCurrency!.code,
       };
 
-      final firstImageMedia = _selectedMedia.firstWhere((m) => !m.isVideo);
-      final imageFile = kIsWeb ? firstImageMedia.fileNative : firstImageMedia.fileWeb;
-      
-      await ApiService.createProductWithImage(productData, imageFile as dynamic);
+      // Every selected image/video goes up in one request — previously
+      // only the first image was ever sent, so anything beyond it just
+      // silently vanished at submit time regardless of the picker showing
+      // it as "added".
+      final mediaFiles = _selectedMedia
+          .map((m) => kIsWeb ? m.fileNative : m.fileWeb)
+          .where((f) => f != null)
+          .toList();
+
+      await ApiService.createProductWithMedia(productData, mediaFiles);
 
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -269,12 +312,12 @@ class _AddProductViewState extends State<AddProductView> {
                             validator: (v) {
                               final value = v?.trim() ?? '';
                               if (value.isEmpty) return 'Required';
-                              if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                              final parsed = _parsePrice(value);
+                              if (parsed == null || parsed <= 0) {
                                 return 'Enter a valid price';
                               }
                               return null;
                             },
-                            onChanged: (_) => setState(() {}), // Trigger rebuild to update revenue breakdown
                           ),
                         ),
                       ],
@@ -355,7 +398,7 @@ class _AddProductViewState extends State<AddProductView> {
                     padding: const EdgeInsets.all(20),
                     child: MultiMediaPicker(
                       onMediaSelected: (media) => setState(() => _selectedMedia = media),
-                      maxImages: 4,
+                      maxImages: 8,
                       allowVideo: true,
                       maxVideoDurationSeconds: 40,
                     ),
@@ -443,7 +486,7 @@ class _AddProductViewState extends State<AddProductView> {
 
   // 💰 Revenue Breakdown Widget
   Widget _buildRevenueBreakdown() {
-    final double price = double.tryParse(_priceController.text) ?? 0.0;
+    final double price = _parsePrice(_priceController.text) ?? 0.0;
 
     // This is your price exactly as entered — fees are added ON TOP for
     // the customer, never deducted from what you typed. Must match

@@ -21,6 +21,16 @@ function emitProductChange(type, productId, storeId, status = null) {
   } catch {}
 }
 
+// Some clients (Flutter's http package, without an explicit contentType on
+// the MultipartFile) send a generic 'application/octet-stream' Content-Type
+// regardless of the real file — so file.mimetype alone can't be trusted.
+// Checking the extension too (the app names every upload
+// product_<ts>_<i>.mp4|jpg deliberately, see api_service.dart) makes this
+// robust either way.
+function isVideoUpload(file) {
+  return file.mimetype.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/i.test(file.originalname || '');
+}
+
 export class ProductController {
   static async getAll(req, res, next) {
     try {
@@ -85,8 +95,8 @@ export class ProductController {
       // mimetype here rather than trusting upload order, since a store
       // owner can pick the video from anywhere in their selection.
       const files = req.files || [];
-      const imageFiles = files.filter(f => f.mimetype.startsWith('image/'));
-      const videoFiles = files.filter(f => f.mimetype.startsWith('video/'));
+      const videoFiles = files.filter(isVideoUpload);
+      const imageFiles = files.filter(f => !isVideoUpload(f));
 
       const imageUrl = imageFiles[0] ? `/uploads/products/${imageFiles[0].filename}` : null;
 
@@ -129,8 +139,8 @@ export class ProductController {
       const updateData = req.body;
 
       const files = req.files || [];
-      const imageFiles = files.filter(f => f.mimetype.startsWith('image/'));
-      const videoFiles = files.filter(f => f.mimetype.startsWith('video/'));
+      const videoFiles = files.filter(isVideoUpload);
+      const imageFiles = files.filter(f => !isVideoUpload(f));
 
       if (imageFiles[0]) {
         updateData.imageUrl = `/uploads/products/${imageFiles[0].filename}`;

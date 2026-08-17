@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import '../../widgets/store_admin_widgets.dart';
 import '../../models/currency.dart';
 
@@ -11,6 +11,12 @@ String getCurrencySymbol(String? currencyCode) {
   if (currencyCode == null || currencyCode.isEmpty) return '';
   final currency = Currency.fromCode(currencyCode);
   return currency?.symbol ?? '';
+}
+
+class _MediaEntry {
+  final String url;
+  final bool isVideo;
+  const _MediaEntry(this.url, {this.isVideo = false});
 }
 
 class ProductDetailsView extends StatefulWidget {
@@ -23,7 +29,7 @@ class ProductDetailsView extends StatefulWidget {
 
 class _ProductDetailsViewState extends State<ProductDetailsView>
     with TickerProviderStateMixin {
-  late final List<String> _media;
+  late final List<_MediaEntry> _media;
   late final AnimationController _priceCtrl;
   late final Animation<double> _priceAnim;
   final PageController _pageController = PageController();
@@ -35,7 +41,14 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
   @override
   void initState() {
     super.initState();
-    _media = [widget.product.imageUrl];
+    // imageUrls already falls back to [imageUrl] when the product predates
+    // multi-image support (see ProductS's constructor), so this always has
+    // at least the one photo every product has had historically.
+    _media = [
+      ...widget.product.imageUrls.map((u) => _MediaEntry(u)),
+      if (widget.product.videoUrl != null && widget.product.videoUrl!.isNotEmpty)
+        _MediaEntry(widget.product.videoUrl!, isVideo: true),
+    ];
     _priceCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -303,19 +316,25 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
     return Stack(
       fit: StackFit.expand,
       children: [
-        //  Dynamic blur background
-        ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
-          child: CachedNetworkImage(
-            imageUrl: _media[_index],
-            fit: BoxFit.cover,
-          ),
-        ),
+        //  Dynamic blur background — decorative fill only, cropping this
+        // one is fine since the sharp foreground image below never crops.
+        if (!_media[_index].isVideo)
+          ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
+            child: Image.network(
+              _media[_index].url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+          )
+        else
+          Container(color: dark ? Colors.black : Colors.grey.shade200),
         PageView.builder(
           controller: _pageController,
           itemCount: _media.length,
           onPageChanged: (i) => setState(() => _index = i),
           itemBuilder: (_, i) {
+            final entry = _media[i];
             return MouseRegion(
               onHover: (e) {
                 if (!isDesktop) return;
@@ -329,21 +348,42 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
               },
               onExit: (_) => setState(() => _hoverOffset = Offset.zero),
               child: GestureDetector(
-                onTap: () => _openFullscreen(i),
+                onTap: entry.isVideo ? null : () => _openFullscreen(i),
                 child: Center(
                   child: Transform.translate(
                     offset: _hoverOffset,
-                    child: Hero(
-                      tag: 'media_$i',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: CachedNetworkImage(
-                          imageUrl: _media[i],
-                          fit: BoxFit.cover,
-                          width: isDesktop ? 420 : 300,
-                          height: isDesktop ? 520 : 380,
-                        ),
-                      ),
+                    child: SizedBox(
+                      width: isDesktop ? 420 : 300,
+                      height: isDesktop ? 520 : 380,
+                      child: entry.isVideo
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: _ProductVideoTile(url: entry.url),
+                            )
+                          : Hero(
+                              tag: 'media_$i',
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(28),
+                                // Store owners upload photos of every shape —
+                                // tall, wide, square. BoxFit.cover was
+                                // silently cropping the top/sides off
+                                // anything that wasn't already close to the
+                                // frame's own aspect ratio; contain shows
+                                // the whole photo, letterboxed on the blur.
+                                child: Image.network(
+                                  entry.url,
+                                  fit: BoxFit.contain,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return Container(color: dark ? Colors.white10 : Colors.black12);
+                                  },
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: dark ? Colors.white10 : Colors.black12,
+                                    child: const Icon(Icons.image_not_supported_outlined),
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -471,12 +511,15 @@ class _ProductDetailsViewState extends State<ProductDetailsView>
       );
 
   // ─────────────── Fullscreen ───────────────
+  // Only ever opened by tapping a non-video entry (see _gallery above), and
+  // video is always appended last, so the image-only list stays index-safe.
   void _openFullscreen(int index) {
+    final imageUrls = _media.where((m) => !m.isVideo).map((m) => m.url).toList();
     Navigator.push(
       context,
       PageRouteBuilder(
         opaque: false,
-        pageBuilder: (_, __, ___) => _FullscreenGallery(media: _media, index: index),
+        pageBuilder: (_, __, ___) => _FullscreenGallery(media: imageUrls, index: index),
       ),
     );
   }
@@ -502,9 +545,12 @@ class _FullscreenGallery extends StatelessWidget {
               return Hero(
                 tag: 'media_$i',
                 child: InteractiveViewer(
-                  child: CachedNetworkImage(
-                    imageUrl: media[i],
+                  child: Image.network(
+                    media[i],
                     fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.image_not_supported_outlined, color: Colors.white54, size: 48),
+                    ),
                   ),
                 ),
               );
@@ -535,6 +581,86 @@ class _FullscreenGallery extends StatelessWidget {
             ),
           )
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────── Product Video Tile ───────────────
+// A store owner previewing their own upload — plays with sound, loops,
+// tap anywhere to pause/resume. Kept intentionally simple (no scrub bar):
+// this is a preview, not a media player.
+class _ProductVideoTile extends StatefulWidget {
+  final String url;
+  const _ProductVideoTile({required this.url});
+
+  @override
+  State<_ProductVideoTile> createState() => _ProductVideoTileState();
+}
+
+class _ProductVideoTileState extends State<_ProductVideoTile> {
+  VideoPlayerController? _controller;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller = controller;
+    controller.initialize().then((_) {
+      if (!mounted) return;
+      controller.setLooping(true);
+      controller.play();
+      setState(() {});
+    }).catchError((_) {
+      if (mounted) setState(() => _failed = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (_failed || controller == null) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Icon(Icons.videocam_off_outlined, color: Colors.white54, size: 40),
+        ),
+      );
+    }
+    if (!controller.value.isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: const Center(child: CircularProgressIndicator(color: Colors.white70)),
+      );
+    }
+    return GestureDetector(
+      onTap: () => setState(() {
+        controller.value.isPlaying ? controller.pause() : controller.play();
+      }),
+      child: Container(
+        color: Colors.black,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            AspectRatio(
+              aspectRatio: controller.value.aspectRatio,
+              child: VideoPlayer(controller),
+            ),
+            if (!controller.value.isPlaying)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+              ),
+          ],
+        ),
       ),
     );
   }

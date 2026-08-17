@@ -1,7 +1,6 @@
 // lib/screens/store_products_view.dart
 
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 import '../../services/api_service.dart'; //  استخدام API Service
 import '../../models/currency.dart'; // للحصول على رموز العملات
@@ -616,16 +615,20 @@ class _ProductCardView extends StatelessWidget {
                 topLeft: Radius.circular(15),
                 topRight: Radius.circular(15),
               ),
-              child: CachedNetworkImage(
-                imageUrl: product.imageUrl ?? '',
-                fit: BoxFit.cover,
+              child: Image.network(
+                product.imageUrl ?? '',
+                fit: BoxFit.contain,
                 height: 120,
                 width: double.infinity,
-                placeholder: (context, url) => Container(
-                  height: 120,
-                  color: kSecondaryTextColor.withOpacity(0.1),
-                ),
-                errorWidget: (context, url, error) => Container(
+                cacheWidth: 320,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    height: 120,
+                    color: kSecondaryTextColor.withOpacity(0.1),
+                  );
+                },
+                errorBuilder: (context, error, stack) => Container(
                   height: 120,
                   color: kSecondaryTextColor.withOpacity(0.1),
                   child: const Center(
@@ -967,16 +970,20 @@ class _ProductDetailView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     color: kCardBackground,
                   ),
-                  child: CachedNetworkImage(
-                    imageUrl: product.imageUrl ?? '',
+                  child: Image.network(
+                    product.imageUrl ?? '',
                     fit: BoxFit.contain, //  تم التغيير من cover إلى contain
                     width: double.infinity,
-                    placeholder: (context, url) => Container(
-                      height: 250,
-                      color: kSecondaryTextColor.withOpacity(0.1),
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
-                    errorWidget: (context, url, error) => Container(
+                    cacheWidth: 500,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        height: 250,
+                        color: kSecondaryTextColor.withOpacity(0.1),
+                        child: const Center(child: CircularProgressIndicator()),
+                      );
+                    },
+                    errorBuilder: (context, error, stack) => Container(
                       height: 250,
                       color: kSecondaryTextColor.withOpacity(0.1),
                       child: const Center(
