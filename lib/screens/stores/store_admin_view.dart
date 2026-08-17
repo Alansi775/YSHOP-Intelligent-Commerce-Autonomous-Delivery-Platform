@@ -1628,6 +1628,7 @@ class _CategoryCardLargeState extends State<_CategoryCardLarge> {
                               ? Image.network(
                                   _lastProductImage!,
                                   fit: BoxFit.cover,
+                                  alignment: Alignment.topCenter,
                                   width: double.infinity,
                                   height: double.infinity,
                                 )

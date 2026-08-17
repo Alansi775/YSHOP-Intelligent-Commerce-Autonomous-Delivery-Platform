@@ -100,11 +100,20 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
     try {
       final success = await ApiService.removeProductFromCategory(int.parse(productId));
       if (success && mounted) {
+        // getCategoryProducts caches its response for 120s client-side —
+        // without clearing it here, _fetchProducts() below just re-serves
+        // the same stale list and the product appears to never move.
+        ApiService.clearCache();
         widget.onCategoryContentChanged();
         _fetchProducts();
       }
     } catch (e) {
       debugPrint('Error removing product: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove product: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -143,11 +152,22 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
     try {
       final success = await ApiService.deleteProduct(product.id);
       if (success && mounted) {
+        // getCategoryProducts caches its response for 120s client-side —
+        // deleteProduct() doesn't know about that cache (its own comment
+        // assumes caching is globally off), so without clearing it here
+        // the re-fetch below just re-serves the same stale list and the
+        // "deleted" product keeps showing up.
+        ApiService.clearCache();
         widget.onCategoryContentChanged();
         _fetchProducts();
       }
     } catch (e) {
       debugPrint('Error deleting product permanently: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete product: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -247,6 +267,8 @@ class _CategoryProductsViewState extends State<CategoryProductsView> {
       builder: (context) => EditProductView(product: product),
     )).then((result) {
       if (result == true) {
+        // Same 120s getCategoryProducts cache as delete/remove above.
+        ApiService.clearCache();
         _fetchProducts();
       }
     });
