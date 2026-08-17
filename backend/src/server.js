@@ -16,6 +16,7 @@ import { runAITablesMigration } from '../database/migrations/20260712_add_ai_tab
 import { runImageEmbeddingMigration } from '../database/migrations/20260712_add_image_embedding.js';
 import { runPOSMigration } from '../database/migrations/20260719_add_pos_system.js';
 import { runStoreSettlementsMigration } from '../database/migrations/20260802_add_store_settlements.js';
+import { runProductMediaMigration } from '../database/migrations/20260817_add_product_media.js';
 import { VectorStore } from './services/VectorStore.js';
 
 // Routes
@@ -391,6 +392,13 @@ const server = httpServer.listen(PORT, '0.0.0.0', async () => {
       await runStoreSettlementsMigration();
     } catch (e) {
       logger.warn('⚠ Store settlements migration warning:', e.message);
+    }
+
+    // Run product media (multi-image/video) migration
+    try {
+      await runProductMediaMigration();
+    } catch (e) {
+      logger.warn('⚠ Product media migration warning:', e.message);
     }
 
     // Backfill product embeddings in background — non-blocking

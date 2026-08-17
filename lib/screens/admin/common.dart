@@ -1,6 +1,7 @@
 // lib/screens/admin/common.dart
 
 import 'package:flutter/material.dart';
+import '../../models/product.dart' show Product;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  YSHOP BRAND DESIGN SYSTEM - Matching Current App Style
@@ -244,7 +245,7 @@ class StoreRequest {
       storeType: json["store_type"] as String? ?? "",
       address: json["address"] as String? ?? "",
       email: json["email"] as String? ?? "",
-      storeIconUrl: json["icon_url"] as String? ?? "",
+      storeIconUrl: Product.getFullImageUrl(json["icon_url"] as String? ?? ""),
       storePhone: json["phone"] as String? ?? "",
       status: json["status"] as String? ?? "Pending",
     );
@@ -258,7 +259,7 @@ class StoreRequest {
       storeType: m['store_type'] as String? ?? m['storeType'] as String? ?? '',
       address: m['address'] as String? ?? '',
       email: m['email'] as String? ?? '',
-      storeIconUrl: m['icon_url'] as String? ?? m['storeIconUrl'] as String? ?? '',
+      storeIconUrl: Product.getFullImageUrl(m['icon_url'] as String? ?? m['storeIconUrl'] as String? ?? ''),
       storePhone: (m['phone'] ?? m['storePhone'] ?? '').toString(),
       status: m['status'] as String? ?? 'Pending',
     );

@@ -21,11 +21,16 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 52428800 }, // 50MB
+  limits: { fileSize: 104857600 }, // 100MB — covers a ~40s product video, not just a photo
   fileFilter: (req, file, cb) => {
-    // Allow common image formats
-    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/x-png'];
-    const allowedExts = /\.(jpeg|jpg|png|gif|webp)$/i;
+    // Product media now accepts several images plus one optional video in
+    // the same 'media' field (see ProductController.create/update, which
+    // sorts req.files by mimetype rather than trusting field name).
+    const allowedMimes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/x-png',
+      'video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v',
+    ];
+    const allowedExts = /\.(jpeg|jpg|png|gif|webp|mp4|mov|webm|m4v)$/i;
     const mimeMatches = allowedMimes.includes(file.mimetype);
     const extMatches = allowedExts.test(file.originalname.toLowerCase());
 
@@ -33,9 +38,9 @@ const upload = multer({
       return cb(null, true);
     }
 
-    console.log('Invalid file rejected:', { 
-      originalname: file.originalname, 
-      mimetype: file.mimetype 
+    console.log('Invalid file rejected:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype
     });
     cb(new Error('Invalid file type'));
   },
@@ -60,8 +65,8 @@ router.get('/', ProductController.getAll);
 router.get('/:id', ProductController.getById);
 
 // ==================== AUTHENTICATED ROUTES ====================
-router.post('/', verifyFirebaseToken, upload.single('image'), validateProduct, ProductController.create);
-router.put('/:id', verifyFirebaseToken, upload.single('image'), ProductController.update);
+router.post('/', verifyFirebaseToken, upload.array('media', 10), validateProduct, ProductController.create);
+router.put('/:id', verifyFirebaseToken, upload.array('media', 10), ProductController.update);
 router.delete('/:id', verifyFirebaseToken, ProductController.delete);
 
 

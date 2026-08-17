@@ -80,9 +80,15 @@ export class ProductController {
     try {
       const { name, description, price, storeId, categoryId, stock, currency } = req.body;
 
-      const imageUrl = req.file
-        ? `/uploads/products/${req.file.filename}`
-        : null;
+      // req.files holds every image plus the optional single video, all
+      // under one 'media' field (see productRoutes.js) — sorted by
+      // mimetype here rather than trusting upload order, since a store
+      // owner can pick the video from anywhere in their selection.
+      const files = req.files || [];
+      const imageFiles = files.filter(f => f.mimetype.startsWith('image/'));
+      const videoFiles = files.filter(f => f.mimetype.startsWith('video/'));
+
+      const imageUrl = imageFiles[0] ? `/uploads/products/${imageFiles[0].filename}` : null;
 
       const product = await Product.create({
         name,
@@ -94,6 +100,14 @@ export class ProductController {
         imageUrl,
         currency: currency || 'USD', // Default to USD if not provided
       });
+
+      const mediaItems = [
+        ...imageFiles.map(f => ({ url: `/uploads/products/${f.filename}`, type: 'image' })),
+        ...videoFiles.slice(0, 1).map(f => ({ url: `/uploads/products/${f.filename}`, type: 'video' })),
+      ];
+      if (mediaItems.length > 0) {
+        await Product.replaceMedia(product.id, mediaItems);
+      }
 
       // New product starts as pending — clear cache so stale data doesn't linger
       ProductRetrievalService.clearCache();
@@ -114,8 +128,12 @@ export class ProductController {
       const { id } = req.params;
       const updateData = req.body;
 
-      if (req.file) {
-        updateData.imageUrl = `/uploads/products/${req.file.filename}`;
+      const files = req.files || [];
+      const imageFiles = files.filter(f => f.mimetype.startsWith('image/'));
+      const videoFiles = files.filter(f => f.mimetype.startsWith('video/'));
+
+      if (imageFiles[0]) {
+        updateData.imageUrl = `/uploads/products/${imageFiles[0].filename}`;
       }
 
       const product = await Product.update(id, updateData);
@@ -125,6 +143,14 @@ export class ProductController {
           success: false,
           message: 'Product not found',
         });
+      }
+
+      if (files.length > 0) {
+        const mediaItems = [
+          ...imageFiles.map(f => ({ url: `/uploads/products/${f.filename}`, type: 'image' })),
+          ...videoFiles.slice(0, 1).map(f => ({ url: `/uploads/products/${f.filename}`, type: 'video' })),
+        ];
+        await Product.replaceMedia(id, mediaItems);
       }
 
       // Invalidate catalog cache immediately

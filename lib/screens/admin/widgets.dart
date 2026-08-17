@@ -2,7 +2,6 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'common.dart';
 import '../../models/currency.dart';
 
@@ -550,11 +549,15 @@ class GlassImageContainer extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius - 1),
         child: (imageUrl != null && imageUrl!.isNotEmpty)
-            ? CachedNetworkImage(
-                imageUrl: imageUrl!,
+            ? Image.network(
+                imageUrl!,
                 fit: BoxFit.cover,
-                placeholder: (_, __) => _buildPlaceholder(),
-                errorWidget: (_, __, ___) => _buildFallback(),
+                cacheWidth: (size * 2).round(),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return _buildPlaceholder();
+                },
+                errorBuilder: (_, __, ___) => _buildFallback(),
               )
             : _buildFallback(),
       ),

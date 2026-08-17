@@ -97,6 +97,8 @@ export class Product {
         }
       });
 
+      await Product._attachMedia(rows, baseUrl);
+
       return rows;
     } catch (error) {
       logger.error('Error fetching products:', error);
@@ -108,19 +110,28 @@ export class Product {
     try {
       const connection = await pool.getConnection();
       const [rows] = await connection.execute(
-        `SELECT 
-          p.*, 
-          s.name as store_name, 
-          s.phone as store_phone, 
+        `SELECT
+          p.*,
+          s.name as store_name,
+          s.phone as store_phone,
           COALESCE(u.email, s.email) as owner_email,
           s.uid as owner_uid
-        FROM products p 
-        LEFT JOIN stores s ON p.store_id = s.id 
-        LEFT JOIN users u ON s.owner_uid = u.uid 
+        FROM products p
+        LEFT JOIN stores s ON p.store_id = s.id
+        LEFT JOIN users u ON s.owner_uid = u.uid
         WHERE p.id = ?`,
         [id]
       );
       connection.release();
+      if (!rows[0]) return rows[0];
+
+      const baseUrl = process.env.PUBLIC_BACKEND_URL || process.env.API_BASE_URL || 'http://Mohammeds-Mackbook-MacBook-Air.local:3000';
+      if (rows[0].image_url && typeof rows[0].image_url === 'string') {
+        rows[0].image_url = rows[0].image_url.startsWith('http')
+          ? baseUrl + new URL(rows[0].image_url).pathname
+          : baseUrl + rows[0].image_url;
+      }
+      await Product._attachMedia(rows, baseUrl);
       return rows[0];
     } catch (error) {
       logger.error('Error finding product:', error);
@@ -185,6 +196,80 @@ export class Product {
       logger.error('Error updating product:', error);
       throw error;
     }
+  }
+
+  // Replaces the full media set for a product — used by both create (first
+  // save) and update (when the store owner picks new media). mediaItems is
+  // [{ url, type: 'image'|'video' }, ...] in display order.
+  static async replaceMedia(productId, mediaItems) {
+    if (!mediaItems || mediaItems.length === 0) return;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute('DELETE FROM product_media WHERE product_id = ?', [productId]);
+      for (let i = 0; i < mediaItems.length; i++) {
+        const { url, type } = mediaItems[i];
+        await connection.execute(
+          `INSERT INTO product_media (product_id, media_url, media_type, sort_order) VALUES (?, ?, ?, ?)`,
+          [productId, url, type === 'video' ? 'video' : 'image', i]
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      logger.error('Error replacing product media:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  // Batch-attaches image_urls (all images, ordered) and video_url (first
+  // video, if any) to a list of product rows — one query for the whole
+  // page instead of N+1. Rows without any product_media rows fall back to
+  // [row.image_url] so older products (created before this table existed)
+  // still show their single photo in a gallery.
+  static async _attachMedia(rows, baseUrl) {
+    if (!rows || rows.length === 0) return rows;
+    const ids = rows.map(r => r.id).filter(id => id !== undefined && id !== null);
+    if (ids.length === 0) return rows;
+
+    const connection = await pool.getConnection();
+    let mediaRows;
+    try {
+      const placeholders = ids.map(() => '?').join(',');
+      [mediaRows] = await connection.execute(
+        `SELECT product_id, media_url, media_type FROM product_media WHERE product_id IN (${placeholders}) ORDER BY product_id, sort_order`,
+        ids
+      );
+    } finally {
+      connection.release();
+    }
+
+    const byProduct = new Map();
+    for (const m of mediaRows) {
+      if (!byProduct.has(m.product_id)) byProduct.set(m.product_id, []);
+      byProduct.get(m.product_id).push(m);
+    }
+
+    const toFullUrl = (u) => {
+      if (!u) return u;
+      return u.startsWith('http') ? baseUrl + new URL(u).pathname : `${baseUrl}${u}`;
+    };
+
+    rows.forEach(row => {
+      const media = byProduct.get(row.id);
+      if (media && media.length > 0) {
+        row.image_urls = media.filter(m => m.media_type === 'image').map(m => toFullUrl(m.media_url));
+        const video = media.find(m => m.media_type === 'video');
+        row.video_url = video ? toFullUrl(video.media_url) : null;
+      } else {
+        row.image_urls = row.image_url ? [row.image_url] : [];
+        row.video_url = null;
+      }
+    });
+
+    return rows;
   }
 
   static async delete(id) {
