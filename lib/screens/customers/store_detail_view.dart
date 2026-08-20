@@ -49,6 +49,23 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
   // sequence, just without that particular animation playing first.
   bool get _isFoodStore => widget.store.storeType.trim().toLowerCase() == 'food';
 
+  // "THE MENU" only makes sense for restaurants — every other store type
+  // (see StoreCategories.all) gets wording that actually fits what it sells.
+  String get _menuSectionTitle {
+    switch (widget.store.storeType.trim().toLowerCase()) {
+      case 'food':
+        return 'THE MENU';
+      case 'pharmacy':
+        return 'THE PHARMACY';
+      case 'clothes':
+        return 'THE COLLECTION';
+      case 'market':
+        return 'THE MARKET';
+      default:
+        return 'THE SHOP';
+    }
+  }
+
   // 🎯 SCROLL CONFIGURATION متناسق مع البرغر
   // 6 طبقات × 150px = 900px + 100px buffer = 1000px
   final double _burgerScrollEnd = 1700.0;
@@ -262,7 +279,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                           child: Padding(
                             padding: const EdgeInsets.only(top: 24, bottom: 16),
                             child: Text(
-                              'THE MENU',
+                              _menuSectionTitle,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontFamily: 'TenorSans',
