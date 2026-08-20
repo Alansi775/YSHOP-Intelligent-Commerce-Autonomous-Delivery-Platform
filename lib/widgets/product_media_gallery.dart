@@ -41,11 +41,29 @@ class ProductMediaGallery extends StatefulWidget {
 class _ProductMediaGalleryState extends State<ProductMediaGallery> {
   late final PageController _pageController;
   int _index = 0;
+  bool _hasPrecached = false;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: 0.82);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_hasPrecached) return;
+    _hasPrecached = true;
+    // Without this, each photo only started downloading the moment its
+    // own page actually scrolled into view — swiping to the next one
+    // showed a blank placeholder that popped into the image a beat later.
+    // Precaching every photo the moment the gallery mounts means by the
+    // time someone swipes, it's already sitting in Flutter's image cache.
+    for (final entry in widget.media) {
+      if (!entry.isVideo) {
+        precacheImage(NetworkImage(entry.url), context);
+      }
+    }
   }
 
   @override
@@ -236,12 +254,28 @@ class ProductMediaFullscreenViewer extends StatefulWidget {
 class _ProductMediaFullscreenViewerState extends State<ProductMediaFullscreenViewer> {
   late final PageController _pageController;
   late int _index;
+  bool _hasPrecached = false;
 
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex;
     _pageController = PageController(initialPage: _index);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_hasPrecached) return;
+    _hasPrecached = true;
+    // Usually already cached by ProductMediaGallery (this viewer only
+    // opens from there), so normally a no-op — kept as a safety net for
+    // any other caller.
+    for (final entry in widget.media) {
+      if (!entry.isVideo) {
+        precacheImage(NetworkImage(entry.url), context);
+      }
+    }
   }
 
   @override

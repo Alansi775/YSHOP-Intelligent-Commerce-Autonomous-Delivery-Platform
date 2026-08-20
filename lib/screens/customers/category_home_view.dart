@@ -1256,6 +1256,14 @@ class _VideoSectionState extends State<_VideoSection> {
   late final PageController _pageController;
   int _realIndex = _initialPage % _videos.length;
 
+  // Only 3 fixed local videos, so keeping all 3 alive and initialized for
+  // the section's whole lifetime is cheap — the old approach had each
+  // _VideoCard create its own controller lazily when its page actually
+  // built, so swiping to a video PageView.builder hadn't built yet showed
+  // a blank card before it popped in. Initializing all 3 upfront here
+  // means every one is already decoding/ready before the user ever swipes.
+  late final List<VideoPlayerController> _controllers;
+
   @override
   void initState() {
     super.initState();
@@ -1269,13 +1277,35 @@ class _VideoSectionState extends State<_VideoSection> {
       initialPage: _initialPage,
     );
     _pageController.addListener(_onScroll);
+
+    _controllers = _videos.map((v) {
+      final c = VideoPlayerController.asset(v['path']!)
+        ..setLooping(true)
+        ..setVolume(0);
+      return c;
+    }).toList();
+    for (var i = 0; i < _controllers.length; i++) {
+      _controllers[i].initialize().then((_) {
+        if (!mounted) return;
+        setState(() {});
+        if (i == _realIndex) _controllers[i].play();
+      }).catchError((_) {});
+    }
   }
 
   void _onScroll() {
     if (!_pageController.hasClients) return;
     final virtual = _pageController.page?.round() ?? _initialPage;
     final real = virtual % _videos.length;
-    if (real != _realIndex) setState(() => _realIndex = real);
+    if (real != _realIndex) {
+      setState(() {
+        _controllers[_realIndex].pause();
+        _realIndex = real;
+        if (_controllers[_realIndex].value.isInitialized) {
+          _controllers[_realIndex].play();
+        }
+      });
+    }
   }
 
   void _go(int delta) {
@@ -1287,6 +1317,9 @@ class _VideoSectionState extends State<_VideoSection> {
   void dispose() {
     _pageController.removeListener(_onScroll);
     _pageController.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -1333,6 +1366,7 @@ class _VideoSectionState extends State<_VideoSection> {
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: _VideoCard(
                         videoData: data,
+                        controller: _controllers[index % _videos.length],
                         isActive: index == (_pageController.hasClients ? (_pageController.page?.round() ?? _initialPage) : _initialPage),
                         isMobile: widget.isMobile,
                       ),
@@ -1410,57 +1444,17 @@ class _CarouselArrow extends StatelessWidget {
   }
 }
 
-class _VideoCard extends StatefulWidget {
+class _VideoCard extends StatelessWidget {
   final Map<String, String> videoData;
+  // Owned and initialized by _VideoSectionState for the whole section's
+  // lifetime (only 3 fixed videos, cheap to keep alive) — this card just
+  // displays whatever state it's already in, so a video that's already
+  // playing when swiped to shows instantly instead of a blank card that
+  // pops in once its own lazily-created controller finishes initializing.
+  final VideoPlayerController controller;
   final bool isActive;
   final bool isMobile;
-  const _VideoCard({required this.videoData, required this.isActive, required this.isMobile});
-
-  @override
-  State<_VideoCard> createState() => _VideoCardState();
-}
-
-class _VideoCardState extends State<_VideoCard> {
-  VideoPlayerController? _ctrl;
-  bool _ready = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    final ctrl = VideoPlayerController.asset(widget.videoData['path']!)
-      ..setLooping(true)
-      ..setVolume(0);
-    try {
-      await ctrl.initialize();
-    } catch (_) {
-      return;
-    }
-    if (!mounted) {
-      ctrl.dispose();
-      return;
-    }
-    _ctrl = ctrl;
-    setState(() => _ready = true);
-    if (widget.isActive) _ctrl!.play();
-  }
-
-  @override
-  void didUpdateWidget(_VideoCard old) {
-    super.didUpdateWidget(old);
-    if (widget.isActive != old.isActive) {
-      widget.isActive ? _ctrl?.play() : _ctrl?.pause();
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl?.dispose();
-    super.dispose();
-  }
+  const _VideoCard({required this.videoData, required this.controller, required this.isActive, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
@@ -1470,22 +1464,22 @@ class _VideoCardState extends State<_VideoCard> {
         fit: StackFit.expand,
         children: [
           Container(color: Colors.black),
-          if (_ready && _ctrl != null)
+          if (controller.value.isInitialized)
             FittedBox(
               fit: BoxFit.cover,
               child: SizedBox(
-                width: _ctrl!.value.size.width,
-                height: _ctrl!.value.size.height,
-                child: VideoPlayer(_ctrl!),
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                child: VideoPlayer(controller),
               ),
             ),
-          if (!widget.isActive) Container(color: Colors.black.withOpacity(0.5)),
+          if (!isActive) Container(color: Colors.black.withOpacity(0.5)),
           // Bottom scrim so the overlay text stays legible over bright
           // footage. Smaller on mobile — at the old size the text/gradient
           // ate a large fraction of the card height, cramping the video.
           Positioned(
             left: 0, right: 0, bottom: 0,
-            height: widget.isMobile ? 100 : 140,
+            height: isMobile ? 100 : 140,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -1497,33 +1491,33 @@ class _VideoCardState extends State<_VideoCard> {
             ),
           ),
           Positioned(
-            left: widget.isMobile ? 16 : 20,
-            right: widget.isMobile ? 16 : 20,
-            bottom: widget.isMobile ? 14 : 20,
+            left: isMobile ? 16 : 20,
+            right: isMobile ? 16 : 20,
+            bottom: isMobile ? 14 : 20,
             child: AnimatedOpacity(
-              opacity: widget.isActive ? 1 : 0,
+              opacity: isActive ? 1 : 0,
               duration: const Duration(milliseconds: 250),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    widget.videoData['sub']!,
+                    videoData['sub']!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: widget.isMobile ? 9.5 : 11, fontWeight: FontWeight.w600, letterSpacing: widget.isMobile ? 1.5 : 2),
+                    style: TextStyle(color: Colors.white70, fontSize: isMobile ? 9.5 : 11, fontWeight: FontWeight.w600, letterSpacing: isMobile ? 1.5 : 2),
                   ),
-                  SizedBox(height: widget.isMobile ? 4 : 6),
+                  SizedBox(height: isMobile ? 4 : 6),
                   Text(
-                    widget.videoData['title']!,
+                    videoData['title']!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: widget.isMobile ? 20 : 26, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: Colors.white, fontSize: isMobile ? 20 : 26, fontWeight: FontWeight.w700),
                   ),
-                  SizedBox(height: widget.isMobile ? 6 : 10),
+                  SizedBox(height: isMobile ? 6 : 10),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _VideoLink('Learn More', isMobile: widget.isMobile),
-                      SizedBox(width: widget.isMobile ? 16 : 20),
-                      _VideoLink('Shop Now', isMobile: widget.isMobile),
+                      _VideoLink('Learn More', isMobile: isMobile),
+                      SizedBox(width: isMobile ? 16 : 20),
+                      _VideoLink('Shop Now', isMobile: isMobile),
                     ],
                   ),
                 ],
