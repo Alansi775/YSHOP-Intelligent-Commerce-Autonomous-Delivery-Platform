@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "home-720ef"
-  }
+  },
+  "targets": {
+    "home-720ef": {
+      "hosting": {
+        "main": [
+          "home-720ef"
+        ],
+        "yshopapp": [
+          "yshop-app"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
