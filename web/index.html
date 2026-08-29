@@ -44,13 +44,19 @@
   <!-- The gap reported at the top (behind the status bar) and bottom
        (above the address bar) on mobile Safari/Chrome isn't a load-time
        flash — it's the page's own rubber-band/bounce overscroll revealing
-       the raw white <body> background beyond the app's edges. Pinning
-       html/body to the visual viewport (height:100dvh + overflow:hidden +
-       overscroll-behavior:none) stops the *page itself* from scrolling or
-       bouncing at all; only Flutter's own internal ScrollViews should
-       ever move. The background-color is the fallback color shown in that
-       same sliver before Flutter paints over it, matched to the app's
-       actual light/dark theme colors instead of default browser white. -->
+       the raw white <body> background beyond the app's edges.
+       overscroll-behavior:none (the modern fix, no position:fixed needed)
+       stops that bounce; the background-color is the fallback shown in
+       that same sliver before Flutter paints over it, matched to the
+       app's actual light/dark theme instead of default browser white.
+       NOTE: body was previously `position: fixed` here as a belt-and-
+       braces version of this fix — that broke Google Sign-In's real
+       button (a platform view Flutter overlays as a genuine DOM node,
+       not something Flutter itself lays out), which got stuck showing
+       "Getting ready" forever because a fixed-position ancestor changes
+       how the browser resolves its containing block/measurements. Don't
+       reintroduce position: fixed on body without checking that button
+       still renders. -->
   <style>
     html, body {
       height: 100%;
@@ -60,10 +66,6 @@
       overflow: hidden;
       overscroll-behavior: none;
       background-color: #0A0A0A;
-    }
-    body {
-      position: fixed;
-      inset: 0;
     }
     @media (prefers-color-scheme: light) {
       html, body { background-color: #FAFAFA; }

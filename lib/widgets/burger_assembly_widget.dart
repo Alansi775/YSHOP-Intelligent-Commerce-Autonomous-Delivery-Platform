@@ -18,6 +18,15 @@ class BurgerAssemblyWidget extends StatefulWidget {
   // completion celebration, scroll mechanics) and just skip this one part.
   final bool showBurgerPieces;
   final String completionLabel;
+  // How much scrolling it takes to reach the "assembled"/onAssembled
+  // trigger. Defaults to the burger's own real pacing (6 layers x 180px).
+  // Non-Food stores have nothing to watch during that scroll — no burger
+  // pieces — so making them scroll the same distance felt like an empty
+  // dead zone before the menu ever showed up; a store passing a shorter
+  // value here gets straight to its products right after the welcome
+  // text finishes its own fade (which always completes by scroll=300,
+  // regardless of this value).
+  final double totalScrollRange;
 
   const BurgerAssemblyWidget({
     Key? key,
@@ -28,6 +37,7 @@ class BurgerAssemblyWidget extends StatefulWidget {
     this.welcomeOpacityNotifier,
     this.showBurgerPieces = true,
     this.completionLabel = 'MASTERPIECE ASSEMBLED',
+    this.totalScrollRange = 1080.0,
   }) : super(key: key);
 
   @override
@@ -53,7 +63,7 @@ class _BurgerAssemblyWidgetState extends State<BurgerAssemblyWidget>
   // 🎯 SCROLL CONFIGURATION
   final double _scrollRangePerLayer = 180.0;  // أقصر = أسرع
   final List<ScrollRange> _scrollRanges = [];
-  final double _totalScrollRange = 1080.0;  // 6 طبقات × 180px
+  double get _totalScrollRange => widget.totalScrollRange;  // default: 6 طبقات × 180px
 
   //  EXPLODED VIEW LAYERS
   final List<BurgerLayer> _layers = [

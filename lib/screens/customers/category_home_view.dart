@@ -121,6 +121,16 @@ class _CategoryHomeViewState extends State<CategoryHomeView>
       _preloadImages();
     });
 
+    // A brief pause after the page settles reads as a deliberate nudge,
+    // not a jarring pop-up fighting the page for attention on load — Google
+    // owns the actual card's UI/positioning/one-time-per-session behavior
+    // from here (see AuthManager.maybeShowGoogleOneTap), this just decides
+    // when to ask for it.
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      Provider.of<AuthManager>(context, listen: false).maybeShowGoogleOneTap();
+    });
+
     _startAutoRotate();
   }
 
@@ -1249,6 +1259,7 @@ class _VideoSectionState extends State<_VideoSection> {
     {'path': 'assets/videos/hero1.mp4', 'title': 'Featured Selection', 'sub': 'HANDPICKED FOR YOU'},
     {'path': 'assets/videos/hero2.mp4', 'title': 'New Arrivals', 'sub': 'FRESH ON YSHOP'},
     {'path': 'assets/videos/hero3.mp4', 'title': 'Best Sellers', 'sub': 'LOVED BY CUSTOMERS'},
+    {'path': 'assets/videos/hero4.mp4', 'title': 'Exclusive Deals', 'sub': 'LIMITED TIME OFFERS'},
   ];
 
   static const int _virtualCount = 999999;

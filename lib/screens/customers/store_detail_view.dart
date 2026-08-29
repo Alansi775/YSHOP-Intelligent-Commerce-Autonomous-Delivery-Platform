@@ -67,8 +67,14 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
   }
 
   // 🎯 SCROLL CONFIGURATION متناسق مع البرغر
-  // 6 طبقات × 150px = 900px + 100px buffer = 1000px
-  final double _burgerScrollEnd = 1700.0;
+  // Food stores keep the real burger pacing (6 layers, matches
+  // BurgerAssemblyWidget's own default totalScrollRange). Non-Food
+  // stores show no burger pieces, so there's nothing to watch during a
+  // long scroll — shortened so the welcome text fades (always done by
+  // scroll=300) and the menu reveals shortly after, not a long empty
+  // scroll first.
+  double get _burgerScrollEnd => _isFoodStore ? 1700.0 : 450.0;
+  double get _burgerTotalScrollRange => _isFoodStore ? 1080.0 : 300.0;
 
   @override
   void initState() {
@@ -229,6 +235,7 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
                     welcomeOpacityNotifier: _burgerWelcomeOpacity,
                     showBurgerPieces: _isFoodStore,
                     completionLabel: _isFoodStore ? 'MASTERPIECE ASSEMBLED' : 'WELCOME',
+                    totalScrollRange: _burgerTotalScrollRange,
                     onAssembled: _revealMenu,
                   ),
                 ),

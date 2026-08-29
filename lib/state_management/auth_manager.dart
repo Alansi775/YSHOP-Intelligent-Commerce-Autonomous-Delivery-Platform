@@ -365,6 +365,51 @@ class AuthManager with ChangeNotifier {
     );
   }
 
+  static const String _oneTapShownKey = 'google_one_tap_shown';
+  bool _oneTapListenerSetUp = false;
+
+  /// Web only: nudges a first-time guest with Google's own native "One Tap"
+  /// card (the small "Continue as ..." bubble Google renders itself, top
+  /// corner of the page — same UI Google-integrated sites like DJI show).
+  /// This is literally `GoogleSignIn.signInSilently()` on web: the
+  /// google_sign_in_web plugin's implementation of that call is Google
+  /// Identity Services' own `id.prompt()`, so there's no custom banner UI
+  /// to build here — Google renders and positions it. Fires at most once
+  /// per browser (flag persisted in SharedPreferences), and only for a
+  /// guest — an already-authenticated user is never shown it.
+  Future<void> maybeShowGoogleOneTap() async {
+    if (!kIsWeb || isAuthenticated) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_oneTapShownKey) == true) return;
+    // Mark it shown immediately, before the prompt even resolves — "only
+    // the first visit" means never retrying, whether the user completes
+    // it, dismisses it, or Google silently declines to show it at all
+    // (e.g. no active Google browser session).
+    await prefs.setBool(_oneTapShownKey, true);
+
+    if (!_oneTapListenerSetUp) {
+      _oneTapListenerSetUp = true;
+      googleSignInInstance.onCurrentUserChanged.listen((account) async {
+        if (account == null || isAuthenticated) return;
+        try {
+          await completeGoogleAuth(account);
+          notifyListeners();
+        } catch (_) {
+          // Silent nudge — a failure here shouldn't interrupt guest
+          // browsing with an error the user never asked to see.
+        }
+      });
+    }
+
+    try {
+      await googleSignInInstance.signInSilently();
+    } catch (_) {
+      // No active Google session, popup blocked, etc. — same as the user
+      // just not seeing/using the prompt.
+    }
+  }
+
   /// Sign in (or sign up, transparently) with Google — mobile path only.
   /// google_sign_in_web's own source is explicit that this imperative
   /// `.signIn()` flow "can't reliably provide an idToken" on web (Google
