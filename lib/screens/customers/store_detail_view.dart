@@ -73,7 +73,19 @@ class _StoreDetailViewState extends State<StoreDetailView> with TickerProviderSt
   // long scroll — shortened so the welcome text fades (always done by
   // scroll=300) and the menu reveals shortly after, not a long empty
   // scroll first.
-  double get _burgerScrollEnd => _isFoodStore ? 1700.0 : 450.0;
+  //
+  // The spacer has to clear the viewport height, not just the trigger
+  // threshold: a CustomScrollView can only actually scroll as far as
+  // (content height - viewport height). A flat 450px spacer was SHORTER
+  // than most phones' own screen height, so maxScrollExtent came out to
+  // ~0 before the menu ever revealed — the user would scroll a tiny
+  // rubber-band bounce and hit a hard stop, since there was nothing below
+  // the spacer to scroll into yet (the real menu content only mounts
+  // after onAssembled fires, which never got the scroll distance it
+  // needed). Anchoring to the actual screen height guarantees real
+  // scrollable room past the trigger point regardless of device size.
+  double get _burgerScrollEnd =>
+      _isFoodStore ? 1700.0 : MediaQuery.of(context).size.height + _burgerTotalScrollRange + 200.0;
   double get _burgerTotalScrollRange => _isFoodStore ? 1080.0 : 300.0;
 
   @override
