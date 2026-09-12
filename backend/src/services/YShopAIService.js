@@ -643,13 +643,14 @@ Other:
   static async callGroq(prompt, temperature = 0.35, maxOutputTokens = 512) {
     const apiKey = process.env.GROQ_API_KEY;
     const apiUrl = process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions';
-    // openai/gpt-oss-120b and the other mid-size Groq models share an 8000
-    // tokens/minute pool on this account — a real multi-turn conversation
-    // (intent parse + product reasons per turn) blows through that in 2-3
-    // messages and falls back to the generic reply again. groq/compound-mini
-    // sits on a separate, much larger 70000 TPM pool, so it survives a real
-    // back-and-forth conversation instead of just a single isolated message.
-    const model = process.env.GROQ_MODEL || 'groq/compound-mini';
+    // groq/compound-mini looked like an escape hatch (separate 70000 TPM
+    // pool) but it internally routes through llama-3.3-70b-versatile, which
+    // has its own small shared pool — so it hit the exact same wall on a
+    // real multi-turn conversation. qwen3.8-27b is a plain single-model
+    // call (no internal double-routing) and doesn't burn extra reasoning
+    // tokens the way the gpt-oss models do, which matters most: every turn
+    // now only fires ONE LLM call total (see generateProductReasons below).
+    const model = process.env.GROQ_MODEL || 'qwen/qwen3.8-27b';
 
     if (!apiKey) {
       throw new Error('GROQ_API_KEY not configured');
@@ -670,10 +671,10 @@ Other:
           messages: [{ role: 'user', content: prompt }],
           temperature,
           max_tokens: maxOutputTokens,
-          // Only the standalone reasoning models (gpt-oss/qwen) accept this —
-          // compound models 400 on it since they manage their own sub-model
-          // reasoning internally.
-          ...(model.startsWith('openai/gpt-oss') || model.startsWith('qwen/') ? { reasoning_effort: 'low' } : {}),
+          // Only gpt-oss models need this to stop reasoning tokens from
+          // eating the whole completion budget — qwen actually reasons MORE
+          // when this is forced on, and compound models 400 on it outright.
+          ...(model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
         }),
         signal: controller.signal,
       });
@@ -907,7 +908,7 @@ Other:
       try {
         const raw = await this.generateLLMText(prompt, {
           temperature: attempt === 0 ? 0.35 : 0.2,
-          maxOutputTokens: 512,
+          maxOutputTokens: 380,
         });
         logger.info(`[YShopAI] understandMessage raw: "${raw.substring(0, 200)}"`);
 
@@ -1263,29 +1264,24 @@ Other:
     }
 
     const productList = products.map(p =>
-      `- ${p.name}: ${p.description ? p.description.substring(0, 80) : 'No description'} (${p.price} ${p.currency})`
+      `- ${p.name}: ${p.description ? p.description.substring(0, 50) : 'No description'}`
     ).join('\n');
 
-    const prompt = `${this.PERSONALITY}
-
-User's language: ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}
+    // Kept deliberately short — this is a second LLM round-trip on top of
+    // understandMessage, and every extra prompt token here is a token this
+    // account's shared Groq TPM budget can't spend on the actual intent
+    // parse in the next message of the same conversation.
+    const prompt = `Talk like a warm, funny human friend who tried these products. ${userLang === 'arabic' ? 'REPLY ONLY IN ARABIC.' : 'REPLY ONLY IN ENGLISH.'} No emojis.
 User asked: "${userMessage}"
-
 Products:
 ${productList}
-
-For EACH product write 1 short reason why they'd love it.
-REPLY ONLY IN ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}
-Talk like you tried it. Be specific.
-NEVER use emojis. NEVER mix languages.
-
-Return JSON only:
-{"reasons":{"ProductName":"reason in ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}"}}`;
+Write 1 short specific reason per product why they'd love it.
+JSON only: {"reasons":{"ProductName":"reason"}}`;
 
     try {
       const raw = await this.generateLLMText(prompt, {
         temperature: 0.5,
-        maxOutputTokens: 512,
+        maxOutputTokens: 180,
       });
       const parsed = this.parseJSON(raw);
       if (parsed?.reasons && typeof parsed.reasons === 'object') {
