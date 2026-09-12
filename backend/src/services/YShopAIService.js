@@ -640,7 +640,7 @@ Other:
   static async callGroq(prompt, temperature = 0.35, maxOutputTokens = 512) {
     const apiKey = process.env.GROQ_API_KEY;
     const apiUrl = process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions';
-    const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    const model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
     if (!apiKey) {
       throw new Error('GROQ_API_KEY not configured');
@@ -661,6 +661,7 @@ Other:
           messages: [{ role: 'user', content: prompt }],
           temperature,
           max_tokens: maxOutputTokens,
+          reasoning_effort: 'low',
         }),
         signal: controller.signal,
       });
