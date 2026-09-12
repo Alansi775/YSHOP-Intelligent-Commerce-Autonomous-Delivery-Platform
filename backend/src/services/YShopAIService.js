@@ -643,7 +643,13 @@ Other:
   static async callGroq(prompt, temperature = 0.35, maxOutputTokens = 512) {
     const apiKey = process.env.GROQ_API_KEY;
     const apiUrl = process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions';
-    const model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+    // openai/gpt-oss-120b and the other mid-size Groq models share an 8000
+    // tokens/minute pool on this account — a real multi-turn conversation
+    // (intent parse + product reasons per turn) blows through that in 2-3
+    // messages and falls back to the generic reply again. groq/compound-mini
+    // sits on a separate, much larger 70000 TPM pool, so it survives a real
+    // back-and-forth conversation instead of just a single isolated message.
+    const model = process.env.GROQ_MODEL || 'groq/compound-mini';
 
     if (!apiKey) {
       throw new Error('GROQ_API_KEY not configured');
@@ -664,7 +670,10 @@ Other:
           messages: [{ role: 'user', content: prompt }],
           temperature,
           max_tokens: maxOutputTokens,
-          reasoning_effort: 'low',
+          // Only the standalone reasoning models (gpt-oss/qwen) accept this —
+          // compound models 400 on it since they manage their own sub-model
+          // reasoning internally.
+          ...(model.startsWith('openai/gpt-oss') || model.startsWith('qwen/') ? { reasoning_effort: 'low' } : {}),
         }),
         signal: controller.signal,
       });
