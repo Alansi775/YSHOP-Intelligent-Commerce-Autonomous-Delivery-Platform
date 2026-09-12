@@ -803,7 +803,7 @@ quantity = number asked (1-5), default 3. Return ONLY JSON.`;
       try {
         const raw = await this.generateLLMText(prompt, {
           temperature: attempt === 0 ? 0.35 : 0.2,
-          maxOutputTokens: 380,
+          maxOutputTokens: 240,
         });
         logger.info(`[YShopAI] understandMessage raw: "${raw.substring(0, 200)}"`);
 
@@ -1176,7 +1176,7 @@ JSON only: {"reasons":{"ProductName":"reason"}}`;
     try {
       const raw = await this.generateLLMText(prompt, {
         temperature: 0.5,
-        maxOutputTokens: 180,
+        maxOutputTokens: 130,
       });
       const parsed = this.parseJSON(raw);
       if (parsed?.reasons && typeof parsed.reasons === 'object') {
