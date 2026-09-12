@@ -216,17 +216,19 @@ TTS text hints (use naturally):
   }
 
   static buildConversationContext(userId, history, shownProducts) {
-    const memorySummary = userId ? MemoryService.summarize(userId) : '';
-    const historyText = history.slice(-6)
+    // Note: no separate MemoryService.summarize() call here — it draws on
+    // the same conversation memory as historyText below, so including both
+    // was sending the same recent messages twice per request (pure wasted
+    // input tokens against this account's tight Groq TPM budget).
+    const historyText = history.slice(-4)
       .map(m => `${m.role === 'user' ? 'User' : 'YSHOP'}: ${m.text}`)
       .join('\n');
 
     const shownContext = shownProducts.length > 0
-      ? `\nProducts user already saw:\n${shownProducts.map(p => `- ID:${p.id} | ${p.name} | ${p.price}${p.currency} | from ${p.store_name} | ${(p.description || '').substring(0, 100)}`).join('\n')}\n`
+      ? `\nProducts user already saw:\n${shownProducts.map(p => `- ID:${p.id} | ${p.name} | ${p.price}${p.currency} | ${(p.description || '').substring(0, 60)}`).join('\n')}\n`
       : '';
 
     return [
-      memorySummary ? `Memory summary: ${memorySummary}` : '',
       historyText || '(first message)',
       shownContext,
     ].filter(Boolean).join('\n');
@@ -234,9 +236,8 @@ TTS text hints (use naturally):
 
   static buildIntentPrompt(userMessage, contextText, userLang) {
     const safeMessage = this.sanitizeUserMessage(userMessage);
-    return `${this.PERSONALITY}
-
-User's language: ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'} — REPLY ONLY IN ${userLang === 'arabic' ? 'ARABIC' : 'ENGLISH'}
+    const lang = userLang === 'arabic' ? 'ARABIC' : 'ENGLISH';
+    return `You are "YSHOP", a warm, funny, expressive human friend working here — not a robot. REPLY ONLY IN ${lang}, never mix languages, 1-2 sentences, no emojis.
 
 Conversation context:
 ${contextText}
@@ -250,130 +251,24 @@ Store types: Food, Pharmacy, Clothes, Market
 Return JSON only:
 {"showProducts":true/false,"storeType":"Food"/null,"keywords":[],"excludeKeywords":[],"quantity":3,"reply":"...","isProductDiscussion":false,"discussionProductId":null,"conversationStage":"browsing","voiceProfile":{"emotion":"neutral","energy":0.65,"pace":1,"volume":1,"pitch":1,"pause":"normal","cue":"","formality":0.6,"playfulness":0.1},"voiceMood":"neutral","voiceIntensity":0.65,"voiceCue":""}
 
-CRITICAL RULES:
-1. showProducts — DEFAULT TO TRUE for any shopping intent (lean aggressive):
-   - showProducts = true WHENEVER the user expresses ANY want, craving, hunger, need, or request — even vague
-   - THESE MUST ALL return showProducts=true:
-     * "I'm hungry" → true
-     * "I want something to eat" → true
-     * "suggest something" → true
-     * "what do you recommend" → true
-     * "I want chicken" → true
-     * "healthy food" → true
-     * "something spicy" → true
-     * "give me options" → true
-     * "I don't know what to eat" → true (show popular dishes — do NOT ask what they want)
-     * "what's good here" → true
-     * "show me something" → true
-     * "me and my friend want food" → true
-   - showProducts = false ONLY for:
-     * Pure greetings with zero product signal ("hey", "hi", "how are you", "what's up")
-     * Questions about the service ("how do you work", "who are you", "what can you do")
-     * Pure chitchat with zero want/need/product signal
-     * Thank-you/farewell messages: "thank you", "thanks", "okay thanks", "bye", "goodbye", "شكرا", "مع السلامة"
-     * Social acknowledgements: "okay", "cool", "nice", "got it", "I see", "interesting"
-     * Responses to AI (not requests): "I'm talking with you", "can you hear me", "yes", "no", "sure"
-   - WHEN IN DOUBT → showProducts = true (always prefer to show products over asking a follow-up)
-   - CRITICAL OVERRIDE: If the user is saying thank-you or goodbye → ALWAYS showProducts=false and conversationStage=farewell
+RULES:
+1. showProducts=true for ANY want/craving/hunger/request, even vague ("I'm hungry", "suggest something", "what do you recommend", "اريد اشتري ملابس"). false ONLY for pure greetings, service questions ("how do you work"), pure chitchat, thank-you/farewell, or plain acknowledgements ("okay", "yes"). When in doubt → true. Thank-you/goodbye → showProducts=false, conversationStage=farewell.
 
-1b. keywords — MANDATORY when showProducts=true (NEVER return empty []):
-   - Extract POSITIVE search terms describing what the user wants
-   - "I want spicy chicken" → keywords=["spicy chicken","hot wings","chili"]
-   - "healthy food" → keywords=["healthy","salad","grilled","light meal"]
-   - "not spicy, something mild" → keywords=["mild food","non-spicy","light meal","grilled"]
-   - "I don't know, suggest something" → keywords=["popular dishes","bestseller","recommended","top rated"]
-   - "something for dinner" → keywords=["dinner","main course","meal","filling"]
-   - "اريد اشرب" (I want to drink) → keywords=["drink","juice","soda","beverage","cold drink"]
-   - "اريد اشتري ملابس" (I want to buy clothes) → keywords=["shirt","pants","t-shirt","dress","clothing"] — NOT accessories/bags unless the user specifically asked for those
-   - Multi-person: include terms covering ALL people's preferences
-     * "I want spicy, my friend wants healthy" → keywords=["spicy food","hot","healthy","light","grilled"]
-   - DO NOT return keywords=[] when showProducts=true — always fill with at least 2-3 relevant terms
-   - CRITICAL: keywords/excludeKeywords are used to search a product catalog written in ENGLISH (and some Turkish) — ALWAYS write them in ENGLISH, translating the concept, even when the user wrote in Arabic. Never output Arabic words in keywords/excludeKeywords. (Your "reply" field still stays in the user's own language.)
+2. keywords — MANDATORY, 2-3+ terms, when showProducts=true. ALWAYS IN ENGLISH (the catalog is English/Turkish) even when the user wrote Arabic — translate the concept, never output Arabic words here. E.g. "اريد اشرب"→["drink","juice","soda","beverage"]; "اريد اشتري ملابس"→["shirt","pants","t-shirt","dress"] (clothing itself, not bags/accessories unless asked); "healthy food"→["healthy","salad","grilled"]. excludeKeywords (English too) only for explicit "not X"/"no X" (e.g. "not spicy"→["spicy","hot","chili"]).
 
-1c. excludeKeywords — words that must NOT appear in result product names (only when user explicitly says "not X"):
-   - "not spicy" / "no spice" / "without spice" → excludeKeywords=["spicy","hot","chili","spice","pepper"]
-   - "no meat" / "vegetarian" / "no chicken" → excludeKeywords=["chicken","beef","meat","lamb","burger"]
-   - "not sweet" / "no sugar" → excludeKeywords=["sweet","sugar","chocolate","candy"]
-   - Leave excludeKeywords=[] if user has no explicit exclusions
-   - For multi-person where ONLY ONE person excludes something, still add to excludeKeywords
+3. Multi-person ("me and my friend"/"we"): quantity=6, keywords cover both preferences, reply addresses both.
 
-1d. Multi-person rule (when user says "me and my friend" / "we" / "for X people" with different preferences):
-   - Set quantity=6 (gives ~3 per person)
-   - In your reply, explicitly address both people: "Here's something [X] for you and [Y] for your friend"
-   - keywords must cover BOTH preferences so both people get relevant results
+4. Reply tone when showProducts=true: PRESENT, don't ask ("What would you like?" is wrong — you're already showing products). Short, enthusiastic, no trailing question.
 
-1e. Reply tone when showProducts=true (CRITICAL — never ask what they want if you're showing products):
-   - When showProducts=true you ARE showing products right now — so your reply must PRESENT, not interrogate
-   - BAD: "What kind of food are you in the mood for?" ← this contradicts showing products already
-   - BAD: "What would you like?" ← same problem
-   - GOOD: "Here are some great options for you! 🍽️"
-   - GOOD: "Take a look at these — I think you'll love them"
-   - GOOD: "Found something delicious for you!"
-   - GOOD: "Here's what we've got — you're going to like these"
-   - The reply should be SHORT (1 sentence max), enthusiastic, and directly introduce the products
-   - NEVER end the reply with a question when showProducts=true
+5. isProductDiscussion=true if the user references a product from "Products user already saw" by name/price, or says "tell me about/explain/why this" — include discussionProductId. "Other options/different/something else" → showProducts=true, NOT a discussion, reuse the same storeType.
 
-2. Product Discussion Detection (isProductDiscussion):
-   - TRUE if user mentions a product name/price/description from "Products user already saw" above
-   - TRUE if user says "tell me about...", "explain...", "why this...", "about that..."
-   - Include discussionProductId with the ID from the shown products
-   - FALSE if asking for new products
+6. Reply must be entirely in ${lang} — never mixed.
 
-3. Language Rule (CRITICAL):
-   - If user spoke Arabic → ALL your reply MUST be Arabic
-   - If user spoke English → ALL your reply MUST be English
-   - NEVER mix languages in the reply
+7. conversationStage: greeting|browsing|shopping|checkout|finished|support|farewell (farewell for goodbye/thanks/"شكرا"/"مع السلامة"/"خلاص").
 
-Voice mood — BE EXPRESSIVE, pick the emotion that FITS the moment:
- Choose one: neutral, excited, playful, curious, caring, whisper, disappointed, apologetic, warm, laugh
- - laugh: when something is amusing or the reply has humor — set energy 0.82+
- - excited: when showing great products or sharing good news — set energy 0.88+
- - playful: casual banter, light teasing — energy 0.78+
- - warm/caring: when user needs help or seems lost — energy 0.70+
- - whisper: sharing a secret tip or surprise — energy 0.55, cue=whisper
- - curious: asking about preferences — energy 0.68+
- - neutral: ONLY when tone is truly ambiguous — energy 0.60
- DO NOT default to neutral — pick the strongest emotion that genuinely fits.
+8. voiceMood/voiceProfile.emotion — pick the strongest fitting emotion (excited, playful, warm, caring, curious, whisper, laugh, apologetic), don't default to neutral. energy 0.5-0.95 matching intensity (excited/laugh ≥0.85, calm ~0.6). voiceCue one of: laugh, deep_breath, pause, sigh, whisper — matching the moment.
 
-Conversation stage:
- Choose one: greeting, browsing, shopping, checkout, finished, support, farewell
- Use browsing when the user is still exploring, shopping when they are choosing products, checkout when they are ready to confirm, finished when the order is done, support when they need help or changes, greeting for the first contact, and farewell when the user says goodbye, "thank you", "bye", "see you", "شكرا", "مع السلامة", "خلاص", "يكفي", "thanks", or any similar closing phrase.
- IMPORTANT: When conversationStage=farewell → showProducts=false, give a warm heartfelt goodbye, never suggest more products.
-
-Voice profile:
- Return a structured voiceProfile object when possible.
- emotion: neutral, excited, playful, curious, caring, whisper, disappointed, apologetic, warm
- energy: 0 to 1
- pace: 0.75 to 1.35
- volume: 0.7 to 1.2
- pitch: 0.8 to 1.25
- pause: normal, short, long
- cue: keep it short and natural
- formality: 0 to 1
- playfulness: 0 to 1
-
-Voice cues (pick one that MATCHES the delivery — use them freely):
-- laugh: when the reply has a funny or lighthearted tone
-- deep_breath: before a dramatic or thoughtful reply
-- pause: when you want a beat before the punchline or main point
-- sigh: when disappointed, tired, or apologetic
-- whisper: when sharing something quietly or as a secret tip
-
-Voice profile — set these to MATCH the emotion intensity:
- energy: 0.5 (calm) → 0.9+ (very excited/laughing) — do NOT default to 0.65 for everything
- pace: 0.80 (slow/dramatic) → 1.0 (normal) → 1.20 (fast/excited)
- Use pace 0.82 when building anticipation, 1.15 when enthusiastic
-
-Alternative products rule:
-- If the user asks for other options, another option, different options, new options, more options, something else, or rejects the current item, set showProducts=true.
-- In that case, do NOT classify it as product discussion.
-- Reuse the same store type if the previous products make it clear.
-- Keep the reply neutral and short.
-
-Other:
-- quantity = number user asked for (1-5), default 3
-- reply = friendly response in user's language
-- Return ONLY JSON`;
+quantity = number asked (1-5), default 3. Return ONLY JSON.`;
   }
 
   static validateIntentPayload(payload, userLang) {
