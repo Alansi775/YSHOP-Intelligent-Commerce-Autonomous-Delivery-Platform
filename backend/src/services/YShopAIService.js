@@ -283,9 +283,12 @@ CRITICAL RULES:
    - "not spicy, something mild" → keywords=["mild food","non-spicy","light meal","grilled"]
    - "I don't know, suggest something" → keywords=["popular dishes","bestseller","recommended","top rated"]
    - "something for dinner" → keywords=["dinner","main course","meal","filling"]
+   - "اريد اشرب" (I want to drink) → keywords=["drink","juice","soda","beverage","cold drink"]
+   - "اريد اشتري ملابس" (I want to buy clothes) → keywords=["shirt","pants","t-shirt","dress","clothing"] — NOT accessories/bags unless the user specifically asked for those
    - Multi-person: include terms covering ALL people's preferences
      * "I want spicy, my friend wants healthy" → keywords=["spicy food","hot","healthy","light","grilled"]
    - DO NOT return keywords=[] when showProducts=true — always fill with at least 2-3 relevant terms
+   - CRITICAL: keywords/excludeKeywords are used to search a product catalog written in ENGLISH (and some Turkish) — ALWAYS write them in ENGLISH, translating the concept, even when the user wrote in Arabic. Never output Arabic words in keywords/excludeKeywords. (Your "reply" field still stays in the user's own language.)
 
 1c. excludeKeywords — words that must NOT appear in result product names (only when user explicitly says "not X"):
    - "not spicy" / "no spice" / "without spice" → excludeKeywords=["spicy","hot","chili","spice","pepper"]
@@ -1383,16 +1386,25 @@ Return JSON only:
 
       // ── SHOW PRODUCTS only when AI decided it's time ──
       if (understanding.showProducts) {
+        // Exclude everything shown across the whole conversation, not just
+        // the last batch — otherwise a 2nd/3rd "show me other options" can
+        // bring back something shown two turns ago once it drops out of
+        // the immediate previousProducts window.
+        const excludeIds = [...new Set([
+          ...MemoryService.getAllShownProductIds(userId),
+          ...previousProducts.map(p => p.id),
+        ])];
+
         const allProducts = await this.fetchProducts(
           understanding.storeType,
           userMessage,
-          previousProducts.map(p => p.id),
+          excludeIds,
           userId, // personalized semantic retrieval
         );
 
         logger.info(
           `[YShopAI] Fetch | trace=${traceId} | store=${understanding.storeType || 'null'} | fetched=${allProducts.length} | ` +
-          `exclude=${previousProducts.map(p => p.id).join(',') || 'none'}`
+          `exclude=${excludeIds.join(',') || 'none'}`
         );
 
         if (allProducts.length > 0) {

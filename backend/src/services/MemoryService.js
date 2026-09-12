@@ -4,6 +4,7 @@ import logger from '../config/logger.js';
 export class MemoryService {
   static conversationMemory = new Map();
   static shownProducts = new Map();
+  static shownProductIds = new Map();
   static accessOrder = [];
   static MAX_USERS = 5000;
   static TTL_MS = 2 * 60 * 60 * 1000;
@@ -18,6 +19,7 @@ export class MemoryService {
       if (evicted) {
         this.conversationMemory.delete(evicted);
         this.shownProducts.delete(evicted);
+        this.shownProductIds.delete(evicted);
       }
     }
   }
@@ -43,12 +45,27 @@ export class MemoryService {
 
   static setShownProducts(userId, products) {
     this.shownProducts.set(userId, products);
+
+    // Accumulate across the whole conversation (capped) so "show me other
+    // options" a second or third time doesn't bring back something already
+    // shown two turns ago — setShownProducts only tracks the latest batch.
+    const seen = this.shownProductIds.get(userId) || [];
+    const ids = new Set(seen);
+    for (const p of products || []) ids.add(Number(p.id));
+    const capped = [...ids].slice(-60);
+    this.shownProductIds.set(userId, capped);
+
     this.touch(userId);
+  }
+
+  static getAllShownProductIds(userId) {
+    return this.shownProductIds.get(userId) || [];
   }
 
   static clear(userId) {
     this.conversationMemory.delete(userId);
     this.shownProducts.delete(userId);
+    this.shownProductIds.delete(userId);
     const index = this.accessOrder.indexOf(userId);
     if (index >= 0) this.accessOrder.splice(index, 1);
   }

@@ -73,29 +73,33 @@ export class RankingService {
       product.store_type,
     ].filter(Boolean).join(' '));
 
-    let score = 0;
-    if (!queryText && !keywords.length && !storeType) return 1;
+    if (!queryText && !keywords.length && !storeType) return { total: 1, contentScore: 1 };
 
     const name = normalizeText(product.name);
     const desc = normalizeText(product.description);
     const overlap = queryTokens.reduce((count, token) => count + (productText.includes(token) ? 1 : 0), 0);
 
-    if (name && queryText === name)           score += 50;
-    if (name && queryText.includes(name))     score += 35;
-    if (name && name.includes(queryText))     score += 25;
+    // ── Content score: does this product actually relate to what was asked? ──
+    // Kept separate from popularity/stock/affinity so a product with zero
+    // textual/semantic connection to the request can't win purely by being
+    // popular or well-stocked (that's how an unrelated item — e.g. a bag
+    // when clothes were asked for — used to slip into the results).
+    let contentScore = 0;
+    if (name && queryText === name)           contentScore += 50;
+    if (name && queryText.includes(name))     contentScore += 35;
+    if (name && name.includes(queryText))     contentScore += 25;
+    contentScore += overlap * 6;
+    contentScore += this.keywordBoost(queryTokens, keywords, productText);
+    if (desc && queryText && desc.includes(queryText)) contentScore += 6;
+    if (product.price != null && queryText.includes(normalizeText(product.price))) contentScore += 8;
 
-    score += overlap * 6;
-    score += this.keywordBoost(queryTokens, keywords, productText);
+    const semanticScore = typeof product.semanticScore === 'number' ? product.semanticScore : 0;
+    contentScore += semanticScore * 100;
+
+    let score = contentScore;
     score += this.storeTypeBoost(storeType, product);
-
-    if (desc && queryText && desc.includes(queryText)) score += 6;
-    if (product.price != null && queryText.includes(normalizeText(product.price))) score += 8;
     if ((product.stock || 0) > 0)  score += 1.5;
     if ((product.stock || 0) > 10) score += 1;
-
-    // ── Semantic score (pre-computed by VectorStore, real Gemini 768-dim) ────
-    const semanticScore = typeof product.semanticScore === 'number' ? product.semanticScore : 0;
-    score += semanticScore * 100;
 
     // ── Personalization signals ───────────────────────────────────────────────
     score += this.popularityBoost(product);      // global crowd intelligence
@@ -103,19 +107,28 @@ export class RankingService {
     score += this.collaborativeBoost(product);   // what similar users liked
     score += this.keywordAffinityBoost(product); // this user's keyword history
 
-    return score;
+    return { total: score, contentScore };
   }
 
   static rankProducts(query, products, options = {}) {
-    const ranked = (products || [])
-      .map(product => ({
-        ...product,
-        _rankScore: this.scoreProduct(query, product, options),
-      }))
-      .sort((a, b) => b._rankScore - a._rankScore || b.stock - a.stock || b.id - a.id);
+    const queryText = normalizeText(query);
+    const hasSearchIntent = !!queryText || (options.keywords || []).length > 0;
+
+    const scored = (products || []).map(product => {
+      const { total, contentScore } = this.scoreProduct(query, product, options);
+      return { ...product, _rankScore: total, _contentScore: contentScore };
+    });
+
+    // If the user actually asked for something specific, drop candidates with
+    // zero textual/semantic relation to the request rather than letting
+    // popularity/stock alone drag in an unrelated product.
+    const relevant = hasSearchIntent ? scored.filter(p => p._contentScore > 0) : scored;
+    const pool = relevant.length > 0 ? relevant : scored;
+
+    const ranked = pool.sort((a, b) => b._rankScore - a._rankScore || b.stock - a.stock || b.id - a.id);
 
     return ranked
       .slice(0, options.limit || 3)
-      .map(({ _rankScore, _popularityScore, _userStoreAffinity, _collaborativeScore, _keywordAffinityScore, ...product }) => product);
+      .map(({ _rankScore, _contentScore, _popularityScore, _userStoreAffinity, _collaborativeScore, _keywordAffinityScore, ...product }) => product);
   }
 }
