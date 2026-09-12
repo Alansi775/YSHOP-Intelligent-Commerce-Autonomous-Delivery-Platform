@@ -810,6 +810,17 @@ Other:
       });
 
       if (products.length > 0) {
+        // When storeType wasn't specified up front (ambiguous intent), the
+        // catalog search spans every store type at once. Without this guard
+        // a stray keyword/embedding match from an unrelated category (e.g. a
+        // clothing item) can ride along with genuine results and get shown
+        // next to them — lock onto the top-scored match's own store type.
+        if (!storeType) {
+          const dominantType = products[0]?.store_type || null;
+          if (dominantType) {
+            return products.filter(p => p.store_type === dominantType);
+          }
+        }
         return products;
       }
 
